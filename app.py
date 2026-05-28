@@ -1,33 +1,59 @@
 from flask import (
+
     Flask,
     request,
     jsonify,
     send_from_directory,
-    render_template
+    render_template,
+
+    redirect
+
 )
 
 from flask_cors import CORS
+
 from faster_whisper import WhisperModel
+
 from openai import OpenAI
+
 from pydub import AudioSegment
 from pydub.silence import split_on_silence
+
 from waitress import serve
+
+from flask_login import (
+
+    LoginManager,
+    UserMixin,
+
+    login_user,
+    login_required,
+    logout_user
+)
+
+from dotenv import load_dotenv
 
 import sqlite3
 import threading
 import uuid
 import os
 import re
-from dotenv import load_dotenv
 
 from datetime import datetime
+
+# =========================================
+# LOAD ENV
+# =========================================
+
 load_dotenv()
 
 # =========================================
 # CONFIG
 # =========================================
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_API_KEY = os.getenv(
+    "OPENAI_API_KEY"
+)
 
 UPLOAD_FOLDER = "uploads"
 
@@ -42,7 +68,35 @@ os.makedirs(
 
 app = Flask(__name__)
 
+app.secret_key = "senha_super_secreta"
+
 CORS(app)
+
+# =========================================
+# LOGIN
+# =========================================
+
+login_manager = LoginManager()
+
+login_manager.init_app(app)
+
+login_manager.login_view = "login"
+
+class User(UserMixin):
+
+    def __init__(self, id):
+
+        self.id = id
+
+USUARIO = "admin"
+
+SENHA = "123"
+
+
+@login_manager.user_loader
+def load_user(user_id):
+
+    return User(user_id)
 
 # =========================================
 # OPENAI
@@ -130,8 +184,8 @@ def remover_silencio(caminho_audio):
         caminho_audio
     )
 
-    # melhora áudio telefonia
     audio = audio.set_channels(1)
+
     audio = audio.set_frame_rate(16000)
 
     chunks = split_on_silence(
@@ -191,7 +245,7 @@ def transcrever_audio(caminho):
 
         vad_filter=True,
 
-        beam_size=5,
+        beam_size=2,
 
         condition_on_previous_text=False
     )
@@ -361,6 +415,57 @@ def processar_em_background(
             )
 
 # =========================================
+# LOGIN
+# =========================================
+
+@app.route(
+    "/login",
+    methods=["GET", "POST"]
+)
+
+def login():
+
+    if request.method == "POST":
+
+        usuario = request.form.get(
+            "usuario"
+        )
+
+        senha = request.form.get(
+            "senha"
+        )
+
+        if (
+
+            usuario == USUARIO and
+            senha == SENHA
+
+        ):
+
+            user = User(usuario)
+
+            login_user(user)
+
+            return redirect("/")
+
+    return render_template(
+        "login.html"
+    )
+
+# =========================================
+# LOGOUT
+# =========================================
+
+@app.route("/logout")
+
+@login_required
+def logout():
+
+    logout_user()
+
+    return redirect("/login")
+
+# =========================================
 # TRANSCREVER
 # =========================================
 
@@ -369,6 +474,7 @@ def processar_em_background(
     methods=["POST"]
 )
 
+@login_required
 def transcrever():
 
     if "audio" not in request.files:
@@ -427,6 +533,7 @@ def transcrever():
 
 @app.route("/resultados")
 
+@login_required
 def resultados():
 
     busca = request.args.get(
@@ -502,6 +609,7 @@ def resultados():
 
 @app.route("/")
 
+@login_required
 def index():
 
     return render_template(
@@ -514,6 +622,7 @@ def index():
 
 @app.route("/popup.js")
 
+@login_required
 def popup():
 
     return send_from_directory(
@@ -533,7 +642,12 @@ if __name__ == "__main__":
 
         host="0.0.0.0",
 
-        port=8080,
+        port=int(
+            os.environ.get(
+                "PORT",
+                8080
+            )
+        ),
 
         threads=8
     )
