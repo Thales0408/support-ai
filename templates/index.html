@@ -13,6 +13,8 @@
 
     <title>55PBX AI</title>
 
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
     <style>
 
         * {
@@ -61,13 +63,6 @@
             cursor: pointer;
 
             font-weight: bold;
-
-            transition: 0.2s;
-        }
-
-        button:hover {
-
-            opacity: 0.9;
         }
 
         #start {
@@ -100,8 +95,54 @@
             border-radius: 10px;
 
             margin-bottom: 20px;
+        }
+
+        .dashboard {
+
+            display: grid;
+
+            grid-template-columns:
+                repeat(auto-fit, minmax(220px, 1fr));
+
+            gap: 15px;
+
+            margin-bottom: 25px;
+        }
+
+        .card-dashboard {
+
+            background: #1b1f27;
+
+            padding: 20px;
+
+            border-radius: 12px;
+        }
+
+        .card-dashboard h2 {
 
             font-size: 15px;
+
+            color: #aaa;
+
+            margin-bottom: 10px;
+        }
+
+        .numero {
+
+            font-size: 32px;
+
+            font-weight: bold;
+        }
+
+        .grafico-box {
+
+            background: #1b1f27;
+
+            padding: 20px;
+
+            border-radius: 12px;
+
+            margin-bottom: 25px;
         }
 
         #resultados {
@@ -137,13 +178,6 @@
             font-size: 14px;
         }
 
-        .processando {
-
-            color: #ffd600;
-
-            margin-bottom: 20px;
-        }
-
     </style>
 
 </head>
@@ -152,7 +186,7 @@
 
     <h1>
 
-        55PBX AI
+        55PBX AI Dashboard
 
     </h1>
 
@@ -191,16 +225,62 @@
         Sistema pronto.
     </div>
 
-    <div
-        id="processando"
-        class="processando"
-    ></div>
+    <div class="dashboard">
+
+        <div class="card-dashboard">
+
+            <h2>Total Atendimentos</h2>
+
+            <div
+                class="numero"
+                id="total"
+            >0</div>
+
+        </div>
+
+        <div class="card-dashboard">
+
+            <h2>Processando</h2>
+
+            <div
+                class="numero"
+                id="processando"
+            >0</div>
+
+        </div>
+
+        <div class="card-dashboard">
+
+            <h2>Hoje</h2>
+
+            <div
+                class="numero"
+                id="hoje"
+            >0</div>
+
+        </div>
+
+    </div>
+
+    <div class="grafico-box">
+
+        <canvas id="grafico"></canvas>
+
+    </div>
+
+    <h2 style="margin-bottom:20px">
+
+        Últimos Atendimentos
+
+    </h2>
 
     <div id="resultados"></div>
 
     <script src="/popup.js"></script>
 
     <script>
+
+        let chart = null
 
         async function carregarResultados() {
 
@@ -210,26 +290,54 @@
             const data =
                 await response.json()
 
+            document.getElementById(
+                "total"
+            ).innerText =
+                data.resultados.length
+
+            document.getElementById(
+                "processando"
+            ).innerText =
+                data.processando.length
+
+            // =========================
+            // HOJE
+            // =========================
+
+            const hoje =
+                new Date()
+
+            const hojeFormatado =
+                hoje.toLocaleDateString("pt-BR")
+
+            let totalHoje = 0
+
+            data.resultados.forEach(item => {
+
+                if (
+                    item.data.includes(
+                        hojeFormatado
+                    )
+                ) {
+
+                    totalHoje++
+                }
+
+            })
+
+            document.getElementById(
+                "hoje"
+            ).innerText =
+                totalHoje
+
+            // =========================
+            // HISTÓRICO
+            // =========================
+
             const resultados =
                 document.getElementById(
                     "resultados"
                 )
-
-            const processando =
-                document.getElementById(
-                    "processando"
-                )
-
-            processando.innerHTML = ""
-
-            if (
-                data.processando.length > 0
-            ) {
-
-                processando.innerHTML =
-                    "Processando: " +
-                    data.processando.length
-            }
 
             resultados.innerHTML = ""
 
@@ -256,6 +364,63 @@
 
             })
 
+            // =========================
+            // GRAFICO
+            // =========================
+
+            const dias = {}
+
+            data.resultados.forEach(item => {
+
+                const dataLimpa =
+                    item.data.split(" ")[0]
+
+                if (!dias[dataLimpa]) {
+
+                    dias[dataLimpa] = 0
+                }
+
+                dias[dataLimpa]++
+
+            })
+
+            const labels =
+                Object.keys(dias)
+
+            const valores =
+                Object.values(dias)
+
+            const ctx =
+                document
+                    .getElementById(
+                        "grafico"
+                    )
+
+            if (chart) {
+
+                chart.destroy()
+            }
+
+            chart =
+                new Chart(ctx, {
+
+                    type: 'line',
+
+                    data: {
+
+                        labels: labels,
+
+                        datasets: [{
+
+                            label: 'Atendimentos',
+
+                            data: valores,
+
+                            tension: 0.3
+
+                        }]
+                    }
+                })
         }
 
         carregarResultados()
