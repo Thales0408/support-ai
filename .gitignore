@@ -3,4 +3,5 @@ uploads/
 __pycache__/
 *.pyc
 .env
+venv/
 substituir.txt

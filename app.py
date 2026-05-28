@@ -18,14 +18,16 @@ import threading
 import uuid
 import os
 import re
+from dotenv import load_dotenv
 
 from datetime import datetime
+load_dotenv()
 
 # =========================================
 # CONFIG
 # =========================================
 
-OPENAI_API_KEY = "REMOVIDO"
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 UPLOAD_FOLDER = "uploads"
 
