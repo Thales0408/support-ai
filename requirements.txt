@@ -1,0 +1,10 @@
+flask
+flask-cors
+faster-whisper
+openai
+pydub
+waitress
+ctranslate2
+onnxruntime
+av
+tokenizers
