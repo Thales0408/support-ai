@@ -1,23 +1,37 @@
 <!DOCTYPE html>
+
 <html lang="pt-br">
 
 <head>
 
     <meta charset="UTF-8">
 
-    <title>
-        55PBX AI
-    </title>
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>55PBX AI</title>
 
     <style>
 
+        * {
+
+            margin: 0;
+            padding: 0;
+
+            box-sizing: border-box;
+        }
+
         body {
 
-            background: #0f172a;
+            background: #0f1115;
+
             color: white;
+
             font-family: Arial;
-            padding: 30px;
-            margin: 0;
+
+            padding: 20px;
         }
 
         h1 {
@@ -25,241 +39,109 @@
             margin-bottom: 20px;
         }
 
-        #topo {
-
-            display: flex;
-            gap: 15px;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        #start {
-
-            background: #2563eb;
-            border: none;
-            color: white;
-            padding: 15px 25px;
-            border-radius: 10px;
-            cursor: pointer;
-            font-size: 16px;
-        }
-
-        #search {
-
-            flex: 1;
-            padding: 15px;
-            border-radius: 10px;
-            border: none;
-            background: #1e293b;
-            color: white;
-            font-size: 15px;
-        }
-
-        #status {
-
-            margin-bottom: 25px;
-            color: #94a3b8;
-        }
-
-        /* DASHBOARD */
-
-        #dashboard {
-
-            display: grid;
-
-            grid-template-columns:
-                repeat(auto-fit, minmax(220px, 1fr));
-
-            gap: 15px;
-
-            margin-bottom: 30px;
-        }
-
-        .metric {
-
-            background: #1e293b;
-
-            border: 1px solid #334155;
-
-            border-radius: 14px;
-
-            padding: 20px;
-        }
-
-        .metric-title {
-
-            color: #94a3b8;
-
-            font-size: 14px;
-
-            margin-bottom: 10px;
-        }
-
-        .metric-value {
-
-            font-size: 30px;
-
-            font-weight: bold;
-        }
-
-        /* RANKINGS */
-
-        #rankings {
-
-            display: grid;
-
-            grid-template-columns:
-                repeat(auto-fit, minmax(350px, 1fr));
-
-            gap: 20px;
-
-            margin-bottom: 30px;
-        }
-
-        .ranking-card {
-
-            background: #1e293b;
-
-            border: 1px solid #334155;
-
-            border-radius: 14px;
-
-            padding: 20px;
-        }
-
-        .ranking-title {
-
-            font-size: 18px;
-
-            margin-bottom: 20px;
-
-            color: #93c5fd;
-        }
-
-        .ranking-item {
+        .topo {
 
             display: flex;
 
-            justify-content: space-between;
-
-            padding: 10px 0;
-
-            border-bottom: 1px solid #334155;
-        }
-
-        .ranking-item:last-child {
-
-            border-bottom: none;
-        }
-
-        /* CARDS */
-
-        .card {
-
-            background: #1e293b;
-
-            border-radius: 14px;
-
-            padding: 20px;
+            gap: 10px;
 
             margin-bottom: 20px;
 
-            border: 1px solid #334155;
+            flex-wrap: wrap;
         }
 
-        .processing {
+        button {
 
-            border: 1px solid #f59e0b;
-
-            background: #2b2112;
-        }
-
-        .arquivo {
-
-            color: #60a5fa;
-
-            margin-bottom: 10px;
-
-            font-weight: bold;
-
-            font-size: 15px;
-        }
-
-        .data {
-
-            color: #94a3b8;
-
-            font-size: 13px;
-
-            margin-bottom: 15px;
-        }
-
-        pre {
-
-            white-space: pre-wrap;
-
-            font-family: Arial;
-
-            line-height: 1.5;
-
-            margin-top: 15px;
-        }
-
-        .btn {
-
-            margin-top: 15px;
-
-            background: #22c55e;
+            padding: 12px 18px;
 
             border: none;
-
-            color: white;
-
-            padding: 10px 15px;
 
             border-radius: 8px;
 
             cursor: pointer;
 
-            margin-right: 10px;
+            font-weight: bold;
+
+            transition: 0.2s;
         }
 
-        .btn-zendesk {
+        button:hover {
 
-            background: #2563eb;
+            opacity: 0.9;
         }
 
-        .tags {
+        #start {
 
-            margin-top: 10px;
+            background: #00c853;
+
+            color: white;
         }
 
-        .tag {
+        .excel {
 
-            display: inline-block;
+            background: #2962ff;
 
-            background: #334155;
-
-            color: #93c5fd;
-
-            padding: 6px 10px;
-
-            border-radius: 999px;
-
-            font-size: 12px;
-
-            margin-right: 5px;
-
-            margin-bottom: 5px;
+            color: white;
         }
 
-        .processando-texto {
+        .logout {
 
-            color: #fbbf24;
+            background: #d50000;
+
+            color: white;
+        }
+
+        #status {
+
+            background: #1b1f27;
+
+            padding: 15px;
+
+            border-radius: 10px;
+
+            margin-bottom: 20px;
 
             font-size: 15px;
+        }
 
-            margin-top: 10px;
+        #resultados {
+
+            display: flex;
+
+            flex-direction: column;
+
+            gap: 15px;
+        }
+
+        .card {
+
+            background: #1b1f27;
+
+            padding: 20px;
+
+            border-radius: 12px;
+
+            white-space: pre-wrap;
+
+            line-height: 1.5;
+
+            border-left: 5px solid #2962ff;
+        }
+
+        .data {
+
+            color: #aaa;
+
+            margin-bottom: 10px;
+
+            font-size: 14px;
+        }
+
+        .processando {
+
+            color: #ffd600;
+
+            margin-bottom: 20px;
         }
 
     </style>
@@ -269,525 +151,118 @@
 <body>
 
     <h1>
+
         55PBX AI
+
     </h1>
 
-    <div id="topo">
+    <div class="topo">
 
         <button id="start">
+
             Iniciar Gravação
+
         </button>
 
-        <input
-            type="text"
-            id="search"
-            placeholder="Pesquisar empresa, CNPJ, problema..."
-        >
+        <a href="/exportar">
+
+            <button class="excel">
+
+                Exportar Excel
+
+            </button>
+
+        </a>
+
+        <a href="/logout">
+
+            <button class="logout">
+
+                Logout
+
+            </button>
+
+        </a>
 
     </div>
 
     <div id="status">
-        Sistema pronto
+
+        Sistema pronto.
     </div>
 
-    <!-- DASHBOARD -->
+    <div
+        id="processando"
+        class="processando"
+    ></div>
 
-    <div id="dashboard">
+    <div id="resultados"></div>
 
-        <div class="metric">
-
-            <div class="metric-title">
-                Total de Atendimentos
-            </div>
-
-            <div
-                class="metric-value"
-                id="totalAtendimentos"
-            >
-                0
-            </div>
-
-        </div>
-
-        <div class="metric">
-
-            <div class="metric-title">
-                Processando Agora
-            </div>
-
-            <div
-                class="metric-value"
-                id="processandoAgora"
-            >
-                0
-            </div>
-
-        </div>
-
-        <div class="metric">
-
-            <div class="metric-title">
-                TAG Mais Comum
-            </div>
-
-            <div
-                class="metric-value"
-                id="topTag"
-            >
-                -
-            </div>
-
-        </div>
-
-        <div class="metric">
-
-            <div class="metric-title">
-                Empresas Diferentes
-            </div>
-
-            <div
-                class="metric-value"
-                id="totalEmpresas"
-            >
-                0
-            </div>
-
-        </div>
-
-    </div>
-
-    <!-- RANKINGS -->
-
-    <div id="rankings">
-
-        <div class="ranking-card">
-
-            <div class="ranking-title">
-                🏢 Empresas que mais ligam
-            </div>
-
-            <div id="rankingEmpresas"></div>
-
-        </div>
-
-        <div class="ranking-card">
-
-            <div class="ranking-title">
-                🔥 Assuntos mais comuns
-            </div>
-
-            <div id="rankingTags"></div>
-
-        </div>
-
-    </div>
-
-    <!-- HISTORICO -->
-
-    <div id="historico"></div>
-
-    <script src="popup.js"></script>
+    <script src="/popup.js"></script>
 
     <script>
 
-        let dadosGlobais = []
-
-        let processandoGlobais = []
-
-        // =====================================
-        // CARREGAR
-        // =====================================
-
         async function carregarResultados() {
 
-            const busca =
-                document
-                .getElementById('search')
-                .value
-
             const response =
-                await fetch(
-                    '/resultados?busca=' +
-                    encodeURIComponent(busca)
-                )
+                await fetch("/resultados")
 
-            const dados =
+            const data =
                 await response.json()
 
-            dadosGlobais =
-                dados.resultados
-
-            processandoGlobais =
-                dados.processando
-
-            atualizarDashboard()
-
-            renderizar()
-        }
-
-        // =====================================
-        // TAGS
-        // =====================================
-
-        function extrairTags(texto) {
-
-            const regex =
-                /Tags:(.*)/i
-
-            const match =
-                texto.match(regex)
-
-            if (match) {
-
-                return match[1]
-                    .split(',')
-                    .map(t => t.trim())
-                    .filter(t => t)
-            }
-
-            return []
-        }
-
-        // =====================================
-        // EMPRESA
-        // =====================================
-
-        function extrairEmpresa(texto) {
-
-            const regex =
-                /Empresa\/Loja:(.*)/i
-
-            const match =
-                texto.match(regex)
-
-            if (match) {
-
-                return match[1].trim()
-            }
-
-            return ''
-        }
-
-        // =====================================
-        // TEXTO ZENDESK
-        // =====================================
-
-        function gerarZendesk(texto) {
-
-            const linhas =
-                texto.split('\n')
-
-            const filtradas =
-                linhas.filter(linha => {
-
-                    return (
-                        !linha.startsWith('Tags:')
-                    )
-
-                })
-
-            return filtradas.join('\n')
-        }
-
-        // =====================================
-        // DASHBOARD
-        // =====================================
-
-        function atualizarDashboard() {
-
-            document.getElementById(
-                'totalAtendimentos'
-            ).innerText =
-                dadosGlobais.length
-
-            document.getElementById(
-                'processandoAgora'
-            ).innerText =
-                processandoGlobais.length
-
-            // TAGS
-
-            const contadorTags = {}
-
-            dadosGlobais.forEach(item => {
-
-                const tags =
-                    extrairTags(
-                        item.conteudo
-                    )
-
-                tags.forEach(tag => {
-
-                    contadorTags[tag] =
-                        (contadorTags[tag] || 0) + 1
-
-                })
-
-            })
-
-            let topTag = '-'
-            let maior = 0
-
-            for (const tag in contadorTags) {
-
-                if (contadorTags[tag] > maior) {
-
-                    maior =
-                        contadorTags[tag]
-
-                    topTag = tag
-                }
-            }
-
-            document.getElementById(
-                'topTag'
-            ).innerText =
-                topTag
-
-            // EMPRESAS
-
-            const empresas =
-                {}
-
-            dadosGlobais.forEach(item => {
-
-                const empresa =
-                    extrairEmpresa(
-                        item.conteudo
-                    )
-
-                if (empresa) {
-
-                    empresas[empresa] =
-                        (empresas[empresa] || 0) + 1
-                }
-
-            })
-
-            document.getElementById(
-                'totalEmpresas'
-            ).innerText =
-                Object.keys(empresas).length
-
-            // RANKING EMPRESAS
-
-            const rankingEmpresas =
-                Object.entries(empresas)
-                    .sort((a, b) => b[1] - a[1])
-                    .slice(0, 10)
-
-            const divEmpresas =
+            const resultados =
                 document.getElementById(
-                    'rankingEmpresas'
+                    "resultados"
                 )
 
-            divEmpresas.innerHTML = ''
-
-            rankingEmpresas.forEach(item => {
-
-                divEmpresas.innerHTML += `
-
-                    <div class="ranking-item">
-
-                        <div>
-                            ${item[0]}
-                        </div>
-
-                        <div>
-                            ${item[1]}
-                        </div>
-
-                    </div>
-
-                `
-            })
-
-            // RANKING TAGS
-
-            const rankingTags =
-                Object.entries(contadorTags)
-                    .sort((a, b) => b[1] - a[1])
-                    .slice(0, 10)
-
-            const divTags =
+            const processando =
                 document.getElementById(
-                    'rankingTags'
+                    "processando"
                 )
 
-            divTags.innerHTML = ''
+            processando.innerHTML = ""
 
-            rankingTags.forEach(item => {
+            if (
+                data.processando.length > 0
+            ) {
 
-                divTags.innerHTML += `
+                processando.innerHTML =
+                    "Processando: " +
+                    data.processando.length
+            }
 
-                    <div class="ranking-item">
+            resultados.innerHTML = ""
 
-                        <div>
-                            ${item[0]}
-                        </div>
+            data.resultados.forEach(item => {
 
-                        <div>
-                            ${item[1]}
-                        </div>
+                const div =
+                    document.createElement("div")
 
-                    </div>
+                div.className = "card"
 
-                `
-            })
-
-        }
-
-        // =====================================
-        // RENDER
-        // =====================================
-
-        function renderizar() {
-
-            const historico =
-                document.getElementById(
-                    'historico'
-                )
-
-            historico.innerHTML = ''
-
-            // PROCESSANDO
-
-            processandoGlobais.forEach(item => {
-
-                const card =
-                    document.createElement('div')
-
-                card.className =
-                    'card processing'
-
-                card.innerHTML = `
-
-                    <div class="arquivo">
-                        ${item}
-                    </div>
-
-                    <div class="processando-texto">
-                        ⏳ Processando áudio...
-                    </div>
-
-                `
-
-                historico.appendChild(card)
-
-            })
-
-            // RESULTADOS
-
-            dadosGlobais.forEach(item => {
-
-                const card =
-                    document.createElement('div')
-
-                card.className = 'card'
-
-                const tags =
-                    extrairTags(
-                        item.conteudo
-                    )
-
-                const tagsHtml =
-                    tags.map(tag => `
-                        <span class="tag">
-                            ${tag}
-                        </span>
-                    `).join('')
-
-                card.innerHTML = `
-
-                    <div class="arquivo">
-                        ${item.arquivo}
-                    </div>
+                div.innerHTML = `
 
                     <div class="data">
+
                         ${item.data}
+
                     </div>
 
-                    <div class="tags">
-                        ${tagsHtml}
-                    </div>
-
-                    <pre>${item.conteudo}</pre>
-
-                    <button class="btn copiar">
-                        Copiar
-                    </button>
-
-                    <button class="btn btn-zendesk zendesk">
-                        Copiar Zendesk
-                    </button>
+                    ${item.conteudo}
 
                 `
 
-                // COPIAR NORMAL
-
-                const btnCopiar =
-                    card.querySelector(
-                        '.copiar'
-                    )
-
-                btnCopiar.onclick = () => {
-
-                    navigator.clipboard.writeText(
-                        item.conteudo
-                    )
-
-                    btnCopiar.innerText =
-                        'Copiado!'
-                }
-
-                // ZENDESK
-
-                const btnZendesk =
-                    card.querySelector(
-                        '.zendesk'
-                    )
-
-                btnZendesk.onclick = () => {
-
-                    const texto =
-                        gerarZendesk(
-                            item.conteudo
-                        )
-
-                    navigator.clipboard.writeText(
-                        texto
-                    )
-
-                    btnZendesk.innerText =
-                        'Zendesk Copiado!'
-                }
-
-                historico.appendChild(card)
+                resultados.appendChild(div)
 
             })
 
         }
-
-        // =====================================
-        // BUSCA
-        // =====================================
-
-        document
-            .getElementById('search')
-            .addEventListener(
-                'input',
-                carregarResultados
-            )
-
-        // =====================================
-        // INIT
-        // =====================================
 
         carregarResultados()
 
         setInterval(
             carregarResultados,
-            3000
+            5000
         )
 
     </script>

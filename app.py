@@ -6,7 +6,8 @@ from flask import (
     send_from_directory,
     render_template,
 
-    redirect
+    redirect,
+    send_file
 
 )
 
@@ -32,6 +33,8 @@ from flask_login import (
 )
 
 from dotenv import load_dotenv
+
+from openpyxl import Workbook
 
 import sqlite3
 import threading
@@ -91,7 +94,6 @@ class User(UserMixin):
 USUARIO = "admin"
 
 SENHA = "123"
-
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -500,11 +502,6 @@ def transcrever():
         caminho_audio
     )
 
-    print(
-        "Audio salvo:",
-        caminho_audio
-    )
-
     processando.append(
         nome_arquivo
     )
@@ -602,6 +599,57 @@ def resultados():
         "processando": processando
 
     })
+
+# =========================================
+# EXPORTAR EXCEL
+# =========================================
+
+@app.route("/exportar")
+
+@login_required
+def exportar_excel():
+
+    cursor.execute("""
+
+        SELECT
+            data,
+            conteudo
+
+        FROM atendimentos
+
+        ORDER BY id DESC
+
+    """)
+
+    rows = cursor.fetchall()
+
+    wb = Workbook()
+
+    ws = wb.active
+
+    ws.title = "Atendimentos"
+
+    ws.append([
+
+        "Data",
+        "Conteúdo"
+
+    ])
+
+    for row in rows:
+
+        ws.append(row)
+
+    nome_arquivo = "atendimentos.xlsx"
+
+    wb.save(nome_arquivo)
+
+    return send_file(
+
+        nome_arquivo,
+
+        as_attachment=True
+    )
 
 # =========================================
 # INDEX
