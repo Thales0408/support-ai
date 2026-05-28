@@ -1,6 +1,0 @@
-Nome da empresa: Gestão Clique
-CNPJ: 13.173.238/1991
-Nome do Cliente: Thales Dias
-Telefone de contato: 31992082052
-E-mail Solicitante: thales.silvaarrupla@gmail.com
-Descritivo da ocorrência do atendimento: Problema de acesso ao sistema. Realizada verificação de cadastro e orientado sobre procedimentos de recuperação de senha.

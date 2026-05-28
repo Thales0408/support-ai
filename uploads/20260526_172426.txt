@@ -1,8 +1,0 @@
-Nome da empresa: SPP
-Empresa/Loja: SPP
-CNPJ: 32.657.536/1000-70
-Nome do Cliente: Carol
-Telefone de contato: Não informado
-E-mail Solicitante: Não informado
-Analista responsável: Thales
-Descritivo da ocorrência do atendimento: Cliente com problema ao visualizar CTE, dois CTEs iguais processados, ambos autorizados. Orientação para exportar pallet na empresa SPP.
