@@ -6,15 +6,30 @@
 
     <meta charset="UTF-8">
 
-    <title>Login</title>
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Login - 55PBX AI</title>
 
     <style>
 
+        * {
+
+            margin: 0;
+            padding: 0;
+
+            box-sizing: border-box;
+        }
+
         body {
 
-            background: #111;
+            background: #0f1115;
 
             color: white;
+
+            font-family: Arial;
 
             display: flex;
 
@@ -23,38 +38,58 @@
             align-items: center;
 
             height: 100vh;
-
-            font-family: Arial;
         }
 
-        form {
+        .login-box {
 
-            background: #222;
+            background: #1b1f27;
 
-            padding: 30px;
+            padding: 40px;
 
-            border-radius: 10px;
+            border-radius: 15px;
 
-            display: flex;
-
-            flex-direction: column;
-
-            gap: 10px;
-
-            width: 300px;
+            width: 350px;
         }
 
-        input,
-        button {
+        h1 {
 
-            padding: 10px;
+            margin-bottom: 25px;
+
+            text-align: center;
+        }
+
+        input {
+
+            width: 100%;
+
+            padding: 12px;
+
+            margin-bottom: 15px;
 
             border: none;
 
-            border-radius: 5px;
+            border-radius: 8px;
+
+            background: #2a2f3a;
+
+            color: white;
         }
 
         button {
+
+            width: 100%;
+
+            padding: 12px;
+
+            border: none;
+
+            border-radius: 8px;
+
+            background: #2962ff;
+
+            color: white;
+
+            font-weight: bold;
 
             cursor: pointer;
         }
@@ -65,20 +100,29 @@
 
 <body>
 
-    <form method="POST">
+    <form
+        method="POST"
+        class="login-box"
+    >
 
-        <h2>Login</h2>
+        <h1>
+
+            55PBX AI
+
+        </h1>
 
         <input
             type="text"
             name="usuario"
             placeholder="Usuário"
+            required
         >
 
         <input
             type="password"
             name="senha"
             placeholder="Senha"
+            required
         >
 
         <button type="submit">
