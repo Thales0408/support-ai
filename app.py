@@ -32,32 +32,51 @@ import traceback
 
 load_dotenv()
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_BASE_URL = os.getenv(
+def ler_env(nome, padrao=None):
+
+    valor = (
+        os.getenv(
+            nome,
+            padrao
+        )
+    )
+
+    if valor is None:
+
+        return None
+
+    return str(valor).strip().strip('"').strip("'")
+
+
+OPENAI_API_KEY = ler_env("OPENAI_API_KEY")
+GROQ_API_KEY = (
+    ler_env("GROQ_API_KEY")
+    or ler_env("GROQ_API_TOKEN")
+)
+GROQ_BASE_URL = ler_env(
     "GROQ_BASE_URL",
     "https://api.groq.com/openai/v1"
 )
-DATABASE_URL = os.getenv("DATABASE_URL")
-DB_HOST = os.getenv(
+DATABASE_URL = ler_env("DATABASE_URL")
+DB_HOST = ler_env(
     "DB_HOST",
     "aws-1-sa-east-1.pooler.supabase.com"
 )
-DB_PORT = os.getenv("DB_PORT", "6543")
-DB_NAME = os.getenv("DB_NAME", "postgres")
-DB_USER = os.getenv(
+DB_PORT = ler_env("DB_PORT", "6543")
+DB_NAME = ler_env("DB_NAME", "postgres")
+DB_USER = ler_env(
     "DB_USER",
     "postgres.epegojdxngrcwvzecupl"
 )
-DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_PASSWORD = ler_env("DB_PASSWORD")
 
-ADMIN_USUARIO = os.getenv("ADMIN_USUARIO", "admin")
-ADMIN_SENHA = os.getenv("ADMIN_SENHA", "123456")
+ADMIN_USUARIO = ler_env("ADMIN_USUARIO", "admin")
+ADMIN_SENHA = ler_env("ADMIN_SENHA", "123456")
 
-TRANSCRIBE_PROVIDER = os.getenv(
+TRANSCRIBE_PROVIDER = ler_env(
     "TRANSCRIBE_PROVIDER",
-    "openai"
-).strip().lower()
+    "groq" if GROQ_API_KEY else "openai"
+).lower()
 
 DEFAULT_TRANSCRIBE_MODEL = (
     "whisper-large-v3-turbo"
@@ -65,12 +84,12 @@ DEFAULT_TRANSCRIBE_MODEL = (
     else "gpt-4o-mini-transcribe"
 )
 
-TRANSCRIBE_MODEL = os.getenv(
+TRANSCRIBE_MODEL = ler_env(
     "TRANSCRIBE_MODEL",
     DEFAULT_TRANSCRIBE_MODEL
 )
 
-SUMMARY_MODEL = os.getenv(
+SUMMARY_MODEL = ler_env(
     "SUMMARY_MODEL",
     "gpt-4.1-mini"
 )
@@ -88,6 +107,17 @@ app.secret_key = os.getenv(
 )
 
 CORS(app)
+
+
+def metadados_railway():
+
+    return {
+        "service": ler_env("RAILWAY_SERVICE_NAME"),
+        "environment": ler_env("RAILWAY_ENVIRONMENT_NAME"),
+        "project": ler_env("RAILWAY_PROJECT_NAME"),
+        "commit": ler_env("RAILWAY_GIT_COMMIT_SHA"),
+        "public_domain": ler_env("RAILWAY_PUBLIC_DOMAIN")
+    }
 
 
 # =========================================
@@ -924,7 +954,8 @@ def health():
             "transcribe_provider": TRANSCRIBE_PROVIDER,
             "transcribe_model": TRANSCRIBE_MODEL,
             "groq_configurado": bool(GROQ_API_KEY),
-            "openai_configurado": bool(OPENAI_API_KEY)
+            "openai_configurado": bool(OPENAI_API_KEY),
+            "railway": metadados_railway()
         })
 
     except Exception as e:
