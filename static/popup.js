@@ -5,14 +5,14 @@ const statusDiv =
     document.getElementById('status')
 
 let recorder = null
-
-let chunks = []
-
 let screenStream = null
-
 let micStream = null
-
 let inicioLigacao = null
+let atendimentoId = null
+let ordemChunk = 0
+let uploadsPendentes = []
+
+const TAMANHO_CHUNK_MS = 30000
 
 // =====================================
 // FORMATAR TEMPO
@@ -33,6 +33,97 @@ function formatarTempo(ms) {
 }
 
 // =====================================
+// ATENDIMENTO
+// =====================================
+
+async function iniciarAtendimento() {
+
+    const response =
+        await fetch('/atendimentos/iniciar', {
+            method: 'POST'
+        })
+
+    const data =
+        await response.json()
+
+    if (!response.ok) {
+
+        throw new Error(
+            data.erro || 'Erro iniciando atendimento'
+        )
+    }
+
+    return data.atendimento_id
+}
+
+async function enviarChunk(blob, ordem) {
+
+    const formData =
+        new FormData()
+
+    formData.append(
+        'atendimento_id',
+        atendimentoId
+    )
+
+    formData.append(
+        'ordem',
+        ordem
+    )
+
+    formData.append(
+        'audio',
+        blob,
+        `chunk-${ordem}.webm`
+    )
+
+    const response =
+        await fetch('/atendimentos/chunk', {
+            method: 'POST',
+            body: formData
+        })
+
+    const data =
+        await response.json()
+
+    if (!response.ok) {
+
+        throw new Error(
+            data.erro || 'Erro transcrevendo trecho'
+        )
+    }
+
+    return data
+}
+
+async function finalizarAtendimento(duracao) {
+
+    const response =
+        await fetch('/atendimentos/finalizar', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                atendimento_id: atendimentoId,
+                duracao_segundos: Math.floor(duracao / 1000)
+            })
+        })
+
+    const data =
+        await response.json()
+
+    if (!response.ok) {
+
+        throw new Error(
+            data.erro || 'Erro finalizando atendimento'
+        )
+    }
+
+    return data
+}
+
+// =====================================
 // CLICK
 // =====================================
 
@@ -49,26 +140,10 @@ startBtn.onclick = async () => {
 
         recorder.stop()
 
-        screenStream
-            .getTracks()
-            .forEach(t => t.stop())
-
-        micStream
-            .getTracks()
-            .forEach(t => t.stop())
-
-        startBtn.innerText =
-            'Iniciar Gravação'
-
-        const fimLigacao =
-            Date.now()
-
-        const duracao =
-            fimLigacao - inicioLigacao
+        startBtn.disabled = true
 
         statusDiv.innerText =
-            'Ligação finalizada • TMA: ' +
-            formatarTempo(duracao)
+            'Finalizando e aguardando ultimos trechos...'
 
         return
     }
@@ -78,12 +153,14 @@ startBtn.onclick = async () => {
         statusDiv.innerText =
             'Escolha a aba do 55PBX'
 
-        // =================================
-        // INICIO
-        // =================================
-
         inicioLigacao =
             Date.now()
+
+        atendimentoId =
+            await iniciarAtendimento()
+
+        ordemChunk = 0
+        uploadsPendentes = []
 
         // =================================
         // ABA
@@ -93,10 +170,8 @@ startBtn.onclick = async () => {
             await navigator
                 .mediaDevices
                 .getDisplayMedia({
-
                     video: true,
                     audio: true
-
                 })
 
         // =================================
@@ -107,9 +182,7 @@ startBtn.onclick = async () => {
             await navigator
                 .mediaDevices
                 .getUserMedia({
-
                     audio: true
-
                 })
 
         // =================================
@@ -123,10 +196,6 @@ startBtn.onclick = async () => {
             audioContext
                 .createMediaStreamDestination()
 
-        // =================================
-        // AUDIO ABA
-        // =================================
-
         if (
             screenStream
                 .getAudioTracks()
@@ -136,22 +205,16 @@ startBtn.onclick = async () => {
             const systemSource =
                 audioContext
                     .createMediaStreamSource(
-
                         new MediaStream([
                             screenStream
                                 .getAudioTracks()[0]
                         ])
-
                     )
 
             systemSource.connect(
                 destination
             )
         }
-
-        // =================================
-        // MICROFONE
-        // =================================
 
         if (
             micStream
@@ -162,12 +225,10 @@ startBtn.onclick = async () => {
             const micSource =
                 audioContext
                     .createMediaStreamSource(
-
                         new MediaStream([
                             micStream
                                 .getAudioTracks()[0]
                         ])
-
                     )
 
             micSource.connect(
@@ -175,95 +236,108 @@ startBtn.onclick = async () => {
             )
         }
 
-        // =================================
-        // STREAM FINAL
-        // =================================
-
         const finalStream =
             destination.stream
 
         recorder =
             new MediaRecorder(
-                finalStream
+                finalStream,
+                {
+                    mimeType: 'audio/webm'
+                }
             )
 
-        chunks = []
+        recorder.ondataavailable = event => {
 
-        recorder.ondataavailable = e => {
+            if (
+                event.data &&
+                event.data.size > 0
+            ) {
 
-            if (e.data.size > 0) {
+                const ordemAtual =
+                    ordemChunk++
 
-                chunks.push(e.data)
+                const upload =
+                    enviarChunk(
+                        event.data,
+                        ordemAtual
+                    ).then(() => {
+
+                        statusDiv.innerText =
+                            `Gravando e transcrevendo... trecho ${ordemAtual + 1}`
+
+                    }).catch(err => {
+
+                        console.error(err)
+
+                        statusDiv.innerText =
+                            'Erro em um trecho da transcricao'
+                    })
+
+                uploadsPendentes.push(upload)
             }
         }
 
-        // =================================
-        // STOP
-        // =================================
-
         recorder.onstop = async () => {
-
-            statusDiv.innerText =
-                'Transcrevendo...'
-
-            const blob =
-                new Blob(chunks, {
-
-                    type: 'audio/webm'
-
-                })
-
-            const formData =
-                new FormData()
-
-            formData.append(
-                'audio',
-                blob,
-                'gravacao.webm'
-            )
 
             try {
 
-                const response =
-                    await fetch(
+                screenStream
+                    .getTracks()
+                    .forEach(t => t.stop())
 
-                        '/transcrever',
+                micStream
+                    .getTracks()
+                    .forEach(t => t.stop())
 
-                        {
-                            method: 'POST',
-                            body: formData
-                        }
+                const fimLigacao =
+                    Date.now()
 
-                    )
+                const duracao =
+                    fimLigacao - inicioLigacao
 
-                const data =
-                    await response.json()
-
-                console.log(data)
+                await Promise.all(
+                    uploadsPendentes
+                )
 
                 statusDiv.innerText =
-                    'Processando IA...'
+                    'Gerando resumo final...'
+
+                await finalizarAtendimento(
+                    duracao
+                )
+
+                statusDiv.innerText =
+                    'Ligacao finalizada - TMA: ' +
+                    formatarTempo(duracao)
 
             } catch (err) {
 
                 console.error(err)
 
                 statusDiv.innerText =
-                    'Erro transcrevendo'
+                    'Erro finalizando atendimento'
+
+            } finally {
+
+                startBtn.disabled = false
+
+                startBtn.innerText =
+                    'Iniciar Gravacao'
+
+                atendimentoId = null
             }
         }
 
-        // =================================
-        // START
-        // =================================
-
-        recorder.start()
+        recorder.start(
+            TAMANHO_CHUNK_MS
+        )
 
         startBtn.innerText =
-            'Parar Gravação'
+            'Parar Gravacao'
 
         statusDiv.innerText =
-            'Gravando atendimento...'
+            'Gravando e transcrevendo em trechos...'
 
     } catch (err) {
 
@@ -271,5 +345,19 @@ startBtn.onclick = async () => {
 
         statusDiv.innerText =
             'Erro: ' + err.message
+
+        startBtn.disabled = false
+
+        if (screenStream) {
+            screenStream
+                .getTracks()
+                .forEach(t => t.stop())
+        }
+
+        if (micStream) {
+            micStream
+                .getTracks()
+                .forEach(t => t.stop())
+        }
     }
 }
