@@ -81,14 +81,31 @@ client = OpenAI(
 
 def conectar_banco():
 
-    if DB_PASSWORD:
+    db_password = DB_PASSWORD
+
+    if (
+        not db_password
+        and DATABASE_URL
+        and "postgres:@" in DATABASE_URL
+        and "@db." in DATABASE_URL
+    ):
+
+        db_password = DATABASE_URL.split(
+            "postgres:@",
+            1
+        )[1].split(
+            "@db.",
+            1
+        )[0]
+
+    if db_password:
 
         return psycopg2.connect(
             host=DB_HOST,
             port=DB_PORT,
             dbname=DB_NAME,
             user=DB_USER,
-            password=DB_PASSWORD,
+            password=db_password,
             sslmode="require"
         )
 
