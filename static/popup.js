@@ -14,6 +14,25 @@ let uploadsPendentes = []
 
 const TAMANHO_CHUNK_MS = 30000
 
+async function lerRespostaJson(response, mensagemPadrao) {
+
+    const contentType =
+        response.headers.get('content-type') || ''
+
+    if (
+        contentType.includes('application/json')
+    ) {
+
+        return await response.json()
+    }
+
+    await response.text()
+
+    throw new Error(
+        mensagemPadrao + ': servidor retornou uma pagina de erro'
+    )
+}
+
 // =====================================
 // FORMATAR TEMPO
 // =====================================
@@ -44,7 +63,10 @@ async function iniciarAtendimento() {
         })
 
     const data =
-        await response.json()
+        await lerRespostaJson(
+            response,
+            'Erro iniciando atendimento'
+        )
 
     if (!response.ok) {
 
@@ -84,7 +106,10 @@ async function enviarChunk(blob, ordem) {
         })
 
     const data =
-        await response.json()
+        await lerRespostaJson(
+            response,
+            'Erro transcrevendo trecho'
+        )
 
     if (!response.ok) {
 
@@ -111,7 +136,10 @@ async function finalizarAtendimento(duracao) {
         })
 
     const data =
-        await response.json()
+        await lerRespostaJson(
+            response,
+            'Erro finalizando atendimento'
+        )
 
     if (!response.ok) {
 

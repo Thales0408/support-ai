@@ -200,6 +200,14 @@ def inicializar_banco():
             cursor.execute(
                 """
                 ALTER TABLE atendimentos
+                ALTER COLUMN data TYPE TEXT
+                USING data::TEXT
+                """
+            )
+
+            cursor.execute(
+                """
+                ALTER TABLE atendimentos
                 ADD COLUMN IF NOT EXISTS transcricao_completa TEXT
                 """
             )
