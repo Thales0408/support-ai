@@ -29,6 +29,14 @@ load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 DATABASE_URL = os.getenv("DATABASE_URL")
+DB_HOST = os.getenv(
+    "DB_HOST",
+    "db.epegojdxngrcwvzecupl.supabase.co"
+)
+DB_PORT = os.getenv("DB_PORT", "5432")
+DB_NAME = os.getenv("DB_NAME", "postgres")
+DB_USER = os.getenv("DB_USER", "postgres")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
 
 ADMIN_USUARIO = os.getenv("ADMIN_USUARIO", "admin")
 ADMIN_SENHA = os.getenv("ADMIN_SENHA", "123456")
@@ -73,10 +81,21 @@ client = OpenAI(
 
 def conectar_banco():
 
+    if DB_PASSWORD:
+
+        return psycopg2.connect(
+            host=DB_HOST,
+            port=DB_PORT,
+            dbname=DB_NAME,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            sslmode="require"
+        )
+
     if not DATABASE_URL:
 
         raise RuntimeError(
-            "DATABASE_URL nao configurada"
+            "DATABASE_URL ou DB_PASSWORD nao configurada"
         )
 
     return psycopg2.connect(
