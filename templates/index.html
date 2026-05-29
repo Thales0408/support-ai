@@ -3,473 +3,1115 @@
 <html lang="pt-br">
 
 <head>
-
     <meta charset="UTF-8">
-
     <meta
         name="viewport"
         content="width=device-width, initial-scale=1.0"
     >
-
     <title>55PBX AI</title>
-
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <style>
-
         * {
-
+            box-sizing: border-box;
             margin: 0;
             padding: 0;
-
-            box-sizing: border-box;
         }
 
         body {
-
             background: #0f1115;
-
-            color: white;
-
-            font-family: Arial;
-
-            padding: 20px;
+            color: #f4f7fb;
+            font-family: Arial, sans-serif;
+            min-height: 100vh;
         }
 
-        h1 {
-
-            margin-bottom: 20px;
-        }
-
-        .topo {
-
-            display: flex;
-
-            gap: 10px;
-
-            margin-bottom: 20px;
-
-            flex-wrap: wrap;
+        button,
+        input,
+        select {
+            font: inherit;
         }
 
         button {
-
-            padding: 12px 18px;
-
             border: none;
-
             border-radius: 8px;
-
             cursor: pointer;
+            font-weight: 700;
+            min-height: 42px;
+            padding: 10px 14px;
+        }
 
-            font-weight: bold;
+        .page {
+            margin: 0 auto;
+            max-width: 1380px;
+            padding: 22px;
+        }
+
+        .header {
+            align-items: center;
+            display: flex;
+            gap: 16px;
+            justify-content: space-between;
+            margin-bottom: 18px;
+        }
+
+        .title h1 {
+            font-size: 28px;
+            margin-bottom: 4px;
+        }
+
+        .title p {
+            color: #9aa4b2;
+            font-size: 14px;
+        }
+
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: flex-end;
         }
 
         #start {
-
-            background: #00c853;
-
+            background: #00a85a;
             color: white;
         }
 
-        .excel {
-
+        .btn-blue {
             background: #2962ff;
-
             color: white;
         }
 
-        .logout {
+        .btn-dark {
+            background: #242a35;
+            color: white;
+        }
 
+        .btn-red {
             background: #d50000;
-
-            color: white;
-        }
-
-        .admin {
-
-            background: #2a2f3a;
-
             color: white;
         }
 
         #status {
-
-            background: #1b1f27;
-
-            padding: 15px;
-
-            border-radius: 10px;
-
-            margin-bottom: 20px;
+            background: #171c25;
+            border: 1px solid #273142;
+            border-radius: 8px;
+            color: #d8dee9;
+            margin-bottom: 18px;
+            padding: 14px 16px;
         }
 
-        .dashboard {
-
+        .metrics {
             display: grid;
-
-            grid-template-columns:
-                repeat(auto-fit, minmax(220px, 1fr));
-
-            gap: 15px;
-
-            margin-bottom: 25px;
+            gap: 12px;
+            grid-template-columns: repeat(5, minmax(150px, 1fr));
+            margin-bottom: 18px;
         }
 
-        .card-dashboard {
-
-            background: #1b1f27;
-
-            padding: 20px;
-
-            border-radius: 12px;
+        .metric {
+            background: #171c25;
+            border: 1px solid #273142;
+            border-radius: 8px;
+            padding: 16px;
         }
 
-        .card-dashboard h2 {
-
-            font-size: 15px;
-
-            color: #aaa;
-
-            margin-bottom: 10px;
+        .metric span {
+            color: #9aa4b2;
+            display: block;
+            font-size: 13px;
+            margin-bottom: 8px;
         }
 
-        .numero {
-
-            font-size: 32px;
-
-            font-weight: bold;
+        .metric strong {
+            display: block;
+            font-size: 28px;
         }
 
-        .grafico-box {
-
-            background: #1b1f27;
-
-            padding: 20px;
-
-            border-radius: 12px;
-
-            margin-bottom: 25px;
+        .workarea {
+            display: grid;
+            gap: 16px;
+            grid-template-columns: minmax(0, 1fr) 360px;
         }
 
-        #resultados {
+        .panel {
+            background: #171c25;
+            border: 1px solid #273142;
+            border-radius: 8px;
+            min-width: 0;
+        }
 
+        .panel-header {
+            align-items: center;
+            border-bottom: 1px solid #273142;
             display: flex;
-
-            flex-direction: column;
-
-            gap: 15px;
+            gap: 12px;
+            justify-content: space-between;
+            padding: 14px 16px;
         }
 
-        .card {
-
-            background: #1b1f27;
-
-            padding: 20px;
-
-            border-radius: 12px;
-
-            white-space: pre-wrap;
-
-            line-height: 1.5;
-
-            border-left: 5px solid #2962ff;
+        .panel-header h2 {
+            font-size: 17px;
         }
 
-        .data {
+        .filters {
+            display: grid;
+            gap: 10px;
+            grid-template-columns: 1.5fr repeat(3, minmax(130px, 1fr));
+            padding: 14px 16px;
+        }
 
-            color: #aaa;
+        input,
+        select {
+            background: #242a35;
+            border: 1px solid #343d4d;
+            border-radius: 8px;
+            color: white;
+            min-height: 42px;
+            padding: 10px 12px;
+            width: 100%;
+        }
 
-            margin-bottom: 10px;
+        .table-wrap {
+            overflow-x: auto;
+        }
 
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        th,
+        td {
+            border-bottom: 1px solid #273142;
+            padding: 12px 16px;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        th {
+            color: #9aa4b2;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+
+        td {
+            color: #e7ebf2;
             font-size: 14px;
         }
 
-    </style>
+        .summary-cell {
+            max-width: 560px;
+        }
 
+        .summary-title {
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .summary-text {
+            color: #b9c2cf;
+            display: -webkit-box;
+            line-height: 1.4;
+            overflow: hidden;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 3;
+        }
+
+        .badge {
+            border-radius: 999px;
+            display: inline-flex;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 5px 9px;
+            white-space: nowrap;
+        }
+
+        .badge-ok {
+            background: #103d24;
+            color: #69df9b;
+        }
+
+        .badge-work {
+            background: #3b3212;
+            color: #ffd666;
+        }
+
+        .badge-error {
+            background: #421616;
+            color: #ff8a8a;
+        }
+
+        .row-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .row-actions button {
+            font-size: 13px;
+            min-height: 34px;
+            padding: 8px 10px;
+        }
+
+        .empty {
+            color: #9aa4b2;
+            padding: 22px 16px;
+            text-align: center;
+        }
+
+        .chart-box {
+            padding: 16px;
+        }
+
+        .insights {
+            display: grid;
+            gap: 16px;
+        }
+
+        .list {
+            display: grid;
+            gap: 10px;
+            padding: 16px;
+        }
+
+        .mini-item {
+            background: #202632;
+            border-radius: 8px;
+            padding: 12px;
+        }
+
+        .mini-item strong {
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .mini-item span {
+            color: #9aa4b2;
+            font-size: 13px;
+        }
+
+        .modal {
+            align-items: center;
+            background: rgba(5, 8, 13, 0.78);
+            display: none;
+            inset: 0;
+            justify-content: center;
+            padding: 18px;
+            position: fixed;
+            z-index: 10;
+        }
+
+        .modal.open {
+            display: flex;
+        }
+
+        .modal-card {
+            background: #171c25;
+            border: 1px solid #343d4d;
+            border-radius: 8px;
+            max-height: 90vh;
+            max-width: 980px;
+            overflow: hidden;
+            width: 100%;
+        }
+
+        .modal-body {
+            display: grid;
+            gap: 14px;
+            max-height: 70vh;
+            overflow: auto;
+            padding: 16px;
+        }
+
+        .text-box {
+            background: #10141b;
+            border: 1px solid #273142;
+            border-radius: 8px;
+            line-height: 1.55;
+            padding: 14px;
+            white-space: pre-wrap;
+        }
+
+        @media (max-width: 1050px) {
+            .metrics {
+                grid-template-columns: repeat(2, minmax(150px, 1fr));
+            }
+
+            .workarea {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 760px) {
+            .header,
+            .panel-header {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .actions {
+                justify-content: flex-start;
+            }
+
+            .filters {
+                grid-template-columns: 1fr;
+            }
+
+            th,
+            td {
+                padding: 10px;
+            }
+        }
+    </style>
 </head>
 
 <body>
+    <main class="page">
+        <header class="header">
+            <div class="title">
+                <h1>55PBX AI</h1>
+                <p>Dashboard de atendimentos e resumos para Zendesk</p>
+            </div>
 
-    <h1>
+            <div class="actions">
+                <button id="start">Iniciar Gravacao</button>
 
-        55PBX AI Dashboard
+                {% if is_admin %}
+                    <a href="/admin">
+                        <button class="btn-dark">Usuarios</button>
+                    </a>
+                {% endif %}
 
-    </h1>
+                <a href="/exportar">
+                    <button class="btn-blue">Exportar Excel</button>
+                </a>
 
-    <div class="topo">
+                <a href="/logout">
+                    <button class="btn-red">Logout</button>
+                </a>
+            </div>
+        </header>
 
-        <button id="start">
+        <div id="status">Sistema pronto.</div>
 
-            Iniciar Gravação
+        <section class="metrics">
+            <div class="metric">
+                <span>Total no filtro</span>
+                <strong id="metric-total">0</strong>
+            </div>
+            <div class="metric">
+                <span>Finalizados</span>
+                <strong id="metric-finalizados">0</strong>
+            </div>
+            <div class="metric">
+                <span>Em andamento</span>
+                <strong id="metric-andamento">0</strong>
+            </div>
+            <div class="metric">
+                <span>Com falha</span>
+                <strong id="metric-falhas">0</strong>
+            </div>
+            <div class="metric">
+                <span>TMA</span>
+                <strong id="metric-tma">00m 00s</strong>
+            </div>
+        </section>
 
-        </button>
+        <section class="workarea">
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>Atendimentos</h2>
+                    <span id="last-update"></span>
+                </div>
 
-        {% if is_admin %}
-            <a href="/admin">
+                <div class="filters">
+                    <input
+                        id="filtro-busca"
+                        placeholder="Buscar por resumo, transcricao, analista ou data"
+                    >
 
-                <button class="admin">
+                    <select id="filtro-periodo">
+                        <option value="todos">Todos os periodos</option>
+                        <option value="hoje">Hoje</option>
+                        <option value="7">Ultimos 7 dias</option>
+                        <option value="30">Ultimos 30 dias</option>
+                    </select>
 
-                    Usuarios
+                    <select id="filtro-status">
+                        <option value="todos">Todos os status</option>
+                        <option value="finalizado">Finalizados</option>
+                        <option value="andamento">Em andamento</option>
+                        <option value="falha">Com falha</option>
+                    </select>
 
-                </button>
+                    {% if is_admin %}
+                        <select id="filtro-escopo">
+                            <option value="meus">Meus atendimentos</option>
+                            <option value="todos">Todos os analistas</option>
+                        </select>
+                    {% else %}
+                        <select
+                            id="filtro-escopo"
+                            disabled
+                        >
+                            <option value="meus">Meus atendimentos</option>
+                        </select>
+                    {% endif %}
+                </div>
 
-            </a>
-        {% endif %}
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>Analista</th>
+                                <th>Status</th>
+                                <th>Resumo</th>
+                                <th>Tempo</th>
+                                <th>Acoes</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-atendimentos"></tbody>
+                    </table>
+                    <div
+                        class="empty"
+                        id="empty-state"
+                    >Nenhum atendimento encontrado.</div>
+                </div>
+            </div>
 
-        <a href="/exportar">
+            <aside class="insights">
+                <div class="panel">
+                    <div class="panel-header">
+                        <h2>Volume por dia</h2>
+                    </div>
+                    <div class="chart-box">
+                        <canvas id="grafico"></canvas>
+                    </div>
+                </div>
 
-            <button class="excel">
+                <div class="panel">
+                    <div class="panel-header">
+                        <h2>Pontos de atencao</h2>
+                    </div>
+                    <div
+                        class="list"
+                        id="lista-alertas"
+                    ></div>
+                </div>
+            </aside>
+        </section>
+    </main>
 
-                Exportar Excel
-
-            </button>
-
-        </a>
-
-        <a href="/logout">
-
-            <button class="logout">
-
-                Logout
-
-            </button>
-
-        </a>
-
-    </div>
-
-    <div id="status">
-
-        Sistema pronto.
-    </div>
-
-    <div class="dashboard">
-
-        <div class="card-dashboard">
-
-            <h2>Total Atendimentos</h2>
-
-            <div
-                class="numero"
-                id="total"
-            >0</div>
-
+    <div
+        class="modal"
+        id="modal-detalhe"
+    >
+        <div class="modal-card">
+            <div class="panel-header">
+                <h2 id="modal-titulo">Atendimento</h2>
+                <div class="row-actions">
+                    <button
+                        class="btn-blue"
+                        id="copiar-modal"
+                    >Copiar resumo</button>
+                    <button
+                        class="btn-dark"
+                        id="fechar-modal"
+                    >Fechar</button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div>
+                    <h3>Resumo Zendesk</h3>
+                    <div
+                        class="text-box"
+                        id="modal-resumo"
+                    ></div>
+                </div>
+                <div>
+                    <h3>Transcricao completa</h3>
+                    <div
+                        class="text-box"
+                        id="modal-transcricao"
+                    ></div>
+                </div>
+            </div>
         </div>
-
-        <div class="card-dashboard">
-
-            <h2>Processando</h2>
-
-            <div
-                class="numero"
-                id="processando"
-            >0</div>
-
-        </div>
-
-        <div class="card-dashboard">
-
-            <h2>Hoje</h2>
-
-            <div
-                class="numero"
-                id="hoje"
-            >0</div>
-
-        </div>
-
     </div>
-
-    <div class="grafico-box">
-
-        <canvas id="grafico"></canvas>
-
-    </div>
-
-    <h2 style="margin-bottom:20px">
-
-        Últimos Atendimentos
-
-    </h2>
-
-    <div id="resultados"></div>
 
     <script src="/static/popup.js"></script>
 
     <script>
-
+        let atendimentos = []
+        let atendimentosFiltrados = []
         let chart = null
+        let detalheAtual = null
 
-        async function carregarResultados() {
+        const tbody =
+            document.getElementById("tbody-atendimentos")
 
-            const response =
-                await fetch("/resultados")
+        const emptyState =
+            document.getElementById("empty-state")
 
-            const data =
-                await response.json()
+        const filtroBusca =
+            document.getElementById("filtro-busca")
 
-            document.getElementById(
-                "total"
-            ).innerText =
-                data.resultados.length
+        const filtroPeriodo =
+            document.getElementById("filtro-periodo")
 
-            document.getElementById(
-                "processando"
-            ).innerText =
-                data.processando.length
+        const filtroStatus =
+            document.getElementById("filtro-status")
 
-            // =========================
-            // HOJE
-            // =========================
+        const filtroEscopo =
+            document.getElementById("filtro-escopo")
 
-            const hoje =
+        const modal =
+            document.getElementById("modal-detalhe")
+
+        const statusArea =
+            document.getElementById("status")
+
+        function formatarDuracao(segundos) {
+            const valor =
+                Number(segundos || 0)
+
+            const minutos =
+                Math.floor(valor / 60)
+
+            const resto =
+                valor % 60
+
+            return `${String(minutos).padStart(2, "0")}m ${String(resto).padStart(2, "0")}s`
+        }
+
+        function dataItem(item) {
+            const partes =
+                String(item.data || "").split(" ")[0].split("/")
+
+            if (partes.length !== 3) {
+                return null
+            }
+
+            return new Date(
+                Number(partes[2]),
+                Number(partes[1]) - 1,
+                Number(partes[0])
+            )
+        }
+
+        function statusInfo(item) {
+            if (
+                item.chunks_falhos &&
+                item.chunks_falhos > 0
+            ) {
+                return {
+                    classe: "badge-error",
+                    texto: "Com falha"
+                }
+            }
+
+            if (item.status === "finalizado") {
+                return {
+                    classe: "badge-ok",
+                    texto: "Finalizado"
+                }
+            }
+
+            return {
+                classe: "badge-work",
+                texto: item.status || "Em andamento"
+            }
+        }
+
+        function resumoCurto(texto) {
+            const limpo =
+                String(texto || "").trim()
+
+            if (!limpo) {
+                return "Resumo ainda nao disponivel."
+            }
+
+            return limpo
+        }
+
+        function filtrarAtendimentos() {
+            const busca =
+                filtroBusca.value.toLowerCase().trim()
+
+            const periodo =
+                filtroPeriodo.value
+
+            const status =
+                filtroStatus.value
+
+            const agora =
                 new Date()
 
-            const hojeFormatado =
-                hoje.toLocaleDateString("pt-BR")
+            atendimentosFiltrados =
+                atendimentos.filter(item => {
+                    const textoBusca = [
+                        item.data,
+                        item.usuario,
+                        item.status,
+                        item.conteudo,
+                        item.transcricao_completa
+                    ].join(" ").toLowerCase()
 
-            let totalHoje = 0
+                    if (
+                        busca &&
+                        !textoBusca.includes(busca)
+                    ) {
+                        return false
+                    }
 
-            data.resultados.forEach(item => {
+                    if (periodo !== "todos") {
+                        const data =
+                            dataItem(item)
 
-                if (
-                    item.data.includes(
-                        hojeFormatado
+                        if (!data) {
+                            return false
+                        }
+
+                        const inicio =
+                            new Date(
+                                agora.getFullYear(),
+                                agora.getMonth(),
+                                agora.getDate()
+                            )
+
+                        if (periodo === "hoje") {
+                            if (data < inicio) {
+                                return false
+                            }
+                        } else {
+                            const dias =
+                                Number(periodo)
+
+                            const limite =
+                                new Date(inicio)
+
+                            limite.setDate(
+                                limite.getDate() - dias + 1
+                            )
+
+                            if (data < limite) {
+                                return false
+                            }
+                        }
+                    }
+
+                    if (status === "finalizado") {
+                        return item.status === "finalizado"
+                    }
+
+                    if (status === "andamento") {
+                        return item.status !== "finalizado"
+                    }
+
+                    if (status === "falha") {
+                        return item.chunks_falhos > 0
+                    }
+
+                    return true
+                })
+
+            renderizarDashboard()
+        }
+
+        function renderizarMetricas() {
+            const total =
+                atendimentosFiltrados.length
+
+            const finalizados =
+                atendimentosFiltrados.filter(
+                    item => item.status === "finalizado"
+                ).length
+
+            const andamento =
+                atendimentosFiltrados.filter(
+                    item => item.status !== "finalizado"
+                ).length
+
+            const falhas =
+                atendimentosFiltrados.filter(
+                    item => item.chunks_falhos > 0
+                ).length
+
+            const duracoes =
+                atendimentosFiltrados
+                    .map(item => Number(item.duracao_segundos || 0))
+                    .filter(valor => valor > 0)
+
+            const media =
+                duracoes.length
+                    ? Math.round(
+                        duracoes.reduce(
+                            (soma, valor) => soma + valor,
+                            0
+                        ) / duracoes.length
                     )
-                ) {
+                    : 0
 
-                    totalHoje++
-                }
+            document.getElementById("metric-total").innerText = total
+            document.getElementById("metric-finalizados").innerText = finalizados
+            document.getElementById("metric-andamento").innerText = andamento
+            document.getElementById("metric-falhas").innerText = falhas
+            document.getElementById("metric-tma").innerText =
+                formatarDuracao(media)
+        }
 
+        function renderizarTabela() {
+            tbody.innerHTML = ""
+
+            emptyState.style.display =
+                atendimentosFiltrados.length ? "none" : "block"
+
+            atendimentosFiltrados.forEach(item => {
+                const tr =
+                    document.createElement("tr")
+
+                const status =
+                    statusInfo(item)
+
+                const tdData =
+                    document.createElement("td")
+
+                tdData.innerText =
+                    item.data || "-"
+
+                const tdUsuario =
+                    document.createElement("td")
+
+                tdUsuario.innerText =
+                    item.usuario || "-"
+
+                const tdStatus =
+                    document.createElement("td")
+
+                const badge =
+                    document.createElement("span")
+
+                badge.className =
+                    `badge ${status.classe}`
+
+                badge.innerText =
+                    status.texto
+
+                tdStatus.appendChild(badge)
+
+                const tdResumo =
+                    document.createElement("td")
+
+                tdResumo.className =
+                    "summary-cell"
+
+                const title =
+                    document.createElement("div")
+
+                title.className =
+                    "summary-title"
+
+                title.innerText =
+                    `Atendimento #${item.id}`
+
+                const text =
+                    document.createElement("div")
+
+                text.className =
+                    "summary-text"
+
+                text.innerText =
+                    resumoCurto(item.conteudo)
+
+                tdResumo.appendChild(title)
+                tdResumo.appendChild(text)
+
+                const tdTempo =
+                    document.createElement("td")
+
+                tdTempo.innerText =
+                    formatarDuracao(item.duracao_segundos)
+
+                const tdAcoes =
+                    document.createElement("td")
+
+                const acoes =
+                    document.createElement("div")
+
+                acoes.className =
+                    "row-actions"
+
+                const btnDetalhe =
+                    document.createElement("button")
+
+                btnDetalhe.className =
+                    "btn-dark"
+
+                btnDetalhe.innerText =
+                    "Detalhes"
+
+                btnDetalhe.onclick =
+                    () => abrirDetalhe(item.id)
+
+                const btnCopiar =
+                    document.createElement("button")
+
+                btnCopiar.className =
+                    "btn-blue"
+
+                btnCopiar.innerText =
+                    "Copiar"
+
+                btnCopiar.onclick =
+                    () => copiarTexto(item.conteudo || "")
+
+                acoes.appendChild(btnDetalhe)
+                acoes.appendChild(btnCopiar)
+                tdAcoes.appendChild(acoes)
+
+                tr.appendChild(tdData)
+                tr.appendChild(tdUsuario)
+                tr.appendChild(tdStatus)
+                tr.appendChild(tdResumo)
+                tr.appendChild(tdTempo)
+                tr.appendChild(tdAcoes)
+                tbody.appendChild(tr)
             })
+        }
 
-            document.getElementById(
-                "hoje"
-            ).innerText =
-                totalHoje
-
-            // =========================
-            // HISTÓRICO
-            // =========================
-
-            const resultados =
-                document.getElementById(
-                    "resultados"
-                )
-
-            resultados.innerHTML = ""
-
-            data.resultados.forEach(item => {
-
-                const div =
-                    document.createElement("div")
-
-                div.className = "card"
-
-                const dataDiv =
-                    document.createElement("div")
-
-                dataDiv.className = "data"
-                dataDiv.innerText =
-                    item.data
-
-                const conteudoDiv =
-                    document.createElement("div")
-
-                conteudoDiv.innerText =
-                    item.conteudo || ""
-
-                div.appendChild(dataDiv)
-                div.appendChild(conteudoDiv)
-
-                if (
-                    item.chunks_falhos &&
-                    item.chunks_falhos > 0
-                ) {
-
-                    const aviso =
-                        document.createElement("div")
-
-                    aviso.className = "data"
-                    aviso.innerText =
-                        `${item.chunks_falhos} trecho(s) com falha na transcricao`
-
-                    div.appendChild(aviso)
-                }
-
-                resultados.appendChild(div)
-
-            })
-
-            // =========================
-            // GRAFICO
-            // =========================
-
+        function renderizarGrafico() {
             const dias = {}
 
-            data.resultados.forEach(item => {
+            atendimentosFiltrados.forEach(item => {
+                const data =
+                    String(item.data || "").split(" ")[0]
 
-                const dataLimpa =
-                    item.data.split(" ")[0]
-
-                if (!dias[dataLimpa]) {
-
-                    dias[dataLimpa] = 0
+                if (!data) {
+                    return
                 }
 
-                dias[dataLimpa]++
-
+                dias[data] =
+                    (dias[data] || 0) + 1
             })
 
             const labels =
-                Object.keys(dias)
+                Object.keys(dias).reverse()
 
             const valores =
-                Object.values(dias)
+                labels.map(label => dias[label])
 
             const ctx =
-                document
-                    .getElementById(
-                        "grafico"
-                    )
+                document.getElementById("grafico")
 
             if (chart) {
-
                 chart.destroy()
             }
 
             chart =
                 new Chart(ctx, {
-
-                    type: 'line',
-
+                    type: "line",
                     data: {
-
-                        labels: labels,
-
+                        labels,
                         datasets: [{
-
-                            label: 'Atendimentos',
-
+                            label: "Atendimentos",
                             data: valores,
-
-                            tension: 0.3
-
+                            borderColor: "#4f8cff",
+                            backgroundColor: "rgba(79, 140, 255, 0.18)",
+                            fill: true,
+                            tension: 0.35
                         }]
+                    },
+                    options: {
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    precision: 0
+                                }
+                            }
+                        }
                     }
                 })
         }
+
+        function renderizarAlertas() {
+            const lista =
+                document.getElementById("lista-alertas")
+
+            lista.innerHTML = ""
+
+            const falhas =
+                atendimentosFiltrados
+                    .filter(item => item.chunks_falhos > 0)
+                    .slice(0, 5)
+
+            const andamento =
+                atendimentosFiltrados
+                    .filter(item => item.status !== "finalizado")
+                    .slice(0, 5)
+
+            const itens =
+                [...falhas, ...andamento].slice(0, 6)
+
+            if (!itens.length) {
+                const div =
+                    document.createElement("div")
+
+                div.className =
+                    "mini-item"
+
+                const titulo =
+                    document.createElement("strong")
+
+                titulo.innerText =
+                    "Nenhum alerta no filtro"
+
+                const texto =
+                    document.createElement("span")
+
+                texto.innerText =
+                    "Os atendimentos estao sem pendencias aparentes."
+
+                div.appendChild(titulo)
+                div.appendChild(texto)
+
+                lista.appendChild(div)
+                return
+            }
+
+            itens.forEach(item => {
+                const div =
+                    document.createElement("div")
+
+                div.className =
+                    "mini-item"
+
+                const falha =
+                    item.chunks_falhos > 0
+
+                const titulo =
+                    document.createElement("strong")
+
+                titulo.innerText =
+                    `Atendimento #${item.id}`
+
+                const texto =
+                    document.createElement("span")
+
+                texto.innerText =
+                    `${falha ? item.chunks_falhos + " trecho(s) com falha" : "Ainda em andamento"} - ${item.data}`
+
+                div.appendChild(titulo)
+                div.appendChild(texto)
+
+                lista.appendChild(div)
+            })
+        }
+
+        function renderizarDashboard() {
+            renderizarMetricas()
+            renderizarTabela()
+            renderizarGrafico()
+            renderizarAlertas()
+        }
+
+        async function carregarResultados() {
+            const response =
+                await fetch(
+                    `/resultados?escopo=${encodeURIComponent(filtroEscopo.value)}`
+                )
+
+            const data =
+                await response.json()
+
+            atendimentos =
+                data.resultados || []
+
+            document.getElementById("last-update").innerText =
+                "Atualizado agora"
+
+            filtrarAtendimentos()
+        }
+
+        async function abrirDetalhe(id) {
+            const response =
+                await fetch(`/atendimentos/${id}`)
+
+            const data =
+                await response.json()
+
+            if (!response.ok) {
+                alert(data.erro || "Erro carregando atendimento")
+                return
+            }
+
+            detalheAtual = data
+
+            document.getElementById("modal-titulo").innerText =
+                `Atendimento #${data.id} - ${data.usuario}`
+
+            document.getElementById("modal-resumo").innerText =
+                data.conteudo || "Resumo nao disponivel."
+
+            document.getElementById("modal-transcricao").innerText =
+                data.transcricao_completa || "Transcricao nao disponivel."
+
+            modal.classList.add("open")
+        }
+
+        async function copiarTexto(texto) {
+            const valor =
+                String(texto || "").trim()
+
+            if (!valor) {
+                alert("Nao ha resumo para copiar.")
+                return
+            }
+
+            await navigator.clipboard.writeText(valor)
+            statusArea.innerText =
+                "Resumo copiado para a area de transferencia."
+        }
+
+        document.getElementById("fechar-modal").onclick =
+            () => modal.classList.remove("open")
+
+        document.getElementById("copiar-modal").onclick =
+            () => copiarTexto(
+                detalheAtual ? detalheAtual.conteudo : ""
+            )
+
+        modal.onclick =
+            event => {
+                if (event.target === modal) {
+                    modal.classList.remove("open")
+                }
+            }
+
+        filtroBusca.oninput =
+            filtrarAtendimentos
+
+        filtroPeriodo.onchange =
+            filtrarAtendimentos
+
+        filtroStatus.onchange =
+            filtrarAtendimentos
+
+        filtroEscopo.onchange =
+            carregarResultados
 
         carregarResultados()
 
         setInterval(
             carregarResultados,
-            5000
+            8000
         )
-
     </script>
-
 </body>
 
 </html>

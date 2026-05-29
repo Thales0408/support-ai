@@ -1226,29 +1226,69 @@ def resultados():
             "processando": []
         })
 
+    escopo = request.args.get(
+        "escopo",
+        "meus"
+    )
+
+    ver_todos = (
+        escopo == "todos"
+        and usuario_admin()
+    )
+
     with conectar_banco() as conn:
 
         with conn.cursor() as cursor:
 
-            cursor.execute(
-                """
-                SELECT
-                    id,
-                    arquivo,
-                    conteudo,
-                    data,
-                    status,
-                    chunks_total,
-                    chunks_falhos
-                FROM atendimentos
-                WHERE usuario_id = %s
-                ORDER BY id DESC
-                LIMIT 100
-                """,
-                (
-                    usuario_id,
+            if ver_todos:
+
+                cursor.execute(
+                    """
+                    SELECT
+                        a.id,
+                        a.arquivo,
+                        a.conteudo,
+                        a.data,
+                        a.status,
+                        a.chunks_total,
+                        a.chunks_falhos,
+                        a.duracao_segundos,
+                        a.transcricao_completa,
+                        u.usuario
+                    FROM atendimentos a
+                    LEFT JOIN usuarios u
+                    ON u.id = a.usuario_id
+                    ORDER BY a.id DESC
+                    LIMIT 300
+                    """
                 )
-            )
+
+            else:
+
+                cursor.execute(
+                    """
+                    SELECT
+                        a.id,
+                        a.arquivo,
+                        a.conteudo,
+                        a.data,
+                        a.status,
+                        a.chunks_total,
+                        a.chunks_falhos,
+                        a.duracao_segundos,
+                        a.transcricao_completa,
+                        u.usuario
+                    FROM atendimentos a
+                    LEFT JOIN usuarios u
+                    ON u.id = a.usuario_id
+                    WHERE a.usuario_id = %s
+                    ORDER BY a.id DESC
+                    LIMIT 300
+                    """,
+                    (
+                        usuario_id,
+                    )
+                )
 
             rows = cursor.fetchall()
 
@@ -1264,7 +1304,10 @@ def resultados():
             "data": row[3],
             "status": row[4],
             "chunks_total": row[5] or 0,
-            "chunks_falhos": row[6] or 0
+            "chunks_falhos": row[6] or 0,
+            "duracao_segundos": row[7] or 0,
+            "transcricao_completa": row[8] or "",
+            "usuario": row[9] or "Nao informado"
         }
 
         itens.append(item)
@@ -1275,7 +1318,95 @@ def resultados():
 
     return jsonify({
         "resultados": itens,
-        "processando": processando
+        "processando": processando,
+        "escopo": "todos" if ver_todos else "meus",
+        "is_admin": usuario_admin()
+    })
+
+
+@app.route("/atendimentos/<int:atendimento_id>")
+def detalhe_atendimento(atendimento_id):
+
+    usuario_id = usuario_logado()
+
+    if not usuario_id:
+
+        return jsonify({
+            "erro": "Nao autenticado"
+        }), 401
+
+    with conectar_banco() as conn:
+
+        with conn.cursor() as cursor:
+
+            if usuario_admin():
+
+                cursor.execute(
+                    """
+                    SELECT
+                        a.id,
+                        a.conteudo,
+                        a.transcricao_completa,
+                        a.data,
+                        a.status,
+                        a.duracao_segundos,
+                        a.chunks_total,
+                        a.chunks_falhos,
+                        u.usuario
+                    FROM atendimentos a
+                    LEFT JOIN usuarios u
+                    ON u.id = a.usuario_id
+                    WHERE a.id = %s
+                    """,
+                    (
+                        atendimento_id,
+                    )
+                )
+
+            else:
+
+                cursor.execute(
+                    """
+                    SELECT
+                        a.id,
+                        a.conteudo,
+                        a.transcricao_completa,
+                        a.data,
+                        a.status,
+                        a.duracao_segundos,
+                        a.chunks_total,
+                        a.chunks_falhos,
+                        u.usuario
+                    FROM atendimentos a
+                    LEFT JOIN usuarios u
+                    ON u.id = a.usuario_id
+                    WHERE a.id = %s
+                    AND a.usuario_id = %s
+                    """,
+                    (
+                        atendimento_id,
+                        usuario_id
+                    )
+                )
+
+            row = cursor.fetchone()
+
+    if not row:
+
+        return jsonify({
+            "erro": "Atendimento nao encontrado"
+        }), 404
+
+    return jsonify({
+        "id": row[0],
+        "conteudo": row[1] or "",
+        "transcricao_completa": row[2] or "",
+        "data": row[3],
+        "status": row[4],
+        "duracao_segundos": row[5] or 0,
+        "chunks_total": row[6] or 0,
+        "chunks_falhos": row[7] or 0,
+        "usuario": row[8] or "Nao informado"
     })
 
 
