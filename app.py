@@ -739,6 +739,92 @@ def admin_alterar_senha(usuario_id):
     return redirect("/admin")
 
 
+@app.route(
+    "/admin/usuarios/<int:usuario_id>/nome",
+    methods=["POST"]
+)
+def admin_alterar_nome(usuario_id):
+
+    if not usuario_logado():
+
+        return redirect("/login")
+
+    if not usuario_admin():
+
+        return redirect("/")
+
+    novo_usuario = limpar_texto(
+        request.form.get("usuario")
+    )
+
+    if not novo_usuario:
+
+        return redirect("/admin")
+
+    try:
+
+        with conectar_banco() as conn:
+
+            with conn.cursor() as cursor:
+
+                cursor.execute(
+                    """
+                    UPDATE usuarios
+                    SET usuario = %s
+                    WHERE id = %s
+                    """,
+                    (
+                        novo_usuario,
+                        usuario_id
+                    )
+                )
+
+        if usuario_id == usuario_logado():
+
+            session["usuario_nome"] = novo_usuario
+
+    except psycopg2.errors.UniqueViolation:
+
+        pass
+
+    return redirect("/admin")
+
+
+@app.route(
+    "/admin/usuarios/<int:usuario_id>/excluir",
+    methods=["POST"]
+)
+def admin_excluir_usuario(usuario_id):
+
+    if not usuario_logado():
+
+        return redirect("/login")
+
+    if not usuario_admin():
+
+        return redirect("/")
+
+    if usuario_id == usuario_logado():
+
+        return redirect("/admin")
+
+    with conectar_banco() as conn:
+
+        with conn.cursor() as cursor:
+
+            cursor.execute(
+                """
+                DELETE FROM usuarios
+                WHERE id = %s
+                """,
+                (
+                    usuario_id,
+                )
+            )
+
+    return redirect("/admin")
+
+
 # =========================================
 # HEALTH
 # =========================================

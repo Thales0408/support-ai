@@ -153,13 +153,19 @@
             gap: 8px;
         }
 
-        .senha-form {
+        .inline-form {
             display: flex;
             gap: 8px;
         }
 
-        .senha-form input {
+        .inline-form input {
             min-width: 180px;
+        }
+
+        .hint {
+            color: #aaa;
+            font-size: 13px;
+            margin-bottom: 16px;
         }
 
         @media (max-width: 760px) {
@@ -261,6 +267,10 @@
     <section class="box">
         <h2>Usuários cadastrados</h2>
 
+        <p class="hint">
+            Excluir um usuario tambem remove os atendimentos vinculados a ele.
+        </p>
+
         <table>
             <thead>
                 <tr>
@@ -274,7 +284,23 @@
             <tbody>
                 {% for item in usuarios %}
                     <tr>
-                        <td>{{ item[1] }}</td>
+                        <td>
+                            <form
+                                class="inline-form"
+                                method="POST"
+                                action="/admin/usuarios/{{ item[0] }}/nome"
+                            >
+                                <input
+                                    name="usuario"
+                                    value="{{ item[1] }}"
+                                    required
+                                >
+                                <button
+                                    class="principal"
+                                    type="submit"
+                                >Salvar</button>
+                            </form>
+                        </td>
                         <td>
                             {% if item[2] %}
                                 Admin
@@ -321,7 +347,7 @@
                                 </form>
 
                                 <form
-                                    class="senha-form"
+                                    class="inline-form"
                                     method="POST"
                                     action="/admin/usuarios/{{ item[0] }}/senha"
                                 >
@@ -335,6 +361,18 @@
                                         class="principal"
                                         type="submit"
                                     >Redefinir</button>
+                                </form>
+
+                                <form
+                                    method="POST"
+                                    action="/admin/usuarios/{{ item[0] }}/excluir"
+                                    onsubmit="return confirm('Excluir este usuario e todos os atendimentos vinculados?')"
+                                >
+                                    <button
+                                        class="perigo"
+                                        type="submit"
+                                        {% if item[0] == usuario_id %}disabled{% endif %}
+                                    >Excluir</button>
                                 </form>
                             </div>
                         </td>
