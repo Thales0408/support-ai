@@ -55,17 +55,22 @@ Edite o `.env` e preencha:
 
 ```text
 OPENAI_API_KEY=<chave real da OpenAI>
+GROQ_API_KEY=<chave real da Groq>
+GROQ_BASE_URL=https://api.groq.com/openai/v1
 DB_HOST=aws-1-sa-east-1.pooler.supabase.com
 DB_PORT=6543
 DB_NAME=postgres
 DB_USER=postgres.epegojdxngrcwvzecupl
 DB_PASSWORD=<senha atual do Supabase>
-TRANSCRIBE_MODEL=gpt-4o-mini-transcribe
+TRANSCRIBE_PROVIDER=groq
+TRANSCRIBE_MODEL=whisper-large-v3-turbo
 SUMMARY_MODEL=gpt-4.1-mini
 ADMIN_USUARIO=admin
 ADMIN_SENHA=123456
 SECRET_KEY=<chave grande e aleatoria>
 ```
+
+Para manter o custo baixo em volume, a transcricao deve usar Groq (`TRANSCRIBE_PROVIDER=groq`). A OpenAI continua sendo usada para o resumo final.
 
 Nao commitar `.env`. Ele esta ignorado pelo Git.
 
@@ -148,11 +153,14 @@ Conferir no Railway:
 
 ```text
 OPENAI_API_KEY
+GROQ_API_KEY
+GROQ_BASE_URL
 DB_HOST
 DB_PORT
 DB_NAME
 DB_USER
 DB_PASSWORD
+TRANSCRIBE_PROVIDER
 TRANSCRIBE_MODEL
 SUMMARY_MODEL
 SECRET_KEY

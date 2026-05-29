@@ -57,7 +57,8 @@ Status validado em 2026-05-29:
     "user": "postgres.epegojdxngrcwvzecupl"
   },
   "status": "ok",
-  "transcribe_model": "gpt-4o-mini-transcribe"
+  "transcribe_provider": "groq",
+  "transcribe_model": "whisper-large-v3-turbo"
 }
 ```
 
@@ -90,7 +91,7 @@ Banco:
 
 IA:
 
-- OpenAI `gpt-4o-mini-transcribe` para transcricao.
+- Groq `whisper-large-v3-turbo` para transcricao de baixo custo.
 - OpenAI `gpt-4.1-mini` para resumo final.
 
 ## Arquivos principais
@@ -117,12 +118,15 @@ Obrigatorias:
 
 ```text
 OPENAI_API_KEY=<chave real da OpenAI>
+GROQ_API_KEY=<chave real da Groq>
+GROQ_BASE_URL=https://api.groq.com/openai/v1
 DB_HOST=aws-1-sa-east-1.pooler.supabase.com
 DB_PORT=6543
 DB_NAME=postgres
 DB_USER=postgres.epegojdxngrcwvzecupl
 DB_PASSWORD=<senha atual do banco Supabase>
-TRANSCRIBE_MODEL=gpt-4o-mini-transcribe
+TRANSCRIBE_PROVIDER=groq
+TRANSCRIBE_MODEL=whisper-large-v3-turbo
 SUMMARY_MODEL=gpt-4.1-mini
 SECRET_KEY=<chave secreta forte>
 ```
@@ -207,7 +211,7 @@ Browser
 -> Backend cria atendimento
 -> MediaRecorder envia chunks de 30 segundos
 -> Flask/Railway recebe cada chunk
--> OpenAI gpt-4o-mini-transcribe transcreve cada trecho
+-> Groq whisper-large-v3-turbo transcreve cada trecho
 -> Supabase salva chunks
 -> Fim da ligacao
 -> Frontend aguarda uploads pendentes
@@ -413,7 +417,7 @@ Estado atual:
 - Backend Flask em Python 3.11.
 - Deploy Railway.
 - Banco Supabase/PostgreSQL via pooler.
-- Transcricao por chunks de 30 segundos usando OpenAI gpt-4o-mini-transcribe.
+- Transcricao por chunks de 30 segundos usando Groq whisper-large-v3-turbo.
 - Resumo final usando gpt-4.1-mini.
 - Usuarios com senha hash.
 - Tela admin para criar, editar, desativar, excluir e redefinir senha de usuarios.

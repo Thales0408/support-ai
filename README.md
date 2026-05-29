@@ -16,7 +16,7 @@ O sistema captura audio da aba do 55PBX e do microfone, envia trechos de audio p
 - Flask
 - Waitress
 - Supabase/PostgreSQL via Connection Pooler
-- OpenAI `gpt-4o-mini-transcribe`
+- Groq `whisper-large-v3-turbo` para transcricao de baixo custo
 - OpenAI `gpt-4.1-mini`
 - HTML, CSS e JavaScript
 - MediaRecorder, `getDisplayMedia`, `getUserMedia` e `AudioContext`
@@ -58,15 +58,28 @@ Obrigatorias:
 
 ```text
 OPENAI_API_KEY=
+GROQ_API_KEY=
+GROQ_BASE_URL=
 DB_HOST=
 DB_PORT=
 DB_NAME=
 DB_USER=
 DB_PASSWORD=
+TRANSCRIBE_PROVIDER=
 TRANSCRIBE_MODEL=
 SUMMARY_MODEL=
 SECRET_KEY=
 ```
+
+Para reduzir custo mensal, use:
+
+```text
+TRANSCRIBE_PROVIDER=groq
+TRANSCRIBE_MODEL=whisper-large-v3-turbo
+GROQ_BASE_URL=https://api.groq.com/openai/v1
+```
+
+O `OPENAI_API_KEY` continua sendo usado para gerar o resumo final. A transcricao usa `GROQ_API_KEY` quando `TRANSCRIBE_PROVIDER=groq`.
 
 O backend prioriza `DB_*` quando `DB_PASSWORD` esta configurada. `DATABASE_URL` pode existir no Railway, mas nao deve ser a fonte principal enquanto o pooler do Supabase estiver configurado via `DB_*`.
 

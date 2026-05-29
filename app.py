@@ -33,6 +33,11 @@ import traceback
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_BASE_URL = os.getenv(
+    "GROQ_BASE_URL",
+    "https://api.groq.com/openai/v1"
+)
 DATABASE_URL = os.getenv("DATABASE_URL")
 DB_HOST = os.getenv(
     "DB_HOST",
@@ -49,9 +54,20 @@ DB_PASSWORD = os.getenv("DB_PASSWORD")
 ADMIN_USUARIO = os.getenv("ADMIN_USUARIO", "admin")
 ADMIN_SENHA = os.getenv("ADMIN_SENHA", "123456")
 
+TRANSCRIBE_PROVIDER = os.getenv(
+    "TRANSCRIBE_PROVIDER",
+    "openai"
+).strip().lower()
+
+DEFAULT_TRANSCRIBE_MODEL = (
+    "whisper-large-v3-turbo"
+    if TRANSCRIBE_PROVIDER == "groq"
+    else "gpt-4o-mini-transcribe"
+)
+
 TRANSCRIBE_MODEL = os.getenv(
     "TRANSCRIBE_MODEL",
-    "gpt-4o-mini-transcribe"
+    DEFAULT_TRANSCRIBE_MODEL
 )
 
 SUMMARY_MODEL = os.getenv(
@@ -75,12 +91,51 @@ CORS(app)
 
 
 # =========================================
-# OPENAI
+# IA
 # =========================================
 
-client = OpenAI(
-    api_key=OPENAI_API_KEY
+summary_client = (
+    OpenAI(
+        api_key=OPENAI_API_KEY
+    )
+    if OPENAI_API_KEY
+    else None
 )
+
+
+def cliente_resumo():
+
+    if not summary_client:
+
+        raise RuntimeError(
+            "OPENAI_API_KEY nao configurada"
+        )
+
+    return summary_client
+
+
+def cliente_transcricao():
+
+    if TRANSCRIBE_PROVIDER == "groq":
+
+        if not GROQ_API_KEY:
+
+            raise RuntimeError(
+                "GROQ_API_KEY nao configurada"
+            )
+
+        return OpenAI(
+            api_key=GROQ_API_KEY,
+            base_url=GROQ_BASE_URL
+        )
+
+    if not summary_client:
+
+        raise RuntimeError(
+            "OPENAI_API_KEY nao configurada"
+        )
+
+    return summary_client
 
 
 # =========================================
@@ -400,7 +455,7 @@ def transcrever_chunk(arquivo):
     nome = arquivo.filename or "chunk.webm"
     mime = arquivo.mimetype or "audio/webm"
 
-    resposta = client.audio.transcriptions.create(
+    resposta = cliente_transcricao().audio.transcriptions.create(
         model=TRANSCRIBE_MODEL,
         file=(
             nome,
@@ -475,7 +530,7 @@ Transcricao:
 {transcricao}
 """
 
-    resposta = client.chat.completions.create(
+    resposta = cliente_resumo().chat.completions.create(
         model=SUMMARY_MODEL,
         messages=[
             {
@@ -866,7 +921,10 @@ def health():
             "status": "ok",
             "database": "ok",
             "db_config": diagnostico_banco(),
-            "transcribe_model": TRANSCRIBE_MODEL
+            "transcribe_provider": TRANSCRIBE_PROVIDER,
+            "transcribe_model": TRANSCRIBE_MODEL,
+            "groq_configurado": bool(GROQ_API_KEY),
+            "openai_configurado": bool(OPENAI_API_KEY)
         })
 
     except Exception as e:
