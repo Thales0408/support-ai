@@ -89,18 +89,35 @@ client = OpenAI(
 # WHISPER
 # =========================================
 
-print("Carregando Whisper...")
+model = None
 
-model = WhisperModel(
+model_lock = threading.Lock()
 
-    "base",
 
-    device="cpu",
+def obter_modelo_whisper():
 
-    compute_type="int8"
-)
+    global model
 
-print("Whisper carregado!")
+    if model is None:
+
+        with model_lock:
+
+            if model is None:
+
+                print("Carregando Whisper...")
+
+                model = WhisperModel(
+
+                    "base",
+
+                    device="cpu",
+
+                    compute_type="int8"
+                )
+
+                print("Whisper carregado!")
+
+    return model
 
 # =========================================
 # POSTGRES
@@ -171,7 +188,13 @@ def inicializar_banco():
             )
 
 
-inicializar_banco()
+try:
+
+    inicializar_banco()
+
+except Exception as e:
+
+    print("ERRO AO INICIALIZAR BANCO:", e)
 
 # =========================================
 # FILA
@@ -252,7 +275,9 @@ def transcrever_audio(caminho):
         caminho
     )
 
-    segments, info = model.transcribe(
+    whisper = obter_modelo_whisper()
+
+    segments, info = whisper.transcribe(
 
         caminho_limpo,
 
