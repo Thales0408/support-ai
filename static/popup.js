@@ -10,6 +10,7 @@ let micStream = null
 let inicioLigacao = null
 let atendimentoId = null
 let ordemChunk = 0
+let chunksFalhos = 0
 let uploadsPendentes = []
 
 const TAMANHO_CHUNK_MS = 30000
@@ -131,7 +132,9 @@ async function finalizarAtendimento(duracao) {
             },
             body: JSON.stringify({
                 atendimento_id: atendimentoId,
-                duracao_segundos: Math.floor(duracao / 1000)
+                duracao_segundos: Math.floor(duracao / 1000),
+                chunks_total: ordemChunk,
+                chunks_falhos: chunksFalhos
             })
         })
 
@@ -184,10 +187,8 @@ startBtn.onclick = async () => {
         inicioLigacao =
             Date.now()
 
-        atendimentoId =
-            await iniciarAtendimento()
-
         ordemChunk = 0
+        chunksFalhos = 0
         uploadsPendentes = []
 
         // =================================
@@ -212,6 +213,12 @@ startBtn.onclick = async () => {
                 .getUserMedia({
                     audio: true
                 })
+
+        statusDiv.innerText =
+            'Criando atendimento...'
+
+        atendimentoId =
+            await iniciarAtendimento()
 
         // =================================
         // AUDIO CONTEXT
@@ -267,12 +274,17 @@ startBtn.onclick = async () => {
         const finalStream =
             destination.stream
 
+        const opcoesRecorder =
+            MediaRecorder.isTypeSupported('audio/webm')
+                ? {
+                    mimeType: 'audio/webm'
+                }
+                : undefined
+
         recorder =
             new MediaRecorder(
                 finalStream,
-                {
-                    mimeType: 'audio/webm'
-                }
+                opcoesRecorder
             )
 
         recorder.ondataavailable = event => {
@@ -294,12 +306,25 @@ startBtn.onclick = async () => {
                         statusDiv.innerText =
                             `Gravando e transcrevendo... trecho ${ordemAtual + 1}`
 
+                        return {
+                            ok: true,
+                            ordem: ordemAtual
+                        }
+
                     }).catch(err => {
 
                         console.error(err)
 
+                        chunksFalhos++
+
                         statusDiv.innerText =
-                            'Erro em um trecho da transcricao'
+                            `Um trecho falhou, mas a gravacao continua (${chunksFalhos} falha(s))`
+
+                        return {
+                            ok: false,
+                            ordem: ordemAtual,
+                            erro: err.message
+                        }
                     })
 
                 uploadsPendentes.push(upload)
@@ -324,27 +349,38 @@ startBtn.onclick = async () => {
                 const duracao =
                     fimLigacao - inicioLigacao
 
-                await Promise.all(
+                const resultadosUploads =
+                    await Promise.all(
                     uploadsPendentes
-                )
+                    )
+
+                chunksFalhos =
+                    resultadosUploads.filter(
+                        item => !item.ok
+                    ).length
 
                 statusDiv.innerText =
-                    'Gerando resumo final...'
+                    chunksFalhos > 0
+                        ? `Gerando resumo final com ${chunksFalhos} trecho(s) com falha...`
+                        : 'Gerando resumo final...'
 
                 await finalizarAtendimento(
                     duracao
                 )
 
                 statusDiv.innerText =
-                    'Ligacao finalizada - TMA: ' +
-                    formatarTempo(duracao)
+                    chunksFalhos > 0
+                        ? 'Ligacao finalizada com aviso - TMA: ' +
+                            formatarTempo(duracao)
+                        : 'Ligacao finalizada - TMA: ' +
+                            formatarTempo(duracao)
 
             } catch (err) {
 
                 console.error(err)
 
                 statusDiv.innerText =
-                    'Erro finalizando atendimento'
+                    'Erro finalizando atendimento: ' + err.message
 
             } finally {
 

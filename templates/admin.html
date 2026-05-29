@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+
+<html lang="pt-br">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Admin - 55PBX AI</title>
+
+    <style>
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0f1115;
+            color: white;
+            font-family: Arial;
+            padding: 20px;
+        }
+
+        h1,
+        h2 {
+            margin-bottom: 18px;
+        }
+
+        a {
+            color: white;
+            text-decoration: none;
+        }
+
+        .topo {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .box {
+            background: #1b1f27;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+        }
+
+        label {
+            color: #c7ccd6;
+            display: block;
+            font-size: 14px;
+            margin-bottom: 6px;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            background: #2a2f3a;
+            color: white;
+        }
+
+        .check {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 24px;
+        }
+
+        .check input {
+            width: auto;
+        }
+
+        button,
+        .botao {
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            padding: 12px 18px;
+        }
+
+        .principal {
+            background: #2962ff;
+            color: white;
+        }
+
+        .voltar {
+            background: #2a2f3a;
+        }
+
+        .perigo {
+            background: #d50000;
+            color: white;
+        }
+
+        .sucesso {
+            background: #00c853;
+            color: white;
+        }
+
+        .mensagem {
+            background: #103d24;
+            border-left: 5px solid #00c853;
+            padding: 14px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .erro {
+            background: #421616;
+            border-left: 5px solid #d50000;
+            padding: 14px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        th,
+        td {
+            border-bottom: 1px solid #2a2f3a;
+            padding: 12px;
+            text-align: left;
+            vertical-align: middle;
+        }
+
+        th {
+            color: #aaa;
+            font-size: 14px;
+        }
+
+        .acoes {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .senha-form {
+            display: flex;
+            gap: 8px;
+        }
+
+        .senha-form input {
+            min-width: 180px;
+        }
+
+        @media (max-width: 760px) {
+
+            table,
+            thead,
+            tbody,
+            th,
+            td,
+            tr {
+                display: block;
+            }
+
+            thead {
+                display: none;
+            }
+
+            tr {
+                background: #1b1f27;
+                border-radius: 8px;
+                margin-bottom: 12px;
+                padding: 10px;
+            }
+
+            td {
+                border-bottom: none;
+            }
+        }
+
+    </style>
+
+</head>
+
+<body>
+
+    <div class="topo">
+        <a
+            class="botao voltar"
+            href="/"
+        >Voltar</a>
+
+        <a
+            class="botao voltar"
+            href="/logout"
+        >Logout</a>
+    </div>
+
+    <h1>Administração de usuários</h1>
+
+    {% if mensagem %}
+        <div class="mensagem">{{ mensagem }}</div>
+    {% endif %}
+
+    {% if erro %}
+        <div class="erro">{{ erro }}</div>
+    {% endif %}
+
+    <section class="box">
+        <h2>Novo usuário</h2>
+
+        <form method="POST">
+            <div class="grid">
+                <div>
+                    <label for="usuario">Usuário</label>
+                    <input
+                        id="usuario"
+                        name="usuario"
+                        required
+                    >
+                </div>
+
+                <div>
+                    <label for="senha">Senha inicial</label>
+                    <input
+                        id="senha"
+                        name="senha"
+                        type="password"
+                        required
+                    >
+                </div>
+
+                <label class="check">
+                    <input
+                        type="checkbox"
+                        name="is_admin"
+                    >
+                    Administrador
+                </label>
+            </div>
+
+            <button
+                class="principal"
+                type="submit"
+                style="margin-top:16px"
+            >Criar usuário</button>
+        </form>
+    </section>
+
+    <section class="box">
+        <h2>Usuários cadastrados</h2>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Usuário</th>
+                    <th>Perfil</th>
+                    <th>Status</th>
+                    <th>Criado em</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in usuarios %}
+                    <tr>
+                        <td>{{ item[1] }}</td>
+                        <td>
+                            {% if item[2] %}
+                                Admin
+                            {% else %}
+                                Analista
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if item[3] %}
+                                Ativo
+                            {% else %}
+                                Inativo
+                            {% endif %}
+                        </td>
+                        <td>{{ item[4] }}</td>
+                        <td>
+                            <div class="acoes">
+                                <form
+                                    method="POST"
+                                    action="/admin/usuarios/{{ item[0] }}/status"
+                                >
+                                    {% if item[3] %}
+                                        <input
+                                            type="hidden"
+                                            name="ativo"
+                                            value="false"
+                                        >
+                                        <button
+                                            class="perigo"
+                                            type="submit"
+                                            {% if item[0] == usuario_id %}disabled{% endif %}
+                                        >Desativar</button>
+                                    {% else %}
+                                        <input
+                                            type="hidden"
+                                            name="ativo"
+                                            value="true"
+                                        >
+                                        <button
+                                            class="sucesso"
+                                            type="submit"
+                                        >Ativar</button>
+                                    {% endif %}
+                                </form>
+
+                                <form
+                                    class="senha-form"
+                                    method="POST"
+                                    action="/admin/usuarios/{{ item[0] }}/senha"
+                                >
+                                    <input
+                                        name="senha"
+                                        type="password"
+                                        placeholder="Nova senha"
+                                        required
+                                    >
+                                    <button
+                                        class="principal"
+                                        type="submit"
+                                    >Redefinir</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+
+</body>
+
+</html>

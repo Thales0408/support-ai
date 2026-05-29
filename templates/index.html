@@ -86,6 +86,13 @@
             color: white;
         }
 
+        .admin {
+
+            background: #2a2f3a;
+
+            color: white;
+        }
+
         #status {
 
             background: #1b1f27;
@@ -197,6 +204,18 @@
             Iniciar Gravação
 
         </button>
+
+        {% if is_admin %}
+            <a href="/admin">
+
+                <button class="admin">
+
+                    Usuarios
+
+                </button>
+
+            </a>
+        {% endif %}
 
         <a href="/exportar">
 
@@ -348,17 +367,36 @@
 
                 div.className = "card"
 
-                div.innerHTML = `
+                const dataDiv =
+                    document.createElement("div")
 
-                    <div class="data">
+                dataDiv.className = "data"
+                dataDiv.innerText =
+                    item.data
 
-                        ${item.data}
+                const conteudoDiv =
+                    document.createElement("div")
 
-                    </div>
+                conteudoDiv.innerText =
+                    item.conteudo || ""
 
-                    ${item.conteudo}
+                div.appendChild(dataDiv)
+                div.appendChild(conteudoDiv)
 
-                `
+                if (
+                    item.chunks_falhos &&
+                    item.chunks_falhos > 0
+                ) {
+
+                    const aviso =
+                        document.createElement("div")
+
+                    aviso.className = "data"
+                    aviso.innerText =
+                        `${item.chunks_falhos} trecho(s) com falha na transcricao`
+
+                    div.appendChild(aviso)
+                }
 
                 resultados.appendChild(div)
 
