@@ -31,11 +31,14 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 DATABASE_URL = os.getenv("DATABASE_URL")
 DB_HOST = os.getenv(
     "DB_HOST",
-    "db.epegojdxngrcwvzecupl.supabase.co"
+    "aws-1-sa-east-1.pooler.supabase.com"
 )
-DB_PORT = os.getenv("DB_PORT", "5432")
+DB_PORT = os.getenv("DB_PORT", "6543")
 DB_NAME = os.getenv("DB_NAME", "postgres")
-DB_USER = os.getenv("DB_USER", "postgres")
+DB_USER = os.getenv(
+    "DB_USER",
+    "postgres.epegojdxngrcwvzecupl"
+)
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 
 ADMIN_USUARIO = os.getenv("ADMIN_USUARIO", "admin")
