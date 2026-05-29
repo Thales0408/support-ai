@@ -120,6 +120,30 @@ def metadados_railway():
     }
 
 
+def diagnostico_variaveis():
+
+    nomes = (
+        sorted(
+            os.environ.keys()
+        )
+    )
+
+    return {
+        "groq_env_names": [
+            nome for nome in nomes
+            if nome.upper().startswith("GROQ")
+        ],
+        "transcribe_env_names": [
+            nome for nome in nomes
+            if nome.upper().startswith("TRANSCRIBE")
+        ],
+        "groq_api_key_tamanho": len(GROQ_API_KEY or ""),
+        "transcribe_provider_configurado": bool(
+            ler_env("TRANSCRIBE_PROVIDER")
+        )
+    }
+
+
 # =========================================
 # IA
 # =========================================
@@ -955,7 +979,8 @@ def health():
             "transcribe_model": TRANSCRIBE_MODEL,
             "groq_configurado": bool(GROQ_API_KEY),
             "openai_configurado": bool(OPENAI_API_KEY),
-            "railway": metadados_railway()
+            "railway": metadados_railway(),
+            "env_debug": diagnostico_variaveis()
         })
 
     except Exception as e:
