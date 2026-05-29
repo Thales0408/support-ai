@@ -120,6 +120,44 @@ def conectar_banco():
     )
 
 
+def diagnostico_banco():
+
+    db_password = DB_PASSWORD
+
+    if (
+        not db_password
+        and DATABASE_URL
+        and "postgres:@" in DATABASE_URL
+        and "@db." in DATABASE_URL
+    ):
+
+        db_password = DATABASE_URL.split(
+            "postgres:@",
+            1
+        )[1].split(
+            "@db.",
+            1
+        )[0]
+
+    if db_password:
+
+        return {
+            "modo": "variaveis_db",
+            "host": DB_HOST,
+            "port": DB_PORT,
+            "user": DB_USER,
+            "password_configurada": True
+        }
+
+    return {
+        "modo": "database_url",
+        "host": "DATABASE_URL",
+        "port": "DATABASE_URL",
+        "user": "DATABASE_URL",
+        "password_configurada": False
+    }
+
+
 def inicializar_banco():
 
     with conectar_banco() as conn:
@@ -395,6 +433,7 @@ def health():
         return jsonify({
             "status": "ok",
             "database": "ok",
+            "db_config": diagnostico_banco(),
             "transcribe_model": TRANSCRIBE_MODEL
         })
 
@@ -402,7 +441,8 @@ def health():
 
         return jsonify({
             "status": "erro",
-            "database": str(e)
+            "database": str(e),
+            "db_config": diagnostico_banco()
         }), 500
 
 
