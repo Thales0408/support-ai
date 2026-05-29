@@ -1,17 +1,29 @@
 const startBtn =
     document.getElementById('start')
 
+const pauseBtn =
+    document.getElementById('pause')
+
 const statusDiv =
     document.getElementById('status')
 
 let recorder = null
 let screenStream = null
 let micStream = null
+let finalStream = null
+let audioContext = null
+let chunkTimer = null
 let inicioLigacao = null
+let pausaIniciadaEm = null
+let tempoPausadoMs = 0
 let atendimentoId = null
 let ordemChunk = 0
 let chunksFalhos = 0
 let uploadsPendentes = []
+let gravacaoAtiva = false
+let pausado = false
+let finalizando = false
+let pararSegmentoAtual = null
 
 const TAMANHO_CHUNK_MS = 30000
 
@@ -50,6 +62,62 @@ function formatarTempo(ms) {
         totalSegundos % 60
 
     return `${String(minutos).padStart(2, '0')}m ${String(segundos).padStart(2, '0')}s`
+}
+
+function atualizarBotaoPausa(visivel, estaPausado = false) {
+
+    pauseBtn.style.display =
+        visivel ? 'inline-block' : 'none'
+
+    pauseBtn.disabled =
+        !visivel
+
+    pauseBtn.innerText =
+        estaPausado ? 'Continuar' : 'Pausar'
+}
+
+function limparTimerChunk() {
+
+    if (
+        chunkTimer
+    ) {
+
+        clearTimeout(chunkTimer)
+        chunkTimer = null
+    }
+}
+
+function pararStreams() {
+
+    if (
+        screenStream
+    ) {
+
+        screenStream
+            .getTracks()
+            .forEach(t => t.stop())
+    }
+
+    if (
+        micStream
+    ) {
+
+        micStream
+            .getTracks()
+            .forEach(t => t.stop())
+    }
+
+    if (
+        audioContext
+    ) {
+
+        audioContext.close()
+    }
+
+    screenStream = null
+    micStream = null
+    finalStream = null
+    audioContext = null
 }
 
 // =====================================
@@ -154,9 +222,345 @@ async function finalizarAtendimento(duracao) {
     return data
 }
 
+function registrarUpload(blob) {
+
+    if (
+        !blob ||
+        blob.size < 512 ||
+        !atendimentoId
+    ) {
+
+        return
+    }
+
+    const ordemAtual =
+        ordemChunk++
+
+    const upload =
+        enviarChunk(
+            blob,
+            ordemAtual
+        ).then(() => {
+
+            if (
+                gravacaoAtiva &&
+                !pausado
+            ) {
+
+                statusDiv.innerText =
+                    `Gravando e transcrevendo... trecho ${ordemAtual + 1}`
+            }
+
+            return {
+                ok: true,
+                ordem: ordemAtual
+            }
+
+        }).catch(err => {
+
+            console.error(err)
+
+            chunksFalhos++
+
+            statusDiv.innerText =
+                `Um trecho falhou, mas a gravacao continua (${chunksFalhos} falha(s))`
+
+            return {
+                ok: false,
+                ordem: ordemAtual,
+                erro: err.message
+            }
+        })
+
+    uploadsPendentes.push(upload)
+}
+
+function iniciarNovoSegmento() {
+
+    if (
+        !gravacaoAtiva ||
+        pausado ||
+        finalizando ||
+        !finalStream
+    ) {
+
+        return Promise.resolve()
+    }
+
+    limparTimerChunk()
+
+    const opcoesRecorder =
+        MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+            ? {
+                mimeType: 'audio/webm;codecs=opus'
+            }
+            : (
+                MediaRecorder.isTypeSupported('audio/webm')
+                    ? {
+                        mimeType: 'audio/webm'
+                    }
+                    : undefined
+            )
+
+    const partes =
+        []
+
+    recorder =
+        new MediaRecorder(
+            finalStream,
+            opcoesRecorder
+        )
+
+    const encerramento =
+        new Promise(resolve => {
+
+            recorder.ondataavailable = event => {
+
+                if (
+                    event.data &&
+                    event.data.size > 0
+                ) {
+
+                    partes.push(event.data)
+                }
+            }
+
+            recorder.onstop = () => {
+
+                limparTimerChunk()
+
+                if (
+                    partes.length
+                ) {
+
+                    const blob =
+                        new Blob(
+                            partes,
+                            {
+                                type: recorder.mimeType || 'audio/webm'
+                            }
+                        )
+
+                    registrarUpload(blob)
+                }
+
+                const deveContinuar =
+                    gravacaoAtiva &&
+                    !pausado &&
+                    !finalizando
+
+                recorder = null
+                pararSegmentoAtual = null
+
+                if (
+                    deveContinuar
+                ) {
+
+                    iniciarNovoSegmento()
+                }
+
+                resolve()
+            }
+        })
+
+    pararSegmentoAtual =
+        encerramento
+
+    recorder.start()
+
+    chunkTimer =
+        setTimeout(() => {
+
+            if (
+                recorder &&
+                recorder.state === 'recording'
+            ) {
+
+                recorder.stop()
+            }
+        }, TAMANHO_CHUNK_MS)
+
+    return encerramento
+}
+
+async function pararSegmentoSeNecessario() {
+
+    if (
+        recorder &&
+        recorder.state === 'recording'
+    ) {
+
+        recorder.stop()
+    }
+
+    if (
+        pararSegmentoAtual
+    ) {
+
+        await pararSegmentoAtual
+    }
+}
+
+async function finalizarGravacao() {
+
+    startBtn.disabled =
+        true
+
+    atualizarBotaoPausa(false)
+
+    statusDiv.innerText =
+        'Finalizando e aguardando ultimos trechos...'
+
+    finalizando =
+        true
+
+    if (
+        pausaIniciadaEm
+    ) {
+
+        tempoPausadoMs +=
+            Date.now() - pausaIniciadaEm
+    }
+
+    pausaIniciadaEm =
+        null
+
+    gravacaoAtiva =
+        false
+
+    pausado =
+        false
+
+    try {
+
+        await pararSegmentoSeNecessario()
+
+        pararStreams()
+
+        const fimLigacao =
+            Date.now()
+
+        const duracao =
+            Math.max(
+                0,
+                fimLigacao - inicioLigacao - tempoPausadoMs
+            )
+
+        const resultadosUploads =
+            await Promise.all(
+                uploadsPendentes
+            )
+
+        chunksFalhos =
+            resultadosUploads.filter(
+                item => !item.ok
+            ).length
+
+        statusDiv.innerText =
+            chunksFalhos > 0
+                ? `Gerando resumo final com ${chunksFalhos} trecho(s) com falha...`
+                : 'Gerando resumo final...'
+
+        await finalizarAtendimento(
+            duracao
+        )
+
+        statusDiv.innerText =
+            chunksFalhos > 0
+                ? 'Ligacao finalizada com aviso - TMA: ' +
+                    formatarTempo(duracao)
+                : 'Ligacao finalizada - TMA: ' +
+                    formatarTempo(duracao)
+
+    } catch (err) {
+
+        console.error(err)
+
+        statusDiv.innerText =
+            'Erro finalizando atendimento: ' + err.message
+
+    } finally {
+
+        limparTimerChunk()
+
+        startBtn.disabled =
+            false
+
+        startBtn.innerText =
+            'Iniciar Gravacao'
+
+        atualizarBotaoPausa(false)
+
+        recorder = null
+        atendimentoId = null
+        finalizando = false
+    }
+}
+
 // =====================================
 // CLICK
 // =====================================
+
+pauseBtn.onclick = async () => {
+
+    if (
+        !gravacaoAtiva ||
+        finalizando
+    ) {
+
+        return
+    }
+
+    if (
+        !pausado
+    ) {
+
+        pausado =
+            true
+
+        pausaIniciadaEm =
+            Date.now()
+
+        atualizarBotaoPausa(
+            true,
+            true
+        )
+
+        statusDiv.innerText =
+            'Pausando transcricao e fechando o trecho atual...'
+
+        await pararSegmentoSeNecessario()
+
+        statusDiv.innerText =
+            'Transcricao pausada. Nenhum audio sera enviado ate continuar.'
+
+        return
+    }
+
+    if (
+        pausaIniciadaEm
+    ) {
+
+        tempoPausadoMs +=
+            Date.now() - pausaIniciadaEm
+    }
+
+    pausaIniciadaEm =
+        null
+
+    pausado =
+        false
+
+    atualizarBotaoPausa(
+        true,
+        false
+    )
+
+    statusDiv.innerText =
+        'Gravacao retomada. Transcrevendo novos trechos...'
+
+    iniciarNovoSegmento()
+}
 
 startBtn.onclick = async () => {
 
@@ -165,17 +569,11 @@ startBtn.onclick = async () => {
     // =================================
 
     if (
-        recorder &&
-        recorder.state === 'recording'
+        gravacaoAtiva ||
+        finalizando
     ) {
 
-        recorder.stop()
-
-        startBtn.disabled = true
-
-        statusDiv.innerText =
-            'Finalizando e aguardando ultimos trechos...'
-
+        await finalizarGravacao()
         return
     }
 
@@ -187,9 +585,16 @@ startBtn.onclick = async () => {
         inicioLigacao =
             Date.now()
 
+        pausaIniciadaEm = null
+        tempoPausadoMs = 0
         ordemChunk = 0
         chunksFalhos = 0
         uploadsPendentes = []
+        gravacaoAtiva = false
+        pausado = false
+        finalizando = false
+        pararSegmentoAtual = null
+        atualizarBotaoPausa(false)
 
         // =================================
         // ABA
@@ -224,7 +629,7 @@ startBtn.onclick = async () => {
         // AUDIO CONTEXT
         // =================================
 
-        const audioContext =
+        audioContext =
             new AudioContext()
 
         const destination =
@@ -271,134 +676,18 @@ startBtn.onclick = async () => {
             )
         }
 
-        const finalStream =
+        finalStream =
             destination.stream
 
-        const opcoesRecorder =
-            MediaRecorder.isTypeSupported('audio/webm')
-                ? {
-                    mimeType: 'audio/webm'
-                }
-                : undefined
+        gravacaoAtiva =
+            true
 
-        recorder =
-            new MediaRecorder(
-                finalStream,
-                opcoesRecorder
-            )
-
-        recorder.ondataavailable = event => {
-
-            if (
-                event.data &&
-                event.data.size > 0
-            ) {
-
-                const ordemAtual =
-                    ordemChunk++
-
-                const upload =
-                    enviarChunk(
-                        event.data,
-                        ordemAtual
-                    ).then(() => {
-
-                        statusDiv.innerText =
-                            `Gravando e transcrevendo... trecho ${ordemAtual + 1}`
-
-                        return {
-                            ok: true,
-                            ordem: ordemAtual
-                        }
-
-                    }).catch(err => {
-
-                        console.error(err)
-
-                        chunksFalhos++
-
-                        statusDiv.innerText =
-                            `Um trecho falhou, mas a gravacao continua (${chunksFalhos} falha(s))`
-
-                        return {
-                            ok: false,
-                            ordem: ordemAtual,
-                            erro: err.message
-                        }
-                    })
-
-                uploadsPendentes.push(upload)
-            }
-        }
-
-        recorder.onstop = async () => {
-
-            try {
-
-                screenStream
-                    .getTracks()
-                    .forEach(t => t.stop())
-
-                micStream
-                    .getTracks()
-                    .forEach(t => t.stop())
-
-                const fimLigacao =
-                    Date.now()
-
-                const duracao =
-                    fimLigacao - inicioLigacao
-
-                const resultadosUploads =
-                    await Promise.all(
-                    uploadsPendentes
-                    )
-
-                chunksFalhos =
-                    resultadosUploads.filter(
-                        item => !item.ok
-                    ).length
-
-                statusDiv.innerText =
-                    chunksFalhos > 0
-                        ? `Gerando resumo final com ${chunksFalhos} trecho(s) com falha...`
-                        : 'Gerando resumo final...'
-
-                await finalizarAtendimento(
-                    duracao
-                )
-
-                statusDiv.innerText =
-                    chunksFalhos > 0
-                        ? 'Ligacao finalizada com aviso - TMA: ' +
-                            formatarTempo(duracao)
-                        : 'Ligacao finalizada - TMA: ' +
-                            formatarTempo(duracao)
-
-            } catch (err) {
-
-                console.error(err)
-
-                statusDiv.innerText =
-                    'Erro finalizando atendimento: ' + err.message
-
-            } finally {
-
-                startBtn.disabled = false
-
-                startBtn.innerText =
-                    'Iniciar Gravacao'
-
-                atendimentoId = null
-            }
-        }
-
-        recorder.start(
-            TAMANHO_CHUNK_MS
-        )
+        iniciarNovoSegmento()
 
         startBtn.innerText =
             'Parar Gravacao'
+
+        atualizarBotaoPausa(true)
 
         statusDiv.innerText =
             'Gravando e transcrevendo em trechos...'
@@ -411,17 +700,17 @@ startBtn.onclick = async () => {
             'Erro: ' + err.message
 
         startBtn.disabled = false
+        startBtn.innerText =
+            'Iniciar Gravacao'
 
-        if (screenStream) {
-            screenStream
-                .getTracks()
-                .forEach(t => t.stop())
-        }
+        atualizarBotaoPausa(false)
+        limparTimerChunk()
+        pararStreams()
 
-        if (micStream) {
-            micStream
-                .getTracks()
-                .forEach(t => t.stop())
-        }
+        recorder = null
+        atendimentoId = null
+        gravacaoAtiva = false
+        pausado = false
+        finalizando = false
     }
 }

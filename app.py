@@ -421,6 +421,28 @@ def transcrever_chunk(arquivo):
     )
 
 
+def tamanho_arquivo_upload(arquivo):
+
+    posicao_atual = (
+        arquivo.stream.tell()
+    )
+
+    arquivo.stream.seek(
+        0,
+        os.SEEK_END
+    )
+
+    tamanho = (
+        arquivo.stream.tell()
+    )
+
+    arquivo.stream.seek(
+        posicao_atual
+    )
+
+    return tamanho
+
+
 def analisar_com_ia(transcricao):
 
     prompt = f"""
@@ -977,6 +999,19 @@ def receber_chunk():
     arquivo = request.files["audio"]
 
     try:
+
+        tamanho_audio = (
+            tamanho_arquivo_upload(arquivo)
+        )
+
+        if (
+            tamanho_audio < 1024
+        ):
+
+            return jsonify({
+                "status": "chunk_ignorado",
+                "motivo": "audio_muito_curto"
+            })
 
         texto = transcrever_chunk(arquivo)
 

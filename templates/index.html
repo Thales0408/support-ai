@@ -76,6 +76,17 @@
             color: white;
         }
 
+        #pause {
+            background: #f5a400;
+            color: #171c25;
+            display: none;
+        }
+
+        #pause:disabled {
+            cursor: not-allowed;
+            opacity: 0.55;
+        }
+
         .btn-blue {
             background: #2962ff;
             color: white;
@@ -374,6 +385,7 @@
 
             <div class="actions">
                 <button id="start">Iniciar Gravacao</button>
+                <button id="pause">Pausar</button>
 
                 {% if is_admin %}
                     <a href="/admin">
