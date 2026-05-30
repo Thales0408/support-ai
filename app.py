@@ -2620,6 +2620,8 @@ def exportar():
 
         return redirect("/login")
 
+    mostrar_custo = usuario_admin_tecnico()
+
     with conectar_banco() as conn:
 
         with conn.cursor() as cursor:
@@ -2635,7 +2637,6 @@ def exportar():
                     chunks_falhos,
                     chunks_ignorados,
                     segundos_transcritos,
-                    custo_estimado_usd,
                     sentimento_cliente,
                     urgencia,
                     categoria,
@@ -2658,13 +2659,12 @@ def exportar():
     ws.append([
         "Data",
         "Ticket Zendesk",
-        "Resumo",
+        "Texto Zendesk",
         "Transcricao",
         "Trechos",
         "Trechos com falha",
         "Trechos ignorados",
         "Segundos transcritos",
-        "Custo estimado USD",
         "Sentimento",
         "Urgencia",
         "Categoria",
@@ -2672,12 +2672,33 @@ def exportar():
         "Tags internas"
     ])
 
+    if mostrar_custo:
+
+        ws.insert_cols(9)
+        ws.cell(
+            row=1,
+            column=9,
+            value="Custo estimado USD"
+        )
+
     for row in rows:
 
         linha = list(row)
         linha[2] = texto_zendesk_formatado(
             linha[2]
         )
+
+        if mostrar_custo:
+
+            custo_estimado = estimar_custo_atendimento(
+                linha[7] or 0,
+                bool(linha[2])
+            )
+            linha.insert(
+                8,
+                custo_estimado
+            )
+
         ws.append(linha)
 
     nome = "atendimentos.xlsx"
