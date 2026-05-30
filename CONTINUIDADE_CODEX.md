@@ -129,9 +129,13 @@ TRANSCRIBE_PROVIDER=groq
 TRANSCRIBE_MODEL=whisper-large-v3-turbo
 SUMMARY_MODEL=gpt-4.1-mini
 SECRET_KEY=<chave secreta forte>
-MAX_CALLS_PER_DAY=40
-MAX_AUDIO_MINUTES_PER_DAY=360
-MAX_CHUNKS_PER_CALL=120
+MAX_CALLS_PER_DAY=5
+MAX_AUDIO_MINUTES_PER_DAY=50
+MAX_SUMMARIES_PER_DAY=10
+MAX_COST_PER_USER_PER_DAY=1.00
+MAX_SYSTEM_COST_PER_DAY=5.00
+MAX_CALL_DURATION_MINUTES=15
+MAX_CHUNKS_PER_CALL=30
 LOGIN_MAX_ATTEMPTS=5
 LOGIN_BLOCK_MINUTES=15
 ```
@@ -157,6 +161,7 @@ usuarios
 atendimentos
 transcricoes_chunks
 login_tentativas
+uso_eventos
 ```
 
 Tabela `usuarios`:
@@ -425,7 +430,7 @@ Estado atual:
 - Campo ticket Zendesk, resumo editavel, reprocessamento de resumo e troca de senha pelo usuario.
 - Resumo Zendesk curto separado de tags internas e classificacao operacional.
 - Perfis: analista ve proprios dados, supervisor ve equipe sem custo, admin tecnico ve custo e configuracoes.
-- Tabelas criadas/ajustadas automaticamente: usuarios, atendimentos, transcricoes_chunks, login_tentativas.
+- Tabelas criadas/ajustadas automaticamente: usuarios, atendimentos, transcricoes_chunks, login_tentativas, uso_eventos.
 - Health check validado com database ok.
 
 Objetivo:

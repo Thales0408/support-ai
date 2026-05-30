@@ -37,12 +37,17 @@ from config import (
     LOGIN_BLOCK_MINUTES,
     LOGIN_MAX_ATTEMPTS,
     MAX_AUDIO_MINUTES_PER_DAY,
+    MAX_CALL_DURATION_MINUTES,
     MAX_CALLS_PER_DAY,
     MAX_CHUNKS_PER_CALL,
+    MAX_COST_PER_USER_PER_DAY,
+    MAX_SUMMARIES_PER_DAY,
+    MAX_SYSTEM_COST_PER_DAY,
     SECRET_KEY,
     SUMMARY_MODEL,
     TRANSCRIBE_MODEL,
     TRANSCRIBE_PROVIDER,
+    USD_BRL_RATE,
     ler_env
 )
 from services.ai import (
@@ -333,6 +338,154 @@ def uso_diario_usuario(cursor, usuario_id, atendimento_id=None):
         "chunks": int(chunks or 0),
         "custo": float(custo or 0)
     }
+
+
+def uso_eventos_diario(cursor, usuario_id=None):
+
+    filtro_usuario = ""
+    params = []
+
+    if usuario_id:
+
+        filtro_usuario = "AND usuario_id = %s"
+        params.append(usuario_id)
+
+    cursor.execute(
+        f"""
+        SELECT
+            COALESCE(SUM(custo_brl), 0),
+            SUM(
+                CASE
+                    WHEN tipo = 'resumo' THEN 1
+                    ELSE 0
+                END
+            )
+        FROM uso_eventos
+        WHERE criado_em >= CURRENT_DATE
+        AND criado_em < CURRENT_DATE + INTERVAL '1 day'
+        {filtro_usuario}
+        """,
+        tuple(params)
+    )
+
+    custo_brl, resumos = cursor.fetchone()
+
+    return {
+        "custo_brl": float(custo_brl or 0),
+        "resumos": int(resumos or 0)
+    }
+
+
+def custo_brl(custo_usd):
+
+    return round(
+        float(custo_usd or 0) * USD_BRL_RATE,
+        4
+    )
+
+
+def registrar_uso_evento(
+    cursor,
+    usuario_id,
+    atendimento_id,
+    tipo,
+    custo_usd
+):
+
+    cursor.execute(
+        """
+        INSERT INTO uso_eventos (
+            usuario_id,
+            atendimento_id,
+            tipo,
+            custo_usd,
+            custo_brl
+        )
+        VALUES (%s, %s, %s, %s, %s)
+        """,
+        (
+            usuario_id,
+            atendimento_id,
+            tipo,
+            custo_usd,
+            custo_brl(custo_usd)
+        )
+    )
+
+
+def validar_limites_custo_resumo(
+    cursor,
+    usuario_id,
+    atendimento_id,
+    custo_estimado_usd
+):
+
+    uso_usuario = uso_eventos_diario(
+        cursor,
+        usuario_id
+    )
+    uso_sistema = uso_eventos_diario(cursor)
+    custo_projetado = custo_brl(custo_estimado_usd)
+
+    if uso_usuario["resumos"] >= MAX_SUMMARIES_PER_DAY:
+
+        log_evento(
+            "limite_resumos_dia",
+            usuario_id=usuario_id,
+            atendimento_id=atendimento_id,
+            resumos=uso_usuario["resumos"],
+            limite=MAX_SUMMARIES_PER_DAY
+        )
+
+        return erro_limite(
+            "Limite diario de resumos atingido.",
+            resumos_hoje=uso_usuario["resumos"],
+            limite_resumos=MAX_SUMMARIES_PER_DAY
+        )
+
+    if (
+        uso_usuario["custo_brl"] + custo_projetado
+        > MAX_COST_PER_USER_PER_DAY
+    ):
+
+        log_evento(
+            "limite_custo_usuario_dia",
+            usuario_id=usuario_id,
+            atendimento_id=atendimento_id,
+            custo_brl_atual=uso_usuario["custo_brl"],
+            custo_brl_projetado=custo_projetado,
+            limite=MAX_COST_PER_USER_PER_DAY
+        )
+
+        return erro_limite(
+            "Limite diario de custo por usuario atingido.",
+            custo_hoje_brl=round(uso_usuario["custo_brl"], 4),
+            custo_projetado_brl=custo_projetado,
+            limite_custo_usuario_brl=MAX_COST_PER_USER_PER_DAY
+        )
+
+    if (
+        uso_sistema["custo_brl"] + custo_projetado
+        > MAX_SYSTEM_COST_PER_DAY
+    ):
+
+        log_evento(
+            "limite_custo_sistema_dia",
+            usuario_id=usuario_id,
+            atendimento_id=atendimento_id,
+            custo_brl_atual=uso_sistema["custo_brl"],
+            custo_brl_projetado=custo_projetado,
+            limite=MAX_SYSTEM_COST_PER_DAY
+        )
+
+        return erro_limite(
+            "Limite diario de custo total do sistema atingido.",
+            custo_sistema_hoje_brl=round(uso_sistema["custo_brl"], 4),
+            custo_projetado_brl=custo_projetado,
+            limite_custo_sistema_brl=MAX_SYSTEM_COST_PER_DAY
+        )
+
+    return None
 
 
 def erro_limite(mensagem, **dados):
@@ -1717,6 +1870,22 @@ def finalizar_atendimento():
             )
         )
 
+    if int(duracao_segundos or 0) > MAX_CALL_DURATION_MINUTES * 60:
+
+        log_evento(
+            "limite_duracao_atendimento",
+            usuario_id=usuario_id,
+            atendimento_id=atendimento_id,
+            duracao_segundos=duracao_segundos,
+            limite_segundos=MAX_CALL_DURATION_MINUTES * 60
+        )
+
+        return erro_limite(
+            "Limite de duracao por atendimento atingido.",
+            duracao_minutos=round(int(duracao_segundos or 0) / 60, 2),
+            limite_minutos=MAX_CALL_DURATION_MINUTES
+        )
+
     if chunks_total > MAX_CHUNKS_PER_CALL:
 
         log_evento(
@@ -1754,6 +1923,28 @@ def finalizar_atendimento():
             limite_minutos=MAX_AUDIO_MINUTES_PER_DAY
         )
 
+    custo_estimado = estimar_custo_atendimento(
+        segundos_transcritos,
+        bool(transcricao)
+    )
+
+    if transcricao:
+
+        with conectar_banco() as conn:
+
+            with conn.cursor() as cursor:
+
+                limite_resposta = validar_limites_custo_resumo(
+                    cursor,
+                    usuario_id,
+                    atendimento_id,
+                    custo_estimado
+                )
+
+                if limite_resposta:
+
+                    return limite_resposta
+
     if transcricao:
 
         analise = analisar_com_ia(
@@ -1784,11 +1975,6 @@ def finalizar_atendimento():
             "problema_principal": "Transcricao nao capturada",
             "tags": ""
         }
-
-    custo_estimado = estimar_custo_atendimento(
-        segundos_transcritos,
-        bool(transcricao)
-    )
 
     with conectar_banco() as conn:
 
@@ -1835,6 +2021,16 @@ def finalizar_atendimento():
                 )
             )
 
+            if transcricao:
+
+                registrar_uso_evento(
+                    cursor,
+                    usuario_id,
+                    atendimento_id,
+                    "resumo",
+                    custo_estimado
+                )
+
     log_evento(
         "atendimento_finalizado",
         usuario_id=usuario_id,
@@ -1844,6 +2040,7 @@ def finalizar_atendimento():
         chunks_ignorados=chunks_ignorados,
         segundos_transcritos=segundos_transcritos,
         custo_estimado_usd=custo_estimado,
+        custo_estimado_brl=custo_brl(custo_estimado),
         custo_dia_estimado_usd=round(
             uso["custo"] + float(custo_estimado or 0),
             4
@@ -1929,6 +2126,26 @@ def transcrever_arquivo_unico():
     )
 
     arquivo = request.files["audio"]
+    custo_estimado = estimar_custo_atendimento(
+        30,
+        True
+    )
+
+    with conectar_banco() as conn:
+
+        with conn.cursor() as cursor:
+
+            limite_resposta = validar_limites_custo_resumo(
+                cursor,
+                usuario_id,
+                None,
+                custo_estimado
+            )
+
+            if limite_resposta:
+
+                return limite_resposta
+
     texto = transcrever_chunk(arquivo)
     analise = analisar_com_ia(texto)
     resultado = analise["resumo_zendesk"]
@@ -1956,6 +2173,7 @@ def transcrever_arquivo_unico():
                     tags
                 )
                 VALUES (%s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
                 """,
                 (
                     usuario_id,
@@ -1974,12 +2192,25 @@ def transcrever_arquivo_unico():
                 )
             )
 
+            atendimento_id = cursor.fetchone()[0]
+
+            registrar_uso_evento(
+                cursor,
+                usuario_id,
+                atendimento_id,
+                "resumo",
+                custo_estimado
+            )
+
     log_evento(
         "atendimento_upload_unico_finalizado",
         usuario_id=usuario_id,
+        atendimento_id=atendimento_id,
         caracteres_transcricao=len(texto),
         categoria=analise["categoria"],
-        urgencia=analise["urgencia"]
+        urgencia=analise["urgencia"],
+        custo_estimado_usd=custo_estimado,
+        custo_estimado_brl=custo_brl(custo_estimado)
     )
 
     return jsonify({
@@ -2352,7 +2583,7 @@ def reprocessar_resumo_atendimento(atendimento_id):
 
             cursor.execute(
                 """
-                SELECT transcricao_completa, segundos_transcritos
+                SELECT transcricao_completa, segundos_transcritos, usuario_id
                 FROM atendimentos
                 WHERE id = %s
                 AND (
@@ -2385,15 +2616,27 @@ def reprocessar_resumo_atendimento(atendimento_id):
                     "erro": "Transcricao nao disponivel"
                 }), 400
 
-            analise = analisar_com_ia(
-                transcricao
-            )
-            resumo = analise["resumo_zendesk"]
-
             custo_estimado = estimar_custo_atendimento(
                 row[1] or 0,
                 True
             )
+            usuario_custo_id = row[2] or usuario_id
+
+            limite_resposta = validar_limites_custo_resumo(
+                cursor,
+                usuario_custo_id,
+                atendimento_id,
+                custo_estimado
+            )
+
+            if limite_resposta:
+
+                return limite_resposta
+
+            analise = analisar_com_ia(
+                transcricao
+            )
+            resumo = analise["resumo_zendesk"]
 
             cursor.execute(
                 """
@@ -2420,6 +2663,14 @@ def reprocessar_resumo_atendimento(atendimento_id):
                     analise["tags"],
                     atendimento_id
                 )
+            )
+
+            registrar_uso_evento(
+                cursor,
+                usuario_custo_id,
+                atendimento_id,
+                "resumo",
+                custo_estimado
             )
 
     return jsonify({
