@@ -454,7 +454,7 @@
                 <strong id="metric-tma">00m 00s</strong>
             </div>
             <div class="metric">
-                <span>Custo estimado</span>
+                <span id="metric-custo-label">Custo estimado</span>
                 <strong id="metric-custo">US$ 0.00</strong>
             </div>
         </section>
@@ -486,7 +486,7 @@
                         <option value="falha">Com falha</option>
                     </select>
 
-                    {% if is_admin %}
+                    {% if is_supervisor %}
                         <select id="filtro-escopo">
                             <option value="meus">Meus atendimentos</option>
                             <option value="todos">Todos os analistas</option>
@@ -638,6 +638,8 @@
         let atendimentosFiltrados = []
         let chart = null
         let detalheAtual = null
+        const PERFIL_USUARIO = "{{ perfil }}"
+        const MOSTRAR_CUSTO = {{ "true" if mostrar_custo else "false" }}
 
         const tbody =
             document.getElementById("tbody-atendimentos")
@@ -752,6 +754,9 @@
                         item.data,
                         item.usuario,
                         item.status,
+                        item.categoria,
+                        item.problema_principal,
+                        item.tags,
                         item.ticket_zendesk,
                         item.conteudo,
                         item.transcricao_completa
@@ -859,14 +864,28 @@
                     0
                 )
 
+            const semTicket =
+                atendimentosFiltrados.filter(
+                    item => !String(item.ticket_zendesk || "").trim()
+                ).length
+
             document.getElementById("metric-total").innerText = total
             document.getElementById("metric-finalizados").innerText = finalizados
             document.getElementById("metric-andamento").innerText = andamento
             document.getElementById("metric-falhas").innerText = falhas
             document.getElementById("metric-tma").innerText =
                 formatarDuracao(media)
-            document.getElementById("metric-custo").innerText =
-                formatarCusto(custo)
+            if (MOSTRAR_CUSTO) {
+                document.getElementById("metric-custo-label").innerText =
+                    "Custo estimado"
+                document.getElementById("metric-custo").innerText =
+                    formatarCusto(custo)
+            } else {
+                document.getElementById("metric-custo-label").innerText =
+                    "Sem ticket"
+                document.getElementById("metric-custo").innerText =
+                    semTicket
+            }
         }
 
         function renderizarTabela() {
@@ -932,7 +951,9 @@
                     "summary-text"
 
                 text.innerText =
-                    resumoCurto(item.conteudo)
+                    item.problema_principal
+                        ? `${item.problema_principal}\n${resumoCurto(item.conteudo)}`
+                        : resumoCurto(item.conteudo)
 
                 tdResumo.appendChild(title)
                 tdResumo.appendChild(text)
@@ -944,7 +965,9 @@
                     "pre-line"
 
                 tdTempo.innerText =
-                    `${formatarDuracao(item.duracao_segundos)}\n${formatarCusto(item.custo_estimado_usd)}`
+                    MOSTRAR_CUSTO
+                        ? `${formatarDuracao(item.duracao_segundos)}\n${formatarCusto(item.custo_estimado_usd)}`
+                        : formatarDuracao(item.duracao_segundos)
 
                 const tdAcoes =
                     document.createElement("td")
@@ -1069,8 +1092,22 @@
                     .filter(item => item.status !== "finalizado")
                     .slice(0, 5)
 
+            const criticos =
+                atendimentosFiltrados
+                    .filter(item =>
+                        item.urgencia === "alta" ||
+                        item.urgencia === "critica" ||
+                        item.sentimento_cliente === "frustrado"
+                    )
+                    .slice(0, 5)
+
+            const semTicket =
+                atendimentosFiltrados
+                    .filter(item => !String(item.ticket_zendesk || "").trim())
+                    .slice(0, 5)
+
             const itens =
-                [...falhas, ...andamento].slice(0, 6)
+                [...criticos, ...falhas, ...semTicket, ...andamento].slice(0, 6)
 
             if (!itens.length) {
                 const div =
@@ -1108,6 +1145,9 @@
                 const falha =
                     item.chunks_falhos > 0
 
+                const semTicket =
+                    !String(item.ticket_zendesk || "").trim()
+
                 const titulo =
                     document.createElement("strong")
 
@@ -1118,7 +1158,7 @@
                     document.createElement("span")
 
                 texto.innerText =
-                    `${falha ? item.chunks_falhos + " trecho(s) com falha" : "Ainda em andamento"} - ${item.data}`
+                    `${falha ? item.chunks_falhos + " trecho(s) com falha" : semTicket ? "Sem ticket" : item.urgencia || "Em acompanhamento"} - ${item.data}`
 
                 div.appendChild(titulo)
                 div.appendChild(texto)
@@ -1176,7 +1216,9 @@
                 data.ticket_zendesk || ""
 
             document.getElementById("modal-meta").value =
-                `${formatarDuracao(data.duracao_segundos)} - ${formatarCusto(data.custo_estimado_usd)} - ${data.chunks_ignorados || 0} trecho(s) ignorado(s)`
+                MOSTRAR_CUSTO
+                    ? `${formatarDuracao(data.duracao_segundos)} - ${formatarCusto(data.custo_estimado_usd)} - ${data.chunks_ignorados || 0} trecho(s) ignorado(s) - ${data.categoria || "outro"}`
+                    : `${formatarDuracao(data.duracao_segundos)} - ${data.sentimento_cliente || "neutro"} - ${data.urgencia || "media"} - ${data.categoria || "outro"}`
 
             document.getElementById("modal-transcricao").innerText =
                 data.transcricao_completa || "Transcricao nao disponivel."

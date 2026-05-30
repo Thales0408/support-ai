@@ -38,10 +38,10 @@ O sistema captura audio da aba do 55PBX e do microfone, envia trechos de audio p
 - Login com usuarios cadastrados.
 - Senhas com hash seguro via `werkzeug.security`.
 - Migracao automatica de senha antiga em texto puro no primeiro login.
-- Usuario admin inicial.
-- Tela admin para criar, editar login, redefinir senha, ativar/desativar e excluir usuarios.
+- Perfis de acesso: analista, supervisor e admin tecnico.
+- Tela admin tecnico para criar, editar login/perfil, redefinir senha, ativar/desativar e excluir usuarios.
 - Analistas veem apenas seus proprios atendimentos.
-- Admin pode ver "Meus atendimentos" ou "Todos os analistas".
+- Supervisor e admin tecnico podem ver "Meus atendimentos" ou "Todos os analistas".
 - Gravacao de audio da aba + microfone.
 - Envio de chunks de 30 segundos.
 - Transcricao por chunk.
@@ -51,7 +51,7 @@ O sistema captura audio da aba do 55PBX e do microfone, envia trechos de audio p
 - Exportacao para Excel.
 - Pausa de gravacao e deteccao automatica de silencio para reduzir custo.
 - Campo de ticket Zendesk por atendimento.
-- Resumo editavel, reprocessamento de resumo e troca de senha pelo usuario.
+- Resumo Zendesk curto, tags internas para busca, classificacao operacional, reprocessamento de resumo e troca de senha pelo usuario.
 - Estimativa de custo por atendimento e no dashboard.
 
 ## Variaveis de ambiente

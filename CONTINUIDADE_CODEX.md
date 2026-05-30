@@ -426,6 +426,8 @@ Estado atual:
 - Dashboard com filtros, busca, TMA, status, grafico, alertas, copiar resumo e detalhes.
 - Controle de custo com Groq, pausa, deteccao automatica de silencio e estimativa por atendimento.
 - Campo ticket Zendesk, resumo editavel, reprocessamento de resumo e troca de senha pelo usuario.
+- Resumo Zendesk curto separado de tags internas e classificacao operacional.
+- Perfis: analista ve proprios dados, supervisor ve equipe sem custo, admin tecnico ve custo e configuracoes.
 - Tabelas criadas/ajustadas automaticamente: usuarios, atendimentos, transcricoes_chunks.
 - Health check validado com database ok.
 

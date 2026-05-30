@@ -65,7 +65,8 @@
             margin-bottom: 6px;
         }
 
-        input {
+        input,
+        select {
             width: 100%;
             padding: 12px;
             border: none;
@@ -247,13 +248,17 @@
                     >
                 </div>
 
-                <label class="check">
-                    <input
-                        type="checkbox"
-                        name="is_admin"
+                <div>
+                    <label for="perfil">Perfil</label>
+                    <select
+                        id="perfil"
+                        name="perfil"
                     >
-                    Administrador
-                </label>
+                        <option value="analista">Analista</option>
+                        <option value="supervisor">Supervisor</option>
+                        <option value="admin_tecnico">Admin tecnico</option>
+                    </select>
+                </div>
             </div>
 
             <button
@@ -302,27 +307,46 @@
                             </form>
                         </td>
                         <td>
-                            {% if item[2] %}
-                                Admin
-                            {% else %}
-                                Analista
-                            {% endif %}
+                            <form
+                                class="inline-form"
+                                method="POST"
+                                action="/admin/usuarios/{{ item[0] }}/perfil"
+                            >
+                                <select name="perfil">
+                                    <option
+                                        value="analista"
+                                        {% if item[3] == "analista" %}selected{% endif %}
+                                    >Analista</option>
+                                    <option
+                                        value="supervisor"
+                                        {% if item[3] == "supervisor" %}selected{% endif %}
+                                    >Supervisor</option>
+                                    <option
+                                        value="admin_tecnico"
+                                        {% if item[3] == "admin_tecnico" %}selected{% endif %}
+                                    >Admin tecnico</option>
+                                </select>
+                                <button
+                                    class="principal"
+                                    type="submit"
+                                >Salvar</button>
+                            </form>
                         </td>
                         <td>
-                            {% if item[3] %}
+                            {% if item[4] %}
                                 Ativo
                             {% else %}
                                 Inativo
                             {% endif %}
                         </td>
-                        <td>{{ item[4] }}</td>
+                        <td>{{ item[5] }}</td>
                         <td>
                             <div class="acoes">
                                 <form
                                     method="POST"
                                     action="/admin/usuarios/{{ item[0] }}/status"
                                 >
-                                    {% if item[3] %}
+                                    {% if item[4] %}
                                         <input
                                             type="hidden"
                                             name="ativo"
