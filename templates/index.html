@@ -469,7 +469,7 @@
                 <div class="filters">
                     <input
                         id="filtro-busca"
-                        placeholder="Buscar por resumo, transcricao, analista ou data"
+                        placeholder="Buscar por texto Zendesk, transcricao, analista, tag ou data"
                     >
 
                     <select id="filtro-periodo">
@@ -508,7 +508,7 @@
                                 <th>Data</th>
                                 <th>Analista</th>
                                 <th>Status</th>
-                                <th>Resumo</th>
+                                <th>Texto Zendesk</th>
                                 <th>Tempo</th>
                                 <th>Acoes</th>
                             </tr>
@@ -556,7 +556,7 @@
                     <button
                         class="btn-blue"
                         id="copiar-modal"
-                    >Copiar resumo</button>
+                    >Copiar Zendesk</button>
                     <button
                         class="btn-blue"
                         id="salvar-modal"
@@ -583,7 +583,7 @@
                     >
                 </div>
                 <div>
-                    <h3>Resumo Zendesk</h3>
+                    <h3>Texto Zendesk</h3>
                     <textarea
                         class="text-box"
                         id="modal-resumo"
@@ -1231,13 +1231,13 @@
                 String(texto || "").trim()
 
             if (!valor) {
-                alert("Nao ha resumo para copiar.")
+                alert("Nao ha texto para copiar.")
                 return
             }
 
             await navigator.clipboard.writeText(valor)
             statusArea.innerText =
-                "Resumo copiado para a area de transferencia."
+                "Texto Zendesk copiado para a area de transferencia."
         }
 
         document.getElementById("fechar-modal").onclick =
@@ -1270,12 +1270,12 @@
                     await response.json()
 
                 if (!response.ok) {
-                    alert(data.erro || "Erro salvando resumo")
+                    alert(data.erro || "Erro salvando texto")
                     return
                 }
 
                 statusArea.innerText =
-                    "Resumo salvo."
+                    "Texto Zendesk salvo."
 
                 await carregarResultados()
             }

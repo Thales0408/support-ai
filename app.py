@@ -748,6 +748,193 @@ def normalizar_campo(valor, padrao="Nao informado", limite=300):
     return texto[:limite]
 
 
+def extrair_secao_texto(texto, rotulos):
+
+    for rotulo in rotulos:
+
+        padrao = (
+            r"(?:^|\n)\s*"
+            + re.escape(rotulo)
+            + r"\s*:\s*(.*?)(?=\n\s*[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ /-]{1,45}\s*:|\Z)"
+        )
+
+        match = re.search(
+            padrao,
+            texto,
+            flags=re.IGNORECASE | re.DOTALL
+        )
+
+        if match:
+
+            return limpar_texto(
+                match.group(1)
+            )
+
+    return ""
+
+
+def texto_zendesk_formatado(conteudo):
+
+    texto = (
+        str(conteudo or "").strip()
+    )
+
+    if not texto:
+
+        return ""
+
+    if (
+        "Nome da empresa:" in texto
+        and "Descritivo do atendimento:" in texto
+    ):
+
+        return texto
+
+    nome_empresa = (
+        extrair_secao_texto(
+            texto,
+            [
+                "Nome da empresa",
+                "Empresa"
+            ]
+        )
+    )
+
+    empresa_loja = (
+        extrair_secao_texto(
+            texto,
+            [
+                "Empresa/Loja",
+                "Loja"
+            ]
+        )
+    )
+
+    cnpj = (
+        extrair_secao_texto(
+            texto,
+            [
+                "CNPJ"
+            ]
+        )
+    )
+
+    cliente = (
+        extrair_secao_texto(
+            texto,
+            [
+                "Nome do Cliente",
+                "Cliente"
+            ]
+        )
+    )
+
+    telefone = (
+        extrair_secao_texto(
+            texto,
+            [
+                "Telefone de contato",
+                "Telefone"
+            ]
+        )
+    )
+
+    email = (
+        extrair_secao_texto(
+            texto,
+            [
+                "E-mail Solicitante",
+                "Email",
+                "E-mail"
+            ]
+        )
+    )
+
+    descritivo = (
+        extrair_secao_texto(
+            texto,
+            [
+                "Descritivo do atendimento",
+                "Resumo do atendimento",
+                "Problema"
+            ]
+        )
+    )
+
+    acao = (
+        extrair_secao_texto(
+            texto,
+            [
+                "Acao realizada",
+                "Ação realizada",
+                "Acao realizada/orientacao",
+                "Acao realizada/orientação"
+            ]
+        )
+
+    )
+
+    orientacao = (
+        extrair_secao_texto(
+            texto,
+            [
+                "Orientacao ao cliente",
+                "Orientação ao cliente"
+            ]
+        )
+
+    )
+
+    resultado = (
+        extrair_secao_texto(
+            texto,
+            [
+                "Resultado"
+            ]
+        )
+
+    )
+
+    partes_descritivo = [
+        parte for parte in [
+            descritivo,
+            acao,
+            orientacao,
+            resultado
+        ]
+        if parte and parte.lower() != "nao informado"
+    ]
+
+    if not partes_descritivo:
+
+        partes_descritivo = [
+            re.sub(
+                r"(?:^|\n)\s*Tags\s*:.*$",
+                "",
+                texto,
+                flags=re.IGNORECASE | re.DOTALL
+            )
+        ]
+
+    descritivo_final = (
+        normalizar_campo(
+            " ".join(partes_descritivo),
+            "Nao informado",
+            700
+        )
+    )
+
+    return "\n".join([
+        "Nome da empresa: " + normalizar_campo(nome_empresa, limite=160),
+        "Empresa/Loja: " + normalizar_campo(empresa_loja, limite=160),
+        "CNPJ: " + normalizar_campo(cnpj, limite=40),
+        "Nome do Cliente: " + normalizar_campo(cliente, limite=120),
+        "Telefone de contato: " + normalizar_campo(telefone, limite=80),
+        "E-mail Solicitante: " + normalizar_campo(email, limite=120),
+        "Descritivo do atendimento: " + descritivo_final
+    ])
+
+
 def analisar_com_ia(transcricao):
 
     prompt = f"""
@@ -2024,7 +2211,7 @@ def resultados():
         item = {
             "id": row[0],
             "arquivo": row[1],
-            "conteudo": row[2],
+            "conteudo": texto_zendesk_formatado(row[2]),
             "data": row[3],
             "status": row[4],
             "chunks_total": row[5] or 0,
@@ -2160,7 +2347,7 @@ def detalhe_atendimento(atendimento_id):
 
     return jsonify({
         "id": row[0],
-        "conteudo": row[1] or "",
+        "conteudo": texto_zendesk_formatado(row[1]),
         "transcricao_completa": row[2] or "",
         "data": row[3],
         "status": row[4],
@@ -2202,6 +2389,9 @@ def salvar_resumo_atendimento(atendimento_id):
     dados = request.get_json(silent=True) or {}
     resumo = limpar_texto(
         dados.get("resumo", "")
+    )
+    resumo = texto_zendesk_formatado(
+        resumo
     )
     ticket_zendesk = limpar_texto(
         dados.get("ticket_zendesk", "")
@@ -2484,7 +2674,11 @@ def exportar():
 
     for row in rows:
 
-        ws.append(row)
+        linha = list(row)
+        linha[2] = texto_zendesk_formatado(
+            linha[2]
+        )
+        ws.append(linha)
 
     nome = "atendimentos.xlsx"
     wb.save(nome)
