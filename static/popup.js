@@ -19,6 +19,8 @@ let tempoPausadoMs = 0
 let atendimentoId = null
 let ordemChunk = 0
 let chunksFalhos = 0
+let chunksIgnorados = 0
+let audioEnviadoMs = 0
 let uploadsPendentes = []
 let gravacaoAtiva = false
 let pausado = false
@@ -26,6 +28,8 @@ let finalizando = false
 let pararSegmentoAtual = null
 
 const TAMANHO_CHUNK_MS = 30000
+const LIMIAR_SILENCIO_RMS = 0.012
+const LIMIAR_SILENCIO_PICO = 0.035
 
 async function lerRespostaJson(response, mensagemPadrao) {
 
@@ -126,9 +130,18 @@ function pararStreams() {
 
 async function iniciarAtendimento() {
 
+    const ticketInput =
+        document.getElementById('ticket-zendesk')
+
     const response =
         await fetch('/atendimentos/iniciar', {
-            method: 'POST'
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                ticket_zendesk: ticketInput ? ticketInput.value : ''
+            })
         })
 
     const data =
@@ -202,7 +215,9 @@ async function finalizarAtendimento(duracao) {
                 atendimento_id: atendimentoId,
                 duracao_segundos: Math.floor(duracao / 1000),
                 chunks_total: ordemChunk,
-                chunks_falhos: chunksFalhos
+                chunks_falhos: chunksFalhos,
+                chunks_ignorados: chunksIgnorados,
+                segundos_transcritos: Math.floor(audioEnviadoMs / 1000)
             })
         })
 
@@ -222,7 +237,93 @@ async function finalizarAtendimento(duracao) {
     return data
 }
 
-function registrarUpload(blob) {
+async function medirVolume(blob) {
+
+    const buffer =
+        await blob.arrayBuffer()
+
+    const contexto =
+        new AudioContext()
+
+    try {
+
+        const audio =
+            await contexto.decodeAudioData(buffer)
+
+        let soma =
+            0
+
+        let pico =
+            0
+
+        let amostras =
+            0
+
+        for (
+            let canal = 0;
+            canal < audio.numberOfChannels;
+            canal++
+        ) {
+
+            const dados =
+                audio.getChannelData(canal)
+
+            const passo =
+                Math.max(
+                    1,
+                    Math.floor(dados.length / 12000)
+                )
+
+            for (
+                let i = 0;
+                i < dados.length;
+                i += passo
+            ) {
+
+                const valor =
+                    Math.abs(dados[i])
+
+                soma +=
+                    valor * valor
+
+                pico =
+                    Math.max(pico, valor)
+
+                amostras++
+            }
+        }
+
+        return {
+            rms: Math.sqrt(soma / Math.max(1, amostras)),
+            pico
+        }
+
+    } finally {
+
+        contexto.close()
+    }
+}
+
+async function deveIgnorarPorSilencio(blob) {
+
+    try {
+
+        const volume =
+            await medirVolume(blob)
+
+        return (
+            volume.rms < LIMIAR_SILENCIO_RMS &&
+            volume.pico < LIMIAR_SILENCIO_PICO
+        )
+
+    } catch (err) {
+
+        console.warn('Nao foi possivel medir silencio', err)
+        return false
+    }
+}
+
+function registrarUpload(blob, duracaoMs) {
 
     if (
         !blob ||
@@ -237,10 +338,45 @@ function registrarUpload(blob) {
         ordemChunk++
 
     const upload =
-        enviarChunk(
-            blob,
-            ordemAtual
-        ).then(() => {
+        deveIgnorarPorSilencio(blob)
+            .then(ignorar => {
+
+                if (ignorar) {
+
+                    chunksIgnorados++
+
+                    if (
+                        gravacaoAtiva &&
+                        !pausado
+                    ) {
+
+                        statusDiv.innerText =
+                            `Trecho silencioso ignorado (${chunksIgnorados})`
+                    }
+
+                    return {
+                        ok: true,
+                        ignorado: true,
+                        ordem: ordemAtual
+                    }
+                }
+
+                audioEnviadoMs +=
+                    duracaoMs || TAMANHO_CHUNK_MS
+
+                return enviarChunk(
+                    blob,
+                    ordemAtual
+                )
+            }).then(resultado => {
+
+            if (
+                resultado &&
+                resultado.ignorado
+            ) {
+
+                return resultado
+            }
 
             if (
                 gravacaoAtiva &&
@@ -248,7 +384,7 @@ function registrarUpload(blob) {
             ) {
 
                 statusDiv.innerText =
-                    `Gravando e transcrevendo... trecho ${ordemAtual + 1}`
+                        `Gravando e transcrevendo... trecho ${ordemAtual + 1}`
             }
 
             return {
@@ -305,6 +441,9 @@ function iniciarNovoSegmento() {
     const partes =
         []
 
+    const inicioSegmento =
+        Date.now()
+
     recorder =
         new MediaRecorder(
             finalStream,
@@ -341,7 +480,10 @@ function iniciarNovoSegmento() {
                             }
                         )
 
-                    registrarUpload(blob)
+                    registrarUpload(
+                        blob,
+                        Date.now() - inicioSegmento
+                    )
                 }
 
                 const deveContinuar =
@@ -589,6 +731,8 @@ startBtn.onclick = async () => {
         tempoPausadoMs = 0
         ordemChunk = 0
         chunksFalhos = 0
+        chunksIgnorados = 0
+        audioEnviadoMs = 0
         uploadsPendentes = []
         gravacaoAtiva = false
         pausado = false

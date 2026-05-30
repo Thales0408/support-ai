@@ -424,6 +424,8 @@ Estado atual:
 - Analistas veem apenas seus proprios atendimentos.
 - Admin pode ver todos os analistas no dashboard.
 - Dashboard com filtros, busca, TMA, status, grafico, alertas, copiar resumo e detalhes.
+- Controle de custo com Groq, pausa, deteccao automatica de silencio e estimativa por atendimento.
+- Campo ticket Zendesk, resumo editavel, reprocessamento de resumo e troca de senha pelo usuario.
 - Tabelas criadas/ajustadas automaticamente: usuarios, atendimentos, transcricoes_chunks.
 - Health check validado com database ok.
 

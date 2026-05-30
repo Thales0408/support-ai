@@ -49,6 +49,10 @@ O sistema captura audio da aba do 55PBX e do microfone, envia trechos de audio p
 - Registro de falhas de chunks sem derrubar o atendimento inteiro.
 - Dashboard com filtros, busca, status, TMA, grafico, alertas, copiar resumo e detalhes.
 - Exportacao para Excel.
+- Pausa de gravacao e deteccao automatica de silencio para reduzir custo.
+- Campo de ticket Zendesk por atendimento.
+- Resumo editavel, reprocessamento de resumo e troca de senha pelo usuario.
+- Estimativa de custo por atendimento e no dashboard.
 
 ## Variaveis de ambiente
 
@@ -68,6 +72,8 @@ DB_PASSWORD=
 TRANSCRIBE_PROVIDER=
 TRANSCRIBE_MODEL=
 SUMMARY_MODEL=
+TRANSCRIBE_USD_HORA=
+SUMMARY_USD_POR_ATENDIMENTO=
 SECRET_KEY=
 ```
 

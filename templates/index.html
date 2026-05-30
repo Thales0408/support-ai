@@ -71,6 +71,10 @@
             justify-content: flex-end;
         }
 
+        .quick-ticket {
+            max-width: 170px;
+        }
+
         #start {
             background: #00a85a;
             color: white;
@@ -114,7 +118,7 @@
         .metrics {
             display: grid;
             gap: 12px;
-            grid-template-columns: repeat(5, minmax(150px, 1fr));
+            grid-template-columns: repeat(6, minmax(140px, 1fr));
             margin-bottom: 18px;
         }
 
@@ -342,6 +346,19 @@
             white-space: pre-wrap;
         }
 
+        textarea.text-box {
+            color: #f4f7fb;
+            min-height: 220px;
+            resize: vertical;
+            width: 100%;
+        }
+
+        .modal-fields {
+            display: grid;
+            gap: 10px;
+            grid-template-columns: 220px 1fr;
+        }
+
         @media (max-width: 1050px) {
             .metrics {
                 grid-template-columns: repeat(2, minmax(150px, 1fr));
@@ -384,6 +401,11 @@
             </div>
 
             <div class="actions">
+                <input
+                    class="quick-ticket"
+                    id="ticket-zendesk"
+                    placeholder="Ticket Zendesk"
+                >
                 <button id="start">Iniciar Gravacao</button>
                 <button id="pause">Pausar</button>
 
@@ -396,6 +418,11 @@
                 <a href="/exportar">
                     <button class="btn-blue">Exportar Excel</button>
                 </a>
+
+                <button
+                    class="btn-dark"
+                    id="abrir-senha"
+                >Senha</button>
 
                 <a href="/logout">
                     <button class="btn-red">Logout</button>
@@ -425,6 +452,10 @@
             <div class="metric">
                 <span>TMA</span>
                 <strong id="metric-tma">00m 00s</strong>
+            </div>
+            <div class="metric">
+                <span>Custo estimado</span>
+                <strong id="metric-custo">US$ 0.00</strong>
             </div>
         </section>
 
@@ -527,18 +558,36 @@
                         id="copiar-modal"
                     >Copiar resumo</button>
                     <button
+                        class="btn-blue"
+                        id="salvar-modal"
+                    >Salvar</button>
+                    <button
+                        class="btn-dark"
+                        id="reprocessar-modal"
+                    >Reprocessar</button>
+                    <button
                         class="btn-dark"
                         id="fechar-modal"
                     >Fechar</button>
                 </div>
             </div>
             <div class="modal-body">
+                <div class="modal-fields">
+                    <input
+                        id="modal-ticket"
+                        placeholder="Ticket Zendesk"
+                    >
+                    <input
+                        id="modal-meta"
+                        disabled
+                    >
+                </div>
                 <div>
                     <h3>Resumo Zendesk</h3>
-                    <div
+                    <textarea
                         class="text-box"
                         id="modal-resumo"
-                    ></div>
+                    ></textarea>
                 </div>
                 <div>
                     <h3>Transcricao completa</h3>
@@ -547,6 +596,37 @@
                         id="modal-transcricao"
                     ></div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div
+        class="modal"
+        id="modal-senha"
+    >
+        <div class="modal-card">
+            <div class="panel-header">
+                <h2>Alterar senha</h2>
+                <button
+                    class="btn-dark"
+                    id="fechar-senha"
+                >Fechar</button>
+            </div>
+            <div class="modal-body">
+                <input
+                    id="senha-atual"
+                    type="password"
+                    placeholder="Senha atual"
+                >
+                <input
+                    id="nova-senha"
+                    type="password"
+                    placeholder="Nova senha"
+                >
+                <button
+                    class="btn-blue"
+                    id="salvar-senha"
+                >Salvar senha</button>
             </div>
         </div>
     </div>
@@ -580,8 +660,15 @@
         const modal =
             document.getElementById("modal-detalhe")
 
+        const modalSenha =
+            document.getElementById("modal-senha")
+
         const statusArea =
             document.getElementById("status")
+
+        function formatarCusto(valor) {
+            return `US$ ${Number(valor || 0).toFixed(2)}`
+        }
 
         function formatarDuracao(segundos) {
             const valor =
@@ -665,6 +752,7 @@
                         item.data,
                         item.usuario,
                         item.status,
+                        item.ticket_zendesk,
                         item.conteudo,
                         item.transcricao_completa
                     ].join(" ").toLowerCase()
@@ -764,12 +852,21 @@
                     )
                     : 0
 
+            const custo =
+                atendimentosFiltrados.reduce(
+                    (soma, item) =>
+                        soma + Number(item.custo_estimado_usd || 0),
+                    0
+                )
+
             document.getElementById("metric-total").innerText = total
             document.getElementById("metric-finalizados").innerText = finalizados
             document.getElementById("metric-andamento").innerText = andamento
             document.getElementById("metric-falhas").innerText = falhas
             document.getElementById("metric-tma").innerText =
                 formatarDuracao(media)
+            document.getElementById("metric-custo").innerText =
+                formatarCusto(custo)
         }
 
         function renderizarTabela() {
@@ -824,7 +921,9 @@
                     "summary-title"
 
                 title.innerText =
-                    `Atendimento #${item.id}`
+                    item.ticket_zendesk
+                        ? `#${item.id} - Ticket ${item.ticket_zendesk}`
+                        : `Atendimento #${item.id}`
 
                 const text =
                     document.createElement("div")
@@ -841,8 +940,11 @@
                 const tdTempo =
                     document.createElement("td")
 
+                tdTempo.style.whiteSpace =
+                    "pre-line"
+
                 tdTempo.innerText =
-                    formatarDuracao(item.duracao_segundos)
+                    `${formatarDuracao(item.duracao_segundos)}\n${formatarCusto(item.custo_estimado_usd)}`
 
                 const tdAcoes =
                     document.createElement("td")
@@ -1067,8 +1169,14 @@
             document.getElementById("modal-titulo").innerText =
                 `Atendimento #${data.id} - ${data.usuario}`
 
-            document.getElementById("modal-resumo").innerText =
+            document.getElementById("modal-resumo").value =
                 data.conteudo || "Resumo nao disponivel."
+
+            document.getElementById("modal-ticket").value =
+                data.ticket_zendesk || ""
+
+            document.getElementById("modal-meta").value =
+                `${formatarDuracao(data.duracao_segundos)} - ${formatarCusto(data.custo_estimado_usd)} - ${data.chunks_ignorados || 0} trecho(s) ignorado(s)`
 
             document.getElementById("modal-transcricao").innerText =
                 data.transcricao_completa || "Transcricao nao disponivel."
@@ -1095,13 +1203,118 @@
 
         document.getElementById("copiar-modal").onclick =
             () => copiarTexto(
-                detalheAtual ? detalheAtual.conteudo : ""
+                document.getElementById("modal-resumo").value
             )
+
+        document.getElementById("salvar-modal").onclick =
+            async () => {
+                if (!detalheAtual) {
+                    return
+                }
+
+                const response =
+                    await fetch(`/atendimentos/${detalheAtual.id}/resumo`, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            resumo: document.getElementById("modal-resumo").value,
+                            ticket_zendesk: document.getElementById("modal-ticket").value
+                        })
+                    })
+
+                const data =
+                    await response.json()
+
+                if (!response.ok) {
+                    alert(data.erro || "Erro salvando resumo")
+                    return
+                }
+
+                statusArea.innerText =
+                    "Resumo salvo."
+
+                await carregarResultados()
+            }
+
+        document.getElementById("reprocessar-modal").onclick =
+            async () => {
+                if (!detalheAtual) {
+                    return
+                }
+
+                statusArea.innerText =
+                    "Reprocessando resumo..."
+
+                const response =
+                    await fetch(`/atendimentos/${detalheAtual.id}/reprocessar-resumo`, {
+                        method: "POST"
+                    })
+
+                const data =
+                    await response.json()
+
+                if (!response.ok) {
+                    alert(data.erro || "Erro reprocessando resumo")
+                    return
+                }
+
+                document.getElementById("modal-resumo").value =
+                    data.resumo || ""
+
+                statusArea.innerText =
+                    "Resumo reprocessado."
+
+                await carregarResultados()
+            }
+
+        document.getElementById("abrir-senha").onclick =
+            () => modalSenha.classList.add("open")
+
+        document.getElementById("fechar-senha").onclick =
+            () => modalSenha.classList.remove("open")
+
+        document.getElementById("salvar-senha").onclick =
+            async () => {
+                const response =
+                    await fetch("/conta/senha", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            senha_atual: document.getElementById("senha-atual").value,
+                            nova_senha: document.getElementById("nova-senha").value
+                        })
+                    })
+
+                const data =
+                    await response.json()
+
+                if (!response.ok) {
+                    alert(data.erro || "Erro alterando senha")
+                    return
+                }
+
+                document.getElementById("senha-atual").value = ""
+                document.getElementById("nova-senha").value = ""
+                modalSenha.classList.remove("open")
+                statusArea.innerText =
+                    "Senha alterada."
+            }
 
         modal.onclick =
             event => {
                 if (event.target === modal) {
                     modal.classList.remove("open")
+                }
+            }
+
+        modalSenha.onclick =
+            event => {
+                if (event.target === modalSenha) {
+                    modalSenha.classList.remove("open")
                 }
             }
 
