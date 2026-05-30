@@ -20,6 +20,7 @@ import re
 import uuid
 import traceback
 import json
+import logging
 
 from auth import (
     perfil_usuario,
@@ -33,6 +34,11 @@ from auth import (
 from config import (
     CORS_ORIGINS,
     GROQ_API_KEY,
+    LOGIN_BLOCK_MINUTES,
+    LOGIN_MAX_ATTEMPTS,
+    MAX_AUDIO_MINUTES_PER_DAY,
+    MAX_CALLS_PER_DAY,
+    MAX_CHUNKS_PER_CALL,
     SECRET_KEY,
     SUMMARY_MODEL,
     TRANSCRIBE_MODEL,
@@ -54,6 +60,13 @@ from services.database import (
 # =========================================
 # FLASK
 # =========================================
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)s %(message)s"
+)
+
+logger = logging.getLogger("support_ai")
 
 app = Flask(__name__)
 
@@ -96,6 +109,20 @@ except Exception as e:
 # HELPERS
 # =========================================
 
+def log_evento(evento, **dados):
+
+    logger.info(
+        json.dumps(
+            {
+                "evento": evento,
+                **dados
+            },
+            ensure_ascii=False,
+            default=str
+        )
+    )
+
+
 def limpar_texto(texto):
 
     texto = re.sub(
@@ -127,6 +154,194 @@ def tamanho_arquivo_upload(arquivo):
     )
 
     return tamanho
+
+
+def ip_requisicao():
+
+    encaminhado = request.headers.get("X-Forwarded-For", "")
+
+    if encaminhado:
+
+        return encaminhado.split(",")[0].strip()
+
+    return request.remote_addr or "desconhecido"
+
+
+def login_bloqueado(usuario, ip):
+
+    with conectar_banco() as conn:
+
+        with conn.cursor() as cursor:
+
+            cursor.execute(
+                """
+                SELECT tentativas, bloqueado_ate
+                FROM login_tentativas
+                WHERE usuario = %s
+                AND ip = %s
+                """,
+                (
+                    usuario,
+                    ip
+                )
+            )
+
+            row = cursor.fetchone()
+
+            if not row:
+
+                return False
+
+            tentativas, bloqueado_ate = row
+
+            if bloqueado_ate:
+
+                cursor.execute(
+                    "SELECT NOW() < %s",
+                    (
+                        bloqueado_ate,
+                    )
+                )
+
+                if cursor.fetchone()[0]:
+
+                    log_evento(
+                        "login_bloqueado",
+                        usuario=usuario,
+                        ip=ip,
+                        tentativas=tentativas,
+                        bloqueado_ate=bloqueado_ate
+                    )
+
+                    return True
+
+    return False
+
+
+def registrar_login_falho(usuario, ip):
+
+    with conectar_banco() as conn:
+
+        with conn.cursor() as cursor:
+
+            cursor.execute(
+                """
+                INSERT INTO login_tentativas (
+                    usuario,
+                    ip,
+                    tentativas,
+                    bloqueado_ate,
+                    atualizado_em
+                )
+                VALUES (%s, %s, 1, NULL, NOW())
+                ON CONFLICT (usuario, ip)
+                DO UPDATE SET
+                    tentativas = login_tentativas.tentativas + 1,
+                    bloqueado_ate = CASE
+                        WHEN login_tentativas.tentativas + 1 >= %s
+                        THEN NOW() + (%s || ' minutes')::interval
+                        ELSE login_tentativas.bloqueado_ate
+                    END,
+                    atualizado_em = NOW()
+                RETURNING tentativas, bloqueado_ate
+                """,
+                (
+                    usuario,
+                    ip,
+                    LOGIN_MAX_ATTEMPTS,
+                    LOGIN_BLOCK_MINUTES
+                )
+            )
+
+            tentativas, bloqueado_ate = cursor.fetchone()
+
+    log_evento(
+        "login_falhou",
+        usuario=usuario,
+        ip=ip,
+        tentativas=tentativas,
+        bloqueado_ate=bloqueado_ate
+    )
+
+
+def limpar_tentativas_login(usuario, ip):
+
+    with conectar_banco() as conn:
+
+        with conn.cursor() as cursor:
+
+            cursor.execute(
+                """
+                DELETE FROM login_tentativas
+                WHERE usuario = %s
+                AND ip = %s
+                """,
+                (
+                    usuario,
+                    ip
+                )
+            )
+
+
+def uso_diario_usuario(cursor, usuario_id, atendimento_id=None):
+
+    params = [usuario_id]
+    excluir_atendimento = ""
+
+    if atendimento_id:
+
+        excluir_atendimento = "AND id <> %s"
+        params.append(atendimento_id)
+
+    cursor.execute(
+        f"""
+        SELECT
+            COUNT(*),
+            COALESCE(SUM(segundos_transcritos), 0),
+            COALESCE(SUM(custo_estimado_usd), 0)
+        FROM atendimentos
+        WHERE usuario_id = %s
+        AND inicio_em >= CURRENT_DATE
+        AND inicio_em < CURRENT_DATE + INTERVAL '1 day'
+        {excluir_atendimento}
+        """,
+        tuple(params)
+    )
+
+    chamadas, segundos, custo = cursor.fetchone()
+
+    cursor.execute(
+        """
+        SELECT COUNT(*)
+        FROM transcricoes_chunks tc
+        INNER JOIN atendimentos a
+        ON a.id = tc.atendimento_id
+        WHERE tc.usuario_id = %s
+        AND COALESCE(a.inicio_em, tc.criado_em) >= CURRENT_DATE
+        AND COALESCE(a.inicio_em, tc.criado_em) < CURRENT_DATE + INTERVAL '1 day'
+        """,
+        (
+            usuario_id,
+        )
+    )
+
+    chunks = cursor.fetchone()[0]
+
+    return {
+        "chamadas": int(chamadas or 0),
+        "segundos": int(segundos or 0),
+        "chunks": int(chunks or 0),
+        "custo": float(custo or 0)
+    }
+
+
+def erro_limite(mensagem, **dados):
+
+    return jsonify({
+        "erro": mensagem,
+        "limite": True,
+        **dados
+    }), 429
 
 
 def extrair_json_objeto(texto):
@@ -550,8 +765,21 @@ def login():
 
     if request.method == "POST":
 
-        usuario = request.form["usuario"]
+        usuario = limpar_texto(request.form["usuario"])
         senha = request.form["senha"]
+        ip = ip_requisicao()
+
+        if login_bloqueado(usuario, ip):
+
+            erro = (
+                "Muitas tentativas de login. "
+                f"Tente novamente em {LOGIN_BLOCK_MINUTES} minutos."
+            )
+
+            return render_template(
+                "login.html",
+                erro=erro
+            ), 429
 
         with conectar_banco() as conn:
 
@@ -612,7 +840,19 @@ def login():
                     )
                     session["usuario_nome"] = usuario
 
+                    limpar_tentativas_login(usuario, ip)
+
+                    log_evento(
+                        "login_sucesso",
+                        usuario_id=user[0],
+                        usuario=usuario,
+                        perfil=perfil,
+                        ip=ip
+                    )
+
                     return redirect("/")
+
+        registrar_login_falho(usuario, ip)
 
         erro = "Usuario ou senha invalidos."
 
@@ -1043,6 +1283,41 @@ def iniciar_atendimento():
 
         with conn.cursor() as cursor:
 
+            uso = uso_diario_usuario(
+                cursor,
+                usuario_id
+            )
+
+            if uso["chamadas"] >= MAX_CALLS_PER_DAY:
+
+                log_evento(
+                    "limite_chamadas_dia",
+                    usuario_id=usuario_id,
+                    chamadas=uso["chamadas"],
+                    limite=MAX_CALLS_PER_DAY
+                )
+
+                return erro_limite(
+                    "Limite diario de atendimentos atingido.",
+                    chamadas_hoje=uso["chamadas"],
+                    limite_chamadas=MAX_CALLS_PER_DAY
+                )
+
+            if uso["segundos"] >= MAX_AUDIO_MINUTES_PER_DAY * 60:
+
+                log_evento(
+                    "limite_minutos_dia",
+                    usuario_id=usuario_id,
+                    segundos=uso["segundos"],
+                    limite_segundos=MAX_AUDIO_MINUTES_PER_DAY * 60
+                )
+
+                return erro_limite(
+                    "Limite diario de minutos de audio atingido.",
+                    minutos_hoje=round(uso["segundos"] / 60, 2),
+                    limite_minutos=MAX_AUDIO_MINUTES_PER_DAY
+                )
+
             cursor.execute(
                 """
                 INSERT INTO atendimentos (
@@ -1068,6 +1343,13 @@ def iniciar_atendimento():
             )
 
             atendimento_id = cursor.fetchone()[0]
+
+    log_evento(
+        "atendimento_iniciado",
+        usuario_id=usuario_id,
+        atendimento_id=atendimento_id,
+        ticket_zendesk=bool(ticket_zendesk)
+    )
 
     return jsonify({
         "atendimento_id": atendimento_id,
@@ -1114,9 +1396,50 @@ def receber_chunk():
             "erro": "Ordem invalida"
         }), 400
 
+    if ordem_int >= MAX_CHUNKS_PER_CALL:
+
+        log_evento(
+            "limite_chunks_atendimento",
+            usuario_id=usuario_id,
+            atendimento_id=atendimento_id,
+            ordem=ordem_int,
+            limite=MAX_CHUNKS_PER_CALL
+        )
+
+        return erro_limite(
+            "Limite de trechos por atendimento atingido.",
+            limite_chunks=MAX_CHUNKS_PER_CALL
+        )
+
     with conectar_banco() as conn:
 
         with conn.cursor() as cursor:
+
+            uso = uso_diario_usuario(
+                cursor,
+                usuario_id
+            )
+
+            segundos_estimados = (
+                uso["segundos"]
+                + uso["chunks"] * 30
+            )
+
+            if segundos_estimados >= MAX_AUDIO_MINUTES_PER_DAY * 60:
+
+                log_evento(
+                    "limite_minutos_chunk",
+                    usuario_id=usuario_id,
+                    atendimento_id=atendimento_id,
+                    segundos_estimados=segundos_estimados,
+                    limite_segundos=MAX_AUDIO_MINUTES_PER_DAY * 60
+                )
+
+                return erro_limite(
+                    "Limite diario de minutos de audio atingido.",
+                    minutos_estimados=round(segundos_estimados / 60, 2),
+                    limite_minutos=MAX_AUDIO_MINUTES_PER_DAY
+                )
 
             cursor.execute(
                 """
@@ -1148,6 +1471,15 @@ def receber_chunk():
         if (
             tamanho_audio < 1024
         ):
+
+            log_evento(
+                "chunk_ignorado",
+                usuario_id=usuario_id,
+                atendimento_id=atendimento_id,
+                ordem=ordem_int,
+                tamanho_audio=tamanho_audio,
+                motivo="audio_muito_curto"
+            )
 
             return jsonify({
                 "status": "chunk_ignorado",
@@ -1198,6 +1530,15 @@ def receber_chunk():
                     )
                 )
 
+        log_evento(
+            "chunk_transcrito",
+            usuario_id=usuario_id,
+            atendimento_id=atendimento_id,
+            ordem=ordem_int,
+            tamanho_audio=tamanho_audio,
+            caracteres=len(texto)
+        )
+
         return jsonify({
             "status": "chunk_transcrito",
             "texto": texto
@@ -1205,8 +1546,7 @@ def receber_chunk():
 
     except Exception as e:
 
-        print("ERRO AO TRANSCREVER CHUNK:", e)
-        traceback.print_exc()
+        logger.exception("ERRO AO TRANSCREVER CHUNK")
 
         with conectar_banco() as conn:
 
@@ -1250,6 +1590,14 @@ def receber_chunk():
                         usuario_id
                     )
                 )
+
+        log_evento(
+            "chunk_erro",
+            usuario_id=usuario_id,
+            atendimento_id=atendimento_id,
+            ordem=ordem_int,
+            erro=str(e)[:500]
+        )
 
         return jsonify({
             "erro": "Falha ao transcrever este trecho",
@@ -1332,6 +1680,12 @@ def finalizar_atendimento():
 
             total_banco, falhos_banco = cursor.fetchone()
 
+            uso = uso_diario_usuario(
+                cursor,
+                usuario_id,
+                atendimento_id
+            )
+
     transcricao = limpar_texto(
         " ".join(textos)
     )
@@ -1361,6 +1715,43 @@ def finalizar_atendimento():
                 int(duracao_segundos or 0),
                 chunks_total * 30
             )
+        )
+
+    if chunks_total > MAX_CHUNKS_PER_CALL:
+
+        log_evento(
+            "limite_chunks_finalizar",
+            usuario_id=usuario_id,
+            atendimento_id=atendimento_id,
+            chunks_total=chunks_total,
+            limite=MAX_CHUNKS_PER_CALL
+        )
+
+        return erro_limite(
+            "Limite de trechos por atendimento atingido.",
+            chunks_total=chunks_total,
+            limite_chunks=MAX_CHUNKS_PER_CALL
+        )
+
+    segundos_dia_total = (
+        uso["segundos"]
+        + segundos_transcritos
+    )
+
+    if segundos_dia_total > MAX_AUDIO_MINUTES_PER_DAY * 60:
+
+        log_evento(
+            "limite_minutos_finalizar",
+            usuario_id=usuario_id,
+            atendimento_id=atendimento_id,
+            segundos_dia_total=segundos_dia_total,
+            limite_segundos=MAX_AUDIO_MINUTES_PER_DAY * 60
+        )
+
+        return erro_limite(
+            "Limite diario de minutos de audio atingido.",
+            minutos_hoje=round(segundos_dia_total / 60, 2),
+            limite_minutos=MAX_AUDIO_MINUTES_PER_DAY
         )
 
     if transcricao:
@@ -1444,6 +1835,21 @@ def finalizar_atendimento():
                 )
             )
 
+    log_evento(
+        "atendimento_finalizado",
+        usuario_id=usuario_id,
+        atendimento_id=atendimento_id,
+        chunks_total=chunks_total,
+        chunks_falhos=chunks_falhos,
+        chunks_ignorados=chunks_ignorados,
+        segundos_transcritos=segundos_transcritos,
+        custo_estimado_usd=custo_estimado,
+        custo_dia_estimado_usd=round(
+            uso["custo"] + float(custo_estimado or 0),
+            4
+        )
+    )
+
     return jsonify({
         "status": "finalizado",
         "resultado": resultado,
@@ -1478,6 +1884,45 @@ def transcrever_arquivo_unico():
         return jsonify({
             "erro": "Sem audio"
         }), 400
+
+    with conectar_banco() as conn:
+
+        with conn.cursor() as cursor:
+
+            uso = uso_diario_usuario(
+                cursor,
+                usuario_id
+            )
+
+            if uso["chamadas"] >= MAX_CALLS_PER_DAY:
+
+                log_evento(
+                    "limite_chamadas_upload_unico",
+                    usuario_id=usuario_id,
+                    chamadas=uso["chamadas"],
+                    limite=MAX_CALLS_PER_DAY
+                )
+
+                return erro_limite(
+                    "Limite diario de atendimentos atingido.",
+                    chamadas_hoje=uso["chamadas"],
+                    limite_chamadas=MAX_CALLS_PER_DAY
+                )
+
+            if uso["segundos"] >= MAX_AUDIO_MINUTES_PER_DAY * 60:
+
+                log_evento(
+                    "limite_minutos_upload_unico",
+                    usuario_id=usuario_id,
+                    segundos=uso["segundos"],
+                    limite_segundos=MAX_AUDIO_MINUTES_PER_DAY * 60
+                )
+
+                return erro_limite(
+                    "Limite diario de minutos de audio atingido.",
+                    minutos_hoje=round(uso["segundos"] / 60, 2),
+                    limite_minutos=MAX_AUDIO_MINUTES_PER_DAY
+                )
 
     data = datetime.now().strftime(
         "%d/%m/%Y %H:%M"
@@ -1528,6 +1973,14 @@ def transcrever_arquivo_unico():
                     analise["tags"]
                 )
             )
+
+    log_evento(
+        "atendimento_upload_unico_finalizado",
+        usuario_id=usuario_id,
+        caracteres_transcricao=len(texto),
+        categoria=analise["categoria"],
+        urgencia=analise["urgencia"]
+    )
 
     return jsonify({
         "status": "finalizado",

@@ -75,6 +75,13 @@ SUMMARY_MODEL=
 TRANSCRIBE_USD_HORA=
 SUMMARY_USD_POR_ATENDIMENTO=
 SECRET_KEY=
+ADMIN_USUARIO=
+ADMIN_SENHA=
+MAX_CALLS_PER_DAY=
+MAX_AUDIO_MINUTES_PER_DAY=
+MAX_CHUNKS_PER_CALL=
+LOGIN_MAX_ATTEMPTS=
+LOGIN_BLOCK_MINUTES=
 ```
 
 Para reduzir custo mensal, use:
@@ -113,7 +120,7 @@ O sistema nao cria mais credenciais padrao. Configure antes de subir:
 
 ```text
 ADMIN_USUARIO=seu_admin_tecnico
-ADMIN_SENHA=uma_senha_forte
+ADMIN_SENHA=troque_por_uma_senha_forte_com_12_caracteres
 SECRET_KEY=uma_chave_aleatoria_com_mais_de_32_caracteres
 ```
 

@@ -44,17 +44,17 @@ Health check:
 https://web-production-b7e8f.up.railway.app/health
 ```
 
-Status validado em 2026-05-29:
+Status esperado:
 
 ```json
 {
   "database": "ok",
   "db_config": {
-    "host": "aws-1-sa-east-1.pooler.supabase.com",
+    "host": "<host configurado>",
     "modo": "variaveis_db",
     "password_configurada": true,
-    "port": "6543",
-    "user": "postgres.epegojdxngrcwvzecupl"
+    "port": "<porta configurada>",
+    "user": "<usuario configurado>"
   },
   "status": "ok",
   "transcribe_provider": "groq",
@@ -120,15 +120,20 @@ Obrigatorias:
 OPENAI_API_KEY=<chave real da OpenAI>
 GROQ_API_KEY=<chave real da Groq>
 GROQ_BASE_URL=https://api.groq.com/openai/v1
-DB_HOST=aws-1-sa-east-1.pooler.supabase.com
-DB_PORT=6543
-DB_NAME=postgres
-DB_USER=postgres.epegojdxngrcwvzecupl
+DB_HOST=<host do banco ou pooler>
+DB_PORT=<porta do banco>
+DB_NAME=<nome do banco>
+DB_USER=<usuario do banco>
 DB_PASSWORD=<senha atual do banco Supabase>
 TRANSCRIBE_PROVIDER=groq
 TRANSCRIBE_MODEL=whisper-large-v3-turbo
 SUMMARY_MODEL=gpt-4.1-mini
 SECRET_KEY=<chave secreta forte>
+MAX_CALLS_PER_DAY=40
+MAX_AUDIO_MINUTES_PER_DAY=360
+MAX_CHUNKS_PER_CALL=120
+LOGIN_MAX_ATTEMPTS=5
+LOGIN_BLOCK_MINUTES=15
 ```
 
 Obrigatorias para seguranca:
@@ -151,6 +156,7 @@ Tabelas usadas:
 usuarios
 atendimentos
 transcricoes_chunks
+login_tentativas
 ```
 
 Tabela `usuarios`:
@@ -382,19 +388,9 @@ Network is unreachable
 
 Motivo:
 
-```text
-db.epegojdxngrcwvzecupl.supabase.co:5432
-```
+O host direto `db.<projeto>.supabase.co:5432` usa conexao direta com IPv6. Railway pode nao conectar corretamente por IPv6.
 
-usa conexao direta com IPv6. Railway nao conectou corretamente por IPv6.
-
-Solucao aplicada:
-
-```text
-aws-1-sa-east-1.pooler.supabase.com:6543
-```
-
-via Supabase Transaction Pooler.
+Solucao recomendada: usar o Supabase Transaction Pooler do seu projeto.
 
 ## Prompt para outra conta Codex
 
@@ -429,7 +425,7 @@ Estado atual:
 - Campo ticket Zendesk, resumo editavel, reprocessamento de resumo e troca de senha pelo usuario.
 - Resumo Zendesk curto separado de tags internas e classificacao operacional.
 - Perfis: analista ve proprios dados, supervisor ve equipe sem custo, admin tecnico ve custo e configuracoes.
-- Tabelas criadas/ajustadas automaticamente: usuarios, atendimentos, transcricoes_chunks.
+- Tabelas criadas/ajustadas automaticamente: usuarios, atendimentos, transcricoes_chunks, login_tentativas.
 - Health check validado com database ok.
 
 Objetivo:

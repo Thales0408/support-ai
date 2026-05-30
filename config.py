@@ -78,15 +78,22 @@ def ler_float(nome, padrao):
     )
 
 
+def ler_int(nome, padrao):
+
+    return int(
+        ler_env(nome, padrao)
+    )
+
+
 OPENAI_API_KEY = ler_env("OPENAI_API_KEY")
 GROQ_API_KEY = ler_env("GROQ_API_KEY") or ler_env("GROQ_API_TOKEN")
 GROQ_BASE_URL = ler_env("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
 
 DATABASE_URL = ler_env("DATABASE_URL")
-DB_HOST = ler_env("DB_HOST", "aws-1-sa-east-1.pooler.supabase.com")
-DB_PORT = ler_env("DB_PORT", "6543")
-DB_NAME = ler_env("DB_NAME", "postgres")
-DB_USER = ler_env("DB_USER", "postgres.epegojdxngrcwvzecupl")
+DB_HOST = ler_env("DB_HOST")
+DB_PORT = ler_env("DB_PORT")
+DB_NAME = ler_env("DB_NAME")
+DB_USER = ler_env("DB_USER")
 DB_PASSWORD = ler_env("DB_PASSWORD")
 
 ADMIN_USUARIO = exigir_env("ADMIN_USUARIO")
@@ -116,6 +123,12 @@ SUMMARY_USD_POR_ATENDIMENTO = ler_float(
     "SUMMARY_USD_POR_ATENDIMENTO",
     "0.003"
 )
+
+MAX_CALLS_PER_DAY = ler_int("MAX_CALLS_PER_DAY", "40")
+MAX_AUDIO_MINUTES_PER_DAY = ler_int("MAX_AUDIO_MINUTES_PER_DAY", "360")
+MAX_CHUNKS_PER_CALL = ler_int("MAX_CHUNKS_PER_CALL", "120")
+LOGIN_MAX_ATTEMPTS = ler_int("LOGIN_MAX_ATTEMPTS", "5")
+LOGIN_BLOCK_MINUTES = ler_int("LOGIN_BLOCK_MINUTES", "15")
 
 CORS_ORIGINS = [
     origem.strip()

@@ -57,10 +57,10 @@ Edite o `.env` e preencha:
 OPENAI_API_KEY=<chave real da OpenAI>
 GROQ_API_KEY=<chave real da Groq>
 GROQ_BASE_URL=https://api.groq.com/openai/v1
-DB_HOST=aws-1-sa-east-1.pooler.supabase.com
-DB_PORT=6543
-DB_NAME=postgres
-DB_USER=postgres.epegojdxngrcwvzecupl
+DB_HOST=<host do banco ou pooler>
+DB_PORT=<porta do banco>
+DB_NAME=<nome do banco>
+DB_USER=<usuario do banco>
 DB_PASSWORD=<senha atual do Supabase>
 TRANSCRIBE_PROVIDER=groq
 TRANSCRIBE_MODEL=whisper-large-v3-turbo
@@ -71,6 +71,11 @@ ADMIN_USUARIO=seu_admin_tecnico
 ADMIN_SENHA=<senha forte do admin tecnico>
 SECRET_KEY=<chave grande e aleatoria>
 CORS_ORIGINS=
+MAX_CALLS_PER_DAY=40
+MAX_AUDIO_MINUTES_PER_DAY=360
+MAX_CHUNKS_PER_CALL=120
+LOGIN_MAX_ATTEMPTS=5
+LOGIN_BLOCK_MINUTES=15
 ```
 
 Para manter o custo baixo em volume, a transcricao deve usar Groq (`TRANSCRIBE_PROVIDER=groq`). A OpenAI continua sendo usada para o resumo final.
@@ -171,21 +176,14 @@ SUMMARY_USD_POR_ATENDIMENTO
 SECRET_KEY
 ADMIN_USUARIO
 ADMIN_SENHA
+MAX_CALLS_PER_DAY
+MAX_AUDIO_MINUTES_PER_DAY
+MAX_CHUNKS_PER_CALL
+LOGIN_MAX_ATTEMPTS
+LOGIN_BLOCK_MINUTES
 ```
 
-O `DB_HOST` deve usar o pooler:
-
-```text
-aws-1-sa-east-1.pooler.supabase.com
-```
-
-Porta:
-
-```text
-6543
-```
-
-Evite voltar para o host direto `db.<projeto>.supabase.co:5432`, pois houve problema de IPv6 no Railway.
+Se usar Supabase no Railway, prefira o pooler em vez do host direto `db.<projeto>.supabase.co:5432`, pois o host direto pode sofrer com IPv6.
 
 ## 9. Banco de dados
 
@@ -196,6 +194,7 @@ Tabelas:
 - `usuarios`
 - `atendimentos`
 - `transcricoes_chunks`
+- `login_tentativas`
 
 As senhas antigas em texto puro sao migradas automaticamente para hash no primeiro login bem-sucedido.
 
@@ -215,11 +214,7 @@ As senhas antigas em texto puro sao migradas automaticamente para hash no primei
 
 ### `Network is unreachable`
 
-Provavel uso do host direto do Supabase em IPv6. Usar pooler:
-
-```text
-aws-1-sa-east-1.pooler.supabase.com:6543
-```
+Provavel uso do host direto do Supabase em IPv6. Use o pooler do seu projeto Supabase.
 
 ### `Unexpected token '<'`
 
