@@ -131,11 +131,12 @@ SUMMARY_MODEL=gpt-4.1-mini
 SECRET_KEY=<chave secreta forte>
 ```
 
-Opcionais:
+Obrigatorias para seguranca:
 
 ```text
-ADMIN_USUARIO=admin
-ADMIN_SENHA=123456
+ADMIN_USUARIO=seu_admin_tecnico
+ADMIN_SENHA=<senha forte do admin tecnico>
+SECRET_KEY=<chave secreta forte com pelo menos 32 caracteres>
 ```
 
 O `DATABASE_URL` pode existir, mas o backend prioriza as variaveis `DB_*` quando `DB_PASSWORD` esta configurada.

@@ -67,9 +67,10 @@ TRANSCRIBE_MODEL=whisper-large-v3-turbo
 SUMMARY_MODEL=gpt-4.1-mini
 TRANSCRIBE_USD_HORA=0.04
 SUMMARY_USD_POR_ATENDIMENTO=0.003
-ADMIN_USUARIO=admin
-ADMIN_SENHA=123456
+ADMIN_USUARIO=seu_admin_tecnico
+ADMIN_SENHA=<senha forte do admin tecnico>
 SECRET_KEY=<chave grande e aleatoria>
+CORS_ORIGINS=
 ```
 
 Para manter o custo baixo em volume, a transcricao deve usar Groq (`TRANSCRIBE_PROVIDER=groq`). A OpenAI continua sendo usada para o resumo final.

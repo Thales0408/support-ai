@@ -109,14 +109,15 @@ http://127.0.0.1:8080/health
 
 ## Primeiro acesso
 
-Por padrao:
+O sistema nao cria mais credenciais padrao. Configure antes de subir:
 
 ```text
-usuario: admin
-senha: 123456
+ADMIN_USUARIO=seu_admin_tecnico
+ADMIN_SENHA=uma_senha_forte
+SECRET_KEY=uma_chave_aleatoria_com_mais_de_32_caracteres
 ```
 
-Configure `ADMIN_USUARIO` e `ADMIN_SENHA` nas variaveis de ambiente para mudar o usuario inicial em novos ambientes.
+Sem essas variaveis, ou usando senha fraca, o app recusa iniciar.
 
 Depois do login como admin:
 

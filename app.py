@@ -9,104 +9,45 @@ from flask import (
 )
 
 from flask_cors import CORS
-from openai import OpenAI
 from waitress import serve
-from dotenv import load_dotenv
 from datetime import datetime
 from openpyxl import Workbook
-from werkzeug.security import (
-    check_password_hash,
-    generate_password_hash
-)
+from werkzeug.security import generate_password_hash
 
-import psycopg2
 import os
+import psycopg2
 import re
 import uuid
 import traceback
 import json
 
-
-# =========================================
-# ENV
-# =========================================
-
-load_dotenv()
-
-def ler_env(nome, padrao=None):
-
-    valor = (
-        os.getenv(
-            nome,
-            padrao
-        )
-    )
-
-    if valor is None:
-
-        return None
-
-    return str(valor).strip().strip('"').strip("'")
-
-
-OPENAI_API_KEY = ler_env("OPENAI_API_KEY")
-GROQ_API_KEY = (
-    ler_env("GROQ_API_KEY")
-    or ler_env("GROQ_API_TOKEN")
+from auth import (
+    perfil_usuario,
+    perfil_valido,
+    senha_esta_em_hash,
+    senha_valida,
+    usuario_admin_tecnico,
+    usuario_logado,
+    usuario_supervisor
 )
-GROQ_BASE_URL = ler_env(
-    "GROQ_BASE_URL",
-    "https://api.groq.com/openai/v1"
+from config import (
+    CORS_ORIGINS,
+    GROQ_API_KEY,
+    SECRET_KEY,
+    SUMMARY_MODEL,
+    TRANSCRIBE_MODEL,
+    TRANSCRIBE_PROVIDER,
+    ler_env
 )
-DATABASE_URL = ler_env("DATABASE_URL")
-DB_HOST = ler_env(
-    "DB_HOST",
-    "aws-1-sa-east-1.pooler.supabase.com"
+from services.ai import (
+    cliente_resumo,
+    estimar_custo_atendimento,
+    transcrever_chunk
 )
-DB_PORT = ler_env("DB_PORT", "6543")
-DB_NAME = ler_env("DB_NAME", "postgres")
-DB_USER = ler_env(
-    "DB_USER",
-    "postgres.epegojdxngrcwvzecupl"
-)
-DB_PASSWORD = ler_env("DB_PASSWORD")
-
-ADMIN_USUARIO = ler_env("ADMIN_USUARIO", "admin")
-ADMIN_SENHA = ler_env("ADMIN_SENHA", "123456")
-
-TRANSCRIBE_PROVIDER = ler_env(
-    "TRANSCRIBE_PROVIDER",
-    "groq" if GROQ_API_KEY else "openai"
-).lower()
-
-DEFAULT_TRANSCRIBE_MODEL = (
-    "whisper-large-v3-turbo"
-    if TRANSCRIBE_PROVIDER == "groq"
-    else "gpt-4o-mini-transcribe"
-)
-
-TRANSCRIBE_MODEL = ler_env(
-    "TRANSCRIBE_MODEL",
-    DEFAULT_TRANSCRIBE_MODEL
-)
-
-SUMMARY_MODEL = ler_env(
-    "SUMMARY_MODEL",
-    "gpt-4.1-mini"
-)
-
-TRANSCRIBE_USD_HORA = float(
-    ler_env(
-        "TRANSCRIBE_USD_HORA",
-        "0.04" if TRANSCRIBE_PROVIDER == "groq" else "0.36"
-    )
-)
-
-SUMMARY_USD_POR_ATENDIMENTO = float(
-    ler_env(
-        "SUMMARY_USD_POR_ATENDIMENTO",
-        "0.003"
-    )
+from services.database import (
+    conectar_banco,
+    diagnostico_banco,
+    inicializar_banco
 )
 
 
@@ -116,12 +57,15 @@ SUMMARY_USD_POR_ATENDIMENTO = float(
 
 app = Flask(__name__)
 
-app.secret_key = os.getenv(
-    "SECRET_KEY",
-    "55pbx_ai"
-)
+app.secret_key = SECRET_KEY
 
-CORS(app)
+if CORS_ORIGINS:
+
+    CORS(
+        app,
+        origins=CORS_ORIGINS,
+        supports_credentials=True
+    )
 
 
 def metadados_railway():
@@ -136,395 +80,8 @@ def metadados_railway():
 
 
 # =========================================
-# IA
+# STARTUP
 # =========================================
-
-summary_client = (
-    OpenAI(
-        api_key=OPENAI_API_KEY
-    )
-    if OPENAI_API_KEY
-    else None
-)
-
-
-def cliente_resumo():
-
-    if not summary_client:
-
-        raise RuntimeError(
-            "OPENAI_API_KEY nao configurada"
-        )
-
-    return summary_client
-
-
-def cliente_transcricao():
-
-    if TRANSCRIBE_PROVIDER == "groq":
-
-        if not GROQ_API_KEY:
-
-            raise RuntimeError(
-                "GROQ_API_KEY nao configurada"
-            )
-
-        return OpenAI(
-            api_key=GROQ_API_KEY,
-            base_url=GROQ_BASE_URL
-        )
-
-    if not summary_client:
-
-        raise RuntimeError(
-            "OPENAI_API_KEY nao configurada"
-        )
-
-    return summary_client
-
-
-# =========================================
-# POSTGRES
-# =========================================
-
-def conectar_banco():
-
-    db_password = DB_PASSWORD
-
-    if (
-        not db_password
-        and DATABASE_URL
-        and "postgres:@" in DATABASE_URL
-        and "@db." in DATABASE_URL
-    ):
-
-        db_password = DATABASE_URL.split(
-            "postgres:@",
-            1
-        )[1].split(
-            "@db.",
-            1
-        )[0]
-
-    if db_password:
-
-        return psycopg2.connect(
-            host=DB_HOST,
-            port=DB_PORT,
-            dbname=DB_NAME,
-            user=DB_USER,
-            password=db_password,
-            sslmode="require"
-        )
-
-    if not DATABASE_URL:
-
-        raise RuntimeError(
-            "DATABASE_URL ou DB_PASSWORD nao configurada"
-        )
-
-    return psycopg2.connect(
-        DATABASE_URL
-    )
-
-
-def diagnostico_banco():
-
-    db_password = DB_PASSWORD
-
-    if (
-        not db_password
-        and DATABASE_URL
-        and "postgres:@" in DATABASE_URL
-        and "@db." in DATABASE_URL
-    ):
-
-        db_password = DATABASE_URL.split(
-            "postgres:@",
-            1
-        )[1].split(
-            "@db.",
-            1
-        )[0]
-
-    if db_password:
-
-        return {
-            "modo": "variaveis_db",
-            "host": DB_HOST,
-            "port": DB_PORT,
-            "user": DB_USER,
-            "password_configurada": True
-        }
-
-    return {
-        "modo": "database_url",
-        "host": "DATABASE_URL",
-        "port": "DATABASE_URL",
-        "user": "DATABASE_URL",
-        "password_configurada": False
-    }
-
-
-def inicializar_banco():
-
-    with conectar_banco() as conn:
-
-        with conn.cursor() as cursor:
-
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS usuarios (
-                    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-                    usuario TEXT UNIQUE NOT NULL,
-                    senha TEXT NOT NULL,
-                    criado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-                )
-                """
-            )
-
-            cursor.execute(
-                """
-                ALTER TABLE usuarios
-                ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE
-                """
-            )
-
-            cursor.execute(
-                """
-                ALTER TABLE usuarios
-                ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT TRUE
-                """
-            )
-
-            cursor.execute(
-                """
-                ALTER TABLE usuarios
-                ADD COLUMN IF NOT EXISTS perfil TEXT DEFAULT 'analista'
-                """
-            )
-
-            cursor.execute(
-                """
-                UPDATE usuarios
-                SET perfil = 'admin_tecnico'
-                WHERE is_admin = TRUE
-                AND (
-                    perfil IS NULL
-                    OR perfil = 'analista'
-                )
-                """
-            )
-
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS atendimentos (
-                    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-                    usuario_id BIGINT REFERENCES usuarios(id) ON DELETE CASCADE,
-                    arquivo TEXT,
-                    conteudo TEXT,
-                    data TEXT
-                )
-                """
-            )
-
-            cursor.execute(
-                """
-                ALTER TABLE atendimentos
-                ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'finalizado'
-                """
-            )
-
-            cursor.execute(
-                """
-                ALTER TABLE atendimentos
-                ALTER COLUMN data TYPE TEXT
-                USING data::TEXT
-                """
-            )
-
-            cursor.execute(
-                """
-                ALTER TABLE atendimentos
-                ADD COLUMN IF NOT EXISTS transcricao_completa TEXT
-                """
-            )
-
-            cursor.execute(
-                """
-                ALTER TABLE atendimentos
-                ADD COLUMN IF NOT EXISTS inicio_em TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-                """
-            )
-
-            cursor.execute(
-                """
-                ALTER TABLE atendimentos
-                ADD COLUMN IF NOT EXISTS fim_em TIMESTAMP WITH TIME ZONE
-                """
-            )
-
-            cursor.execute(
-                """
-                ALTER TABLE atendimentos
-                ADD COLUMN IF NOT EXISTS duracao_segundos INTEGER
-                """
-            )
-
-            cursor.execute(
-                """
-                ALTER TABLE atendimentos
-                ADD COLUMN IF NOT EXISTS chunks_total INTEGER DEFAULT 0
-                """
-            )
-
-            cursor.execute(
-                """
-                ALTER TABLE atendimentos
-                ADD COLUMN IF NOT EXISTS chunks_falhos INTEGER DEFAULT 0
-                """
-            )
-
-            cursor.execute(
-                """
-                ALTER TABLE atendimentos
-                ADD COLUMN IF NOT EXISTS chunks_ignorados INTEGER DEFAULT 0
-                """
-            )
-
-            cursor.execute(
-                """
-                ALTER TABLE atendimentos
-                ADD COLUMN IF NOT EXISTS segundos_transcritos INTEGER DEFAULT 0
-                """
-            )
-
-            cursor.execute(
-                """
-                ALTER TABLE atendimentos
-                ADD COLUMN IF NOT EXISTS custo_estimado_usd NUMERIC(10, 4) DEFAULT 0
-                """
-            )
-
-            cursor.execute(
-                """
-                ALTER TABLE atendimentos
-                ADD COLUMN IF NOT EXISTS ticket_zendesk TEXT
-                """
-            )
-
-            cursor.execute(
-                """
-                ALTER TABLE atendimentos
-                ADD COLUMN IF NOT EXISTS resumo_editado BOOLEAN DEFAULT FALSE
-                """
-            )
-
-            cursor.execute(
-                """
-                ALTER TABLE atendimentos
-                ADD COLUMN IF NOT EXISTS resumo_editado_em TIMESTAMP WITH TIME ZONE
-                """
-            )
-
-            cursor.execute(
-                """
-                ALTER TABLE atendimentos
-                ADD COLUMN IF NOT EXISTS sentimento_cliente TEXT
-                """
-            )
-
-            cursor.execute(
-                """
-                ALTER TABLE atendimentos
-                ADD COLUMN IF NOT EXISTS urgencia TEXT
-                """
-            )
-
-            cursor.execute(
-                """
-                ALTER TABLE atendimentos
-                ADD COLUMN IF NOT EXISTS categoria TEXT
-                """
-            )
-
-            cursor.execute(
-                """
-                ALTER TABLE atendimentos
-                ADD COLUMN IF NOT EXISTS problema_principal TEXT
-                """
-            )
-
-            cursor.execute(
-                """
-                ALTER TABLE atendimentos
-                ADD COLUMN IF NOT EXISTS tags TEXT
-                """
-            )
-
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS transcricoes_chunks (
-                    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-                    atendimento_id BIGINT REFERENCES atendimentos(id) ON DELETE CASCADE,
-                    usuario_id BIGINT REFERENCES usuarios(id) ON DELETE CASCADE,
-                    ordem INTEGER NOT NULL,
-                    texto TEXT,
-                    criado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-                )
-                """
-            )
-
-            cursor.execute(
-                """
-                ALTER TABLE transcricoes_chunks
-                ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'transcrito'
-                """
-            )
-
-            cursor.execute(
-                """
-                ALTER TABLE transcricoes_chunks
-                ADD COLUMN IF NOT EXISTS erro TEXT
-                """
-            )
-
-            cursor.execute(
-                """
-                CREATE UNIQUE INDEX IF NOT EXISTS idx_chunks_atendimento_ordem
-                ON transcricoes_chunks (atendimento_id, ordem)
-                """
-            )
-
-            admin_hash = generate_password_hash(
-                ADMIN_SENHA
-            )
-
-            cursor.execute(
-                """
-                INSERT INTO usuarios (usuario, senha, is_admin, ativo)
-                VALUES (%s, %s, TRUE, TRUE)
-                ON CONFLICT (usuario) DO NOTHING
-                """,
-                (
-                    ADMIN_USUARIO,
-                    admin_hash
-                )
-            )
-
-            cursor.execute(
-                """
-                UPDATE usuarios
-                SET is_admin = TRUE,
-                    ativo = TRUE,
-                    perfil = 'admin_tecnico'
-                WHERE usuario = %s
-                """,
-                (
-                    ADMIN_USUARIO,
-                )
-            )
-
 
 try:
 
@@ -550,104 +107,6 @@ def limpar_texto(texto):
     return texto.strip()
 
 
-def usuario_logado():
-
-    return session.get("usuario_id")
-
-
-def usuario_admin():
-
-    return bool(
-        session.get("is_admin")
-    )
-
-
-def perfil_usuario():
-
-    return session.get(
-        "perfil",
-        "admin_tecnico" if usuario_admin() else "analista"
-    )
-
-
-def usuario_supervisor():
-
-    return perfil_usuario() in [
-        "supervisor",
-        "admin_tecnico"
-    ]
-
-
-def usuario_admin_tecnico():
-
-    return perfil_usuario() == "admin_tecnico"
-
-
-def perfil_valido(perfil):
-
-    return perfil in [
-        "analista",
-        "supervisor",
-        "admin_tecnico"
-    ]
-
-
-def senha_valida(senha_digitada, senha_salva):
-
-    if not senha_salva:
-
-        return False
-
-    try:
-
-        if check_password_hash(
-            senha_salva,
-            senha_digitada
-        ):
-
-            return True
-
-    except Exception:
-
-        pass
-
-    return senha_digitada == senha_salva
-
-
-def senha_esta_em_hash(senha_salva):
-
-    return (
-        senha_salva.startswith("scrypt:")
-        or senha_salva.startswith("pbkdf2:")
-    )
-
-
-def transcrever_chunk(arquivo):
-
-    nome = arquivo.filename or "chunk.webm"
-    mime = arquivo.mimetype or "audio/webm"
-
-    resposta = cliente_transcricao().audio.transcriptions.create(
-        model=TRANSCRIBE_MODEL,
-        file=(
-            nome,
-            arquivo.stream,
-            mime
-        ),
-        language="pt",
-        prompt=(
-            "Atendimento de suporte ERP em portugues do Brasil. "
-            "Priorize termos de ERP, fiscal, nota fiscal, caixa, venda, "
-            "cadastro, produto, cliente, financeiro, estoque, PDV, NFC-e, "
-            "NF-e, SAT, boleto, XML e Zendesk."
-        )
-    )
-
-    return limpar_texto(
-        getattr(resposta, "text", "")
-    )
-
-
 def tamanho_arquivo_upload(arquivo):
 
     posicao_atual = (
@@ -668,29 +127,6 @@ def tamanho_arquivo_upload(arquivo):
     )
 
     return tamanho
-
-
-def estimar_custo_atendimento(segundos_transcritos, gerou_resumo=True):
-
-    horas = (
-        max(
-            0,
-            int(segundos_transcritos or 0)
-        ) / 3600
-    )
-
-    custo = (
-        horas * TRANSCRIBE_USD_HORA
-    )
-
-    if gerou_resumo:
-
-        custo += SUMMARY_USD_POR_ATENDIMENTO
-
-    return round(
-        custo,
-        4
-    )
 
 
 def extrair_json_objeto(texto):
