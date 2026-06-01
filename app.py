@@ -2307,15 +2307,21 @@ def finalizar_atendimento():
         )
     )
 
-    return jsonify({
+    resposta = {
         "status": "finalizado",
         "resultado": resultado,
         "chunks_total": chunks_total,
         "chunks_falhos": chunks_falhos,
         "chunks_ignorados": chunks_ignorados,
-        "segundos_transcritos": segundos_transcritos,
-        "custo_estimado_usd": custo_estimado
-    })
+        "segundos_transcritos": segundos_transcritos
+    }
+
+    if usuario_admin_tecnico():
+
+        resposta["custo_estimado_usd"] = custo_estimado
+        resposta["custo_estimado_brl"] = custo_brl(custo_estimado)
+
+    return jsonify(resposta)
 
 
 # =========================================
@@ -2584,11 +2590,6 @@ def resultados():
             "ticket_zendesk": row[9] or "",
             "chunks_ignorados": row[10] or 0,
             "segundos_transcritos": row[11] or 0,
-            "custo_estimado_usd": (
-                float(row[12] or 0)
-                if mostrar_custo
-                else 0
-            ),
             "resumo_editado": bool(row[13]),
             "sentimento_cliente": row[14] or "neutro",
             "urgencia": row[15] or "media",
@@ -2601,6 +2602,7 @@ def resultados():
 
         if mostrar_custo:
 
+            item["custo_estimado_usd"] = float(row[12] or 0)
             item["custo_estimado_brl"] = custo_brl(
                 item["custo_estimado_usd"]
             )
@@ -2611,7 +2613,7 @@ def resultados():
 
             processando.append(str(row[0]))
 
-    return jsonify({
+    resposta = {
         "resultados": itens,
         "processando": processando,
         "escopo": filtro_usuario["escopo"],
@@ -2620,9 +2622,14 @@ def resultados():
         "is_admin": usuario_admin_tecnico(),
         "is_supervisor": usuario_supervisor(),
         "mostrar_custo": mostrar_custo,
-        "perfil": perfil_usuario(),
-        "usd_brl_rate": USD_BRL_RATE if mostrar_custo else None
-    })
+        "perfil": perfil_usuario()
+    }
+
+    if mostrar_custo:
+
+        resposta["usd_brl_rate"] = USD_BRL_RATE
+
+    return jsonify(resposta)
 
 
 @app.route("/atendimentos/<int:atendimento_id>")
@@ -2718,7 +2725,7 @@ def detalhe_atendimento(atendimento_id):
             "erro": "Atendimento nao encontrado"
         }), 404
 
-    return jsonify({
+    resposta = {
         "id": row[0],
         "conteudo": texto_zendesk_formatado(row[1]),
         "transcricao_completa": row[2] or "",
@@ -2730,16 +2737,6 @@ def detalhe_atendimento(atendimento_id):
         "ticket_zendesk": row[8] or "",
         "chunks_ignorados": row[9] or 0,
         "segundos_transcritos": row[10] or 0,
-        "custo_estimado_usd": (
-            float(row[11] or 0)
-            if usuario_admin_tecnico()
-            else 0
-        ),
-        "custo_estimado_brl": (
-            custo_brl(float(row[11] or 0))
-            if usuario_admin_tecnico()
-            else 0
-        ),
         "resumo_editado": bool(row[12]),
         "sentimento_cliente": row[13] or "neutro",
         "urgencia": row[14] or "media",
@@ -2747,7 +2744,14 @@ def detalhe_atendimento(atendimento_id):
         "problema_principal": row[16] or "",
         "tags": row[17] or "",
         "usuario": row[18] or "Nao informado"
-    })
+    }
+
+    if usuario_admin_tecnico():
+
+        resposta["custo_estimado_usd"] = float(row[11] or 0)
+        resposta["custo_estimado_brl"] = custo_brl(float(row[11] or 0))
+
+    return jsonify(resposta)
 
 
 @app.route(
@@ -2938,11 +2942,17 @@ def reprocessar_resumo_atendimento(atendimento_id):
                 custo_estimado
             )
 
-    return jsonify({
+    resposta = {
         "status": "resumo_reprocessado",
-        "resumo": resumo,
-        "custo_estimado_usd": custo_estimado
-    })
+        "resumo": resumo
+    }
+
+    if usuario_admin_tecnico():
+
+        resposta["custo_estimado_usd"] = custo_estimado
+        resposta["custo_estimado_brl"] = custo_brl(custo_estimado)
+
+    return jsonify(resposta)
 
 
 @app.route(

@@ -477,10 +477,17 @@
                 <span>TMA</span>
                 <strong id="metric-tma">00m 00s</strong>
             </div>
-            <div class="metric">
-                <span id="metric-custo-label">Custo estimado</span>
-                <strong id="metric-custo">US$ 0.00</strong>
-            </div>
+            {% if is_admin %}
+                <div class="metric">
+                    <span id="metric-custo-label">Custo estimado</span>
+                    <strong id="metric-custo">US$ 0.00</strong>
+                </div>
+            {% else %}
+                <div class="metric">
+                    <span id="metric-custo-label">Sem ticket</span>
+                    <strong id="metric-custo">0</strong>
+                </div>
+            {% endif %}
         </section>
 
         {% if is_supervisor %}
