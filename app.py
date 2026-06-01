@@ -1519,32 +1519,6 @@ def receber_chunk():
 
         with conn.cursor() as cursor:
 
-            uso = uso_diario_usuario(
-                cursor,
-                usuario_id
-            )
-
-            segundos_estimados = (
-                uso["segundos"]
-                + uso["chunks"] * 30
-            )
-
-            if segundos_estimados >= MAX_AUDIO_MINUTES_PER_DAY * 60:
-
-                log_evento(
-                    "limite_minutos_chunk",
-                    usuario_id=usuario_id,
-                    atendimento_id=atendimento_id,
-                    segundos_estimados=segundos_estimados,
-                    limite_segundos=MAX_AUDIO_MINUTES_PER_DAY * 60
-                )
-
-                return erro_limite(
-                    "Limite diario de minutos de audio atingido.",
-                    minutos_estimados=round(segundos_estimados / 60, 2),
-                    limite_minutos=MAX_AUDIO_MINUTES_PER_DAY
-                )
-
             cursor.execute(
                 """
                 SELECT 1
