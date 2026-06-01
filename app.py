@@ -383,6 +383,94 @@ def normalizar_campo(valor, padrao="Nao informado", limite=300):
     return texto[:limite]
 
 
+def normalizar_campo_zendesk(valor, padrao="Não informado", limite=300):
+
+    texto = normalizar_campo(
+        valor,
+        padrao,
+        limite
+    )
+
+    if texto.lower() in [
+        "nao informado",
+        "não informado",
+        "nao informada",
+        "não informada"
+    ]:
+
+        return padrao
+
+    return texto
+
+
+def normalizar_descritivo_zendesk(valor):
+
+    texto = str(valor or "").strip()
+
+    texto = re.sub(
+        r"\*\*|__|`",
+        "",
+        texto
+    )
+
+    texto = re.sub(
+        r"(?m)^\s*[-*]\s+",
+        "",
+        texto
+    )
+
+    texto = re.sub(
+        r"[ \t]+",
+        " ",
+        texto
+    )
+
+    texto = re.sub(
+        r"\n{3,}",
+        "\n\n",
+        texto
+    ).strip()
+
+    if not texto:
+
+        return "Não informado"
+
+    if texto.lower() in [
+        "nao informado",
+        "não informado"
+    ]:
+
+        return "Não informado"
+
+    return texto[:1200]
+
+
+def resumo_zendesk_exato(
+    nome_empresa=None,
+    empresa_loja=None,
+    cnpj=None,
+    cliente=None,
+    telefone=None,
+    email=None,
+    analista=None,
+    descritivo=None
+):
+
+    return "\n\n".join([
+        "Nome da empresa: " + normalizar_campo_zendesk(nome_empresa, limite=160),
+        "Empresa/Loja: " + normalizar_campo_zendesk(empresa_loja, limite=160),
+        "CNPJ: " + normalizar_campo_zendesk(cnpj, limite=40),
+        "Nome do Cliente: " + normalizar_campo_zendesk(cliente, limite=120),
+        "Telefone de contato: " + normalizar_campo_zendesk(telefone, limite=80),
+        "E-mail Solicitante: " + normalizar_campo_zendesk(email, limite=120),
+        "Analista responsável: " + normalizar_campo_zendesk(analista, limite=120),
+        (
+            "Descritivo da ocorrência do atendimento:\n"
+            + normalizar_descritivo_zendesk(descritivo)
+        )
+    ])
+
+
 def extrair_secao_texto(texto, rotulos):
 
     for rotulo in rotulos:
@@ -420,14 +508,35 @@ def texto_zendesk_formatado(conteudo):
 
     if (
         "Nome da empresa:" in texto
-        and "Descritivo do atendimento:" in texto
+        and "Descritivo da ocorrência do atendimento:" in texto
+        and "\n\nEmpresa/Loja:" in texto
+        and "Descritivo da ocorrência do atendimento:\n" in texto
     ):
 
         return texto
 
+    texto_extracao = re.sub(
+        (
+            r"\s+("
+            r"Empresa/Loja:|"
+            r"CNPJ:|"
+            r"Nome do Cliente:|"
+            r"Telefone de contato:|"
+            r"E-mail Solicitante:|"
+            r"Analista responsável:|"
+            r"Analista responsavel:|"
+            r"Descritivo da ocorrência do atendimento:|"
+            r"Descritivo da ocorrencia do atendimento:|"
+            r"Descritivo do atendimento:"
+            r")"
+        ),
+        r"\n\1",
+        texto
+    )
+
     nome_empresa = (
         extrair_secao_texto(
-            texto,
+            texto_extracao,
             [
                 "Nome da empresa",
                 "Empresa"
@@ -437,7 +546,7 @@ def texto_zendesk_formatado(conteudo):
 
     empresa_loja = (
         extrair_secao_texto(
-            texto,
+            texto_extracao,
             [
                 "Empresa/Loja",
                 "Loja"
@@ -447,7 +556,7 @@ def texto_zendesk_formatado(conteudo):
 
     cnpj = (
         extrair_secao_texto(
-            texto,
+            texto_extracao,
             [
                 "CNPJ"
             ]
@@ -456,7 +565,7 @@ def texto_zendesk_formatado(conteudo):
 
     cliente = (
         extrair_secao_texto(
-            texto,
+            texto_extracao,
             [
                 "Nome do Cliente",
                 "Cliente"
@@ -466,7 +575,7 @@ def texto_zendesk_formatado(conteudo):
 
     telefone = (
         extrair_secao_texto(
-            texto,
+            texto_extracao,
             [
                 "Telefone de contato",
                 "Telefone"
@@ -476,7 +585,7 @@ def texto_zendesk_formatado(conteudo):
 
     email = (
         extrair_secao_texto(
-            texto,
+            texto_extracao,
             [
                 "E-mail Solicitante",
                 "Email",
@@ -487,9 +596,11 @@ def texto_zendesk_formatado(conteudo):
 
     descritivo = (
         extrair_secao_texto(
-            texto,
+            texto_extracao,
             [
                 "Descritivo do atendimento",
+                "Descritivo da ocorrência do atendimento",
+                "Descritivo da ocorrencia do atendimento",
                 "Resumo do atendimento",
                 "Problema"
             ]
@@ -498,7 +609,7 @@ def texto_zendesk_formatado(conteudo):
 
     acao = (
         extrair_secao_texto(
-            texto,
+            texto_extracao,
             [
                 "Acao realizada",
                 "Ação realizada",
@@ -511,7 +622,7 @@ def texto_zendesk_formatado(conteudo):
 
     orientacao = (
         extrair_secao_texto(
-            texto,
+            texto_extracao,
             [
                 "Orientacao ao cliente",
                 "Orientação ao cliente"
@@ -522,7 +633,7 @@ def texto_zendesk_formatado(conteudo):
 
     resultado = (
         extrair_secao_texto(
-            texto,
+            texto_extracao,
             [
                 "Resultado"
             ]
@@ -546,56 +657,87 @@ def texto_zendesk_formatado(conteudo):
             re.sub(
                 r"(?:^|\n)\s*Tags\s*:.*$",
                 "",
-                texto,
+                texto_extracao,
                 flags=re.IGNORECASE | re.DOTALL
             )
         ]
 
-    descritivo_final = (
-        normalizar_campo(
-            " ".join(partes_descritivo),
-            "Nao informado",
-            700
+    descritivo_final = " ".join(partes_descritivo)
+
+    analista = (
+        extrair_secao_texto(
+            texto_extracao,
+            [
+                "Analista responsável",
+                "Analista responsavel",
+                "Analista"
+            ]
         )
     )
 
-    return "\n".join([
-        "Nome da empresa: " + normalizar_campo(nome_empresa, limite=160),
-        "Empresa/Loja: " + normalizar_campo(empresa_loja, limite=160),
-        "CNPJ: " + normalizar_campo(cnpj, limite=40),
-        "Nome do Cliente: " + normalizar_campo(cliente, limite=120),
-        "Telefone de contato: " + normalizar_campo(telefone, limite=80),
-        "E-mail Solicitante: " + normalizar_campo(email, limite=120),
-        "Descritivo do atendimento: " + descritivo_final
-    ])
+    return resumo_zendesk_exato(
+        nome_empresa=nome_empresa,
+        empresa_loja=empresa_loja,
+        cnpj=cnpj,
+        cliente=cliente,
+        telefone=telefone,
+        email=email,
+        analista=analista,
+        descritivo=descritivo_final
+    )
 
 
-def analisar_com_ia(transcricao):
+def analisar_com_ia(transcricao, analista_responsavel=None):
 
     prompt = f"""
 Voce e um analista senior de suporte ERP.
 
 Gere um JSON valido para um atendimento de suporte ERP.
 
-Regras:
-- Nao invente dados.
-- Se nao encontrar uma informacao, escreva "Nao informado".
-- Mantenha linguagem profissional e objetiva.
-- Preserve termos tecnicos do ERP quando aparecerem.
-- O campo resumo_zendesk deve ser curto e pronto para copiar no Zendesk.
-- O campo descritivo_atendimento deve resumir problema, acao/orientacao e resolucao quando existir.
-- Nao coloque tags dentro de resumo_zendesk.
-- Use somente uma categoria principal.
+O texto final para Zendesk DEVE seguir exatamente este formato, mantendo quebras de linha e linhas em branco entre campos:
 
-Formato exato:
+Nome da empresa: [se nao informado, usar "Não informado"]
+
+Empresa/Loja: [se nao informado, usar "Não informado"]
+
+CNPJ: [se nao informado, usar "Não informado"]
+
+Nome do Cliente: [se nao informado, usar "Não informado"]
+
+Telefone de contato: [se nao informado, usar "Não informado"]
+
+E-mail Solicitante: [se nao informado, usar "Não informado"]
+
+Analista responsável: [nome do analista logado, se disponivel]
+
+Descritivo da ocorrência do atendimento:
+[Explique de forma clara o problema relatado, o que foi analisado, quais orientacoes foram passadas e o status final.]
+
+Regras:
+- Nao escrever tudo em uma linha.
+- Nao inventar CNPJ, telefone, e-mail ou empresa.
+- Se nao tiver a informacao na transcricao, escrever "Não informado".
+- Escrever como documentacao para colar no Zendesk.
+- Nao usar markdown.
+- Nao usar bullets se nao houver passo a passo.
+- Se houver procedimento, separar em passos numerados.
+- Preserve termos tecnicos do ERP quando aparecerem.
+- Use somente uma categoria principal.
+- O campo descritivo_atendimento deve conter apenas o texto do descritivo, sem repetir os demais campos.
+
+Analista logado:
+{normalizar_campo_zendesk(analista_responsavel, limite=120)}
+
+Formato JSON:
 {{
-  "resumo_zendesk": "Nome da empresa: ...\\nEmpresa/Loja: ...\\nCNPJ: ...\\nNome do Cliente: ...\\nTelefone de contato: ...\\nE-mail Solicitante: ...\\nDescritivo do atendimento: ...",
+  "resumo_zendesk": "texto final no formato exato acima",
   "nome_empresa": "...",
   "empresa_loja": "...",
   "cnpj": "...",
   "nome_cliente": "...",
   "telefone_contato": "...",
   "email_solicitante": "...",
+  "analista_responsavel": "...",
   "descritivo_atendimento": "...",
   "sentimento_cliente": "positivo|neutro|negativo|frustrado",
   "urgencia": "baixa|media|alta|critica",
@@ -642,6 +784,7 @@ Transcricao:
             "nome_cliente": "Nao informado",
             "telefone_contato": "Nao informado",
             "email_solicitante": "Nao informado",
+            "analista_responsavel": analista_responsavel or "Nao informado",
             "descritivo_atendimento": descritivo,
             "sentimento_cliente": "neutro",
             "urgencia": "media",
@@ -650,41 +793,22 @@ Transcricao:
             "tags": []
         }
 
-    descritivo = (
-        normalizar_campo(
-            dados.get("descritivo_atendimento"),
-            limite=700
-        )
+    descritivo = normalizar_descritivo_zendesk(
+        dados.get("descritivo_atendimento")
     )
 
-    resumo = (
-        "\n".join([
-            "Nome da empresa: " + normalizar_campo(
-                dados.get("nome_empresa"),
-                limite=160
-            ),
-            "Empresa/Loja: " + normalizar_campo(
-                dados.get("empresa_loja"),
-                limite=160
-            ),
-            "CNPJ: " + normalizar_campo(
-                dados.get("cnpj"),
-                limite=40
-            ),
-            "Nome do Cliente: " + normalizar_campo(
-                dados.get("nome_cliente"),
-                limite=120
-            ),
-            "Telefone de contato: " + normalizar_campo(
-                dados.get("telefone_contato"),
-                limite=80
-            ),
-            "E-mail Solicitante: " + normalizar_campo(
-                dados.get("email_solicitante"),
-                limite=120
-            ),
-            "Descritivo do atendimento: " + descritivo
-        ])
+    resumo = resumo_zendesk_exato(
+        nome_empresa=dados.get("nome_empresa"),
+        empresa_loja=dados.get("empresa_loja"),
+        cnpj=dados.get("cnpj"),
+        cliente=dados.get("nome_cliente"),
+        telefone=dados.get("telefone_contato"),
+        email=dados.get("email_solicitante"),
+        analista=(
+            analista_responsavel
+            or dados.get("analista_responsavel")
+        ),
+        descritivo=descritivo
     )
 
     tags = (
@@ -702,11 +826,7 @@ Transcricao:
         )
 
     return {
-        "resumo_zendesk": normalizar_campo(
-            resumo,
-            "Nao informado",
-            1400
-        ),
+        "resumo_zendesk": resumo[:1800],
         "sentimento_cliente": normalizar_campo(
             dados.get("sentimento_cliente"),
             "neutro",
@@ -1779,25 +1899,20 @@ def finalizar_atendimento():
     if transcricao:
 
         analise = analisar_com_ia(
-            transcricao
+            transcricao,
+            session.get("usuario_nome")
         )
 
         resultado = analise["resumo_zendesk"]
 
-        if chunks_falhos:
-
-            resultado += (
-                "\n\nAviso interno: "
-                f"{chunks_falhos} trecho(s) de audio falharam "
-                "na transcricao. Revise a ligacao antes de fechar "
-                "o ticket se a informacao parecer incompleta."
-            )
-
     else:
 
-        resultado = (
-            "Nao foi possivel gerar resumo: "
-            "nenhuma transcricao foi capturada."
+        resultado = resumo_zendesk_exato(
+            analista=session.get("usuario_nome"),
+            descritivo=(
+                "Não foi possível gerar resumo: "
+                "nenhuma transcrição foi capturada."
+            )
         )
         analise = {
             "sentimento_cliente": "neutro",
@@ -1978,7 +2093,10 @@ def transcrever_arquivo_unico():
                 return limite_resposta
 
     texto = transcrever_chunk(arquivo)
-    analise = analisar_com_ia(texto)
+    analise = analisar_com_ia(
+        texto,
+        session.get("usuario_nome")
+    )
     resultado = analise["resumo_zendesk"]
 
     with conectar_banco() as conn:
@@ -2338,9 +2456,9 @@ def salvar_resumo_atendimento(atendimento_id):
         }), 401
 
     dados = request.get_json(silent=True) or {}
-    resumo = limpar_texto(
-        dados.get("resumo", "")
-    )
+    resumo = str(
+        dados.get("resumo", "") or ""
+    ).strip()
     resumo = texto_zendesk_formatado(
         resumo
     )
@@ -2414,11 +2532,17 @@ def reprocessar_resumo_atendimento(atendimento_id):
 
             cursor.execute(
                 """
-                SELECT transcricao_completa, segundos_transcritos, usuario_id
-                FROM atendimentos
-                WHERE id = %s
+                SELECT
+                    a.transcricao_completa,
+                    a.segundos_transcritos,
+                    a.usuario_id,
+                    u.usuario
+                FROM atendimentos a
+                LEFT JOIN usuarios u
+                ON u.id = a.usuario_id
+                WHERE a.id = %s
                 AND (
-                    usuario_id = %s
+                    a.usuario_id = %s
                     OR %s
                 )
                 """,
@@ -2465,7 +2589,8 @@ def reprocessar_resumo_atendimento(atendimento_id):
                 return limite_resposta
 
             analise = analisar_com_ia(
-                transcricao
+                transcricao,
+                row[3] or session.get("usuario_nome")
             )
             resumo = analise["resumo_zendesk"]
 
