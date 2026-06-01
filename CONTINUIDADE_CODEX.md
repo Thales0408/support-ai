@@ -134,8 +134,8 @@ MAX_AUDIO_MINUTES_PER_DAY=50
 MAX_SUMMARIES_PER_DAY=10
 MAX_COST_PER_USER_PER_DAY=1.00
 MAX_SYSTEM_COST_PER_DAY=5.00
-MAX_CALL_DURATION_MINUTES=15
-MAX_CHUNKS_PER_CALL=30
+MAX_CALL_DURATION_MINUTES=20
+MAX_CHUNKS_PER_CALL=999
 LOGIN_MAX_ATTEMPTS=5
 LOGIN_BLOCK_MINUTES=15
 ```
@@ -377,7 +377,7 @@ O desenho atual ja e bem melhor para uso real, mas ainda precisa evoluir:
 3. Testar login de analista comum e confirmar isolamento de historico.
 4. Testar dashboard admin com "Todos os analistas".
 5. Fazer teste com 2 a 3 analistas simultaneos.
-6. Medir tempo de resumo em ligacoes de 5, 10 e 15 minutos.
+6. Medir tempo de resumo em ligacoes de 5, 10, 15 e 20 minutos.
 7. Criar troca de senha pelo proprio usuario.
 8. Criar campo `ticket_zendesk`.
 9. Permitir edicao/revisao do resumo.
