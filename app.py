@@ -581,6 +581,15 @@ def normalizar_cnpj(valor, permitir_possivel=False):
     return "Não informado"
 
 
+def possivel_cnpj_formatado(digitos):
+
+    return (
+        "Possível CNPJ informado: "
+        + formatar_cnpj(digitos)
+        + " — confirmar com cliente"
+    )
+
+
 def texto_para_digitos_cnpj(texto):
 
     palavras_numero = {
@@ -622,6 +631,60 @@ def texto_para_digitos_cnpj(texto):
     return "".join(partes)
 
 
+def grupos_numericos_cnpj(texto):
+
+    return re.findall(
+        r"\d+",
+        str(texto or "")
+    )
+
+
+def candidatos_cnpj_por_grupos(fragmento):
+
+    grupos = grupos_numericos_cnpj(fragmento)
+    candidatos = []
+
+    if len(grupos) >= 5:
+
+        base = "".join(grupos[:3])
+        bloco = grupos[3]
+        final = grupos[4]
+
+        if (
+            len(base) == 8
+            and len(bloco) == 4
+            and len(final) >= 2
+        ):
+
+            if bloco == "1000" and len(final) >= 3:
+
+                candidatos.append(
+                    (
+                        base + "0001" + final[-2:],
+                        True
+                    )
+                )
+                candidatos.append(
+                    (
+                        base + bloco + final[:2],
+                        True
+                    )
+                )
+
+            candidatos.append(
+                (
+                    base + bloco + final[-2:],
+                    False
+                )
+            )
+
+    return [
+        candidato
+        for candidato in candidatos
+        if len(candidato[0]) == 14
+    ]
+
+
 def fragmentos_com_evidencia_cnpj(texto):
 
     texto = str(texto or "")
@@ -649,7 +712,7 @@ def fragmentos_com_evidencia_cnpj(texto):
         yield texto[inicio:fim]
 
     for match in re.finditer(
-        r"(?:\d[\d\s.,/\-]+){10,}",
+        r"\d[\d\s.,/\-]{12,}\d",
         texto
     ):
 
@@ -666,7 +729,7 @@ def extrair_possivel_cnpj(texto):
     for fragmento in fragmentos_com_evidencia_cnpj(texto):
 
         digitos = texto_para_digitos_cnpj(fragmento)
-        candidatos = []
+        candidatos = candidatos_cnpj_por_grupos(fragmento)
 
         for inicio in range(0, max(1, len(digitos) - 13)):
 
@@ -690,7 +753,11 @@ def extrair_possivel_cnpj(texto):
 
         for candidato, inferido in dict.fromkeys(candidatos):
 
-            if validar_cnpj_digitos(candidato) and not inferido:
+            if validar_cnpj_digitos(candidato):
+
+                if inferido:
+
+                    return possivel_cnpj_formatado(candidato)
 
                 return formatar_cnpj(candidato)
 
@@ -700,11 +767,7 @@ def extrair_possivel_cnpj(texto):
 
     if melhor_possivel:
 
-        return (
-            "Possível CNPJ informado: "
-            + formatar_cnpj(melhor_possivel)
-            + " — confirmar com cliente"
-        )
+        return possivel_cnpj_formatado(melhor_possivel)
 
     return "Não informado"
 
@@ -739,14 +802,14 @@ def normalizar_descritivo_zendesk(valor):
 
     if not texto:
 
-        return "Não informado"
+        return "Resumo não disponível pela transcrição."
 
     if texto.lower() in [
         "nao informado",
         "não informado"
     ]:
 
-        return "Não informado"
+        return "Resumo não disponível pela transcrição."
 
     return texto[:1200]
 
@@ -783,7 +846,44 @@ def valor_obrigatorio_zendesk(valor):
 
         return texto
 
-    return "Não identificado na ligação"
+    return ""
+
+
+def normalizar_email_zendesk(valor):
+
+    texto = normalizar_campo_zendesk(
+        valor,
+        padrao="",
+        limite=120
+    )
+
+    if not campo_zendesk_informado(texto):
+
+        return ""
+
+    match = re.search(
+        r"[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}",
+        texto,
+        flags=re.IGNORECASE
+    )
+
+    if not match:
+
+        return ""
+
+    email = match.group(0)
+    dominio = email.split("@", 1)[1]
+
+    if (
+        not dominio
+        or "." not in dominio
+        or dominio.startswith(".")
+        or dominio.endswith(".")
+    ):
+
+        return ""
+
+    return email
 
 
 def resumo_zendesk_exato(
@@ -811,7 +911,7 @@ def resumo_zendesk_exato(
 
     if not campo_zendesk_informado(cnpj_final):
 
-        cnpj_final = "Não identificado na ligação"
+        cnpj_final = ""
 
     campos = [
         "Nome da empresa: " + valor_obrigatorio_zendesk(nome_empresa),
@@ -819,7 +919,7 @@ def resumo_zendesk_exato(
         "CNPJ: " + cnpj_final,
         "Nome do Cliente: " + valor_obrigatorio_zendesk(cliente),
         "Telefone de contato: " + valor_obrigatorio_zendesk(telefone),
-        "E-mail Solicitante: " + valor_obrigatorio_zendesk(email)
+        "E-mail Solicitante: " + normalizar_email_zendesk(email)
     ]
 
     campos.extend([
@@ -1050,20 +1150,20 @@ Gere um JSON valido para um atendimento de suporte ERP.
 
 O texto final para Zendesk DEVE manter quebras de linha e linhas em branco entre campos.
 Mantenha sempre todos os campos abaixo.
-Quando um campo nao for identificado na transcricao, use exatamente "Não identificado na ligação".
-Nao use "Não informado", null ou campo vazio.
+Quando um campo nao for identificado na transcricao, deixe vazio apos os dois pontos.
+Nao use "Não informado", "Não identificado na ligação" ou null.
 
-Nome da empresa: [valor identificado ou "Não identificado na ligação"]
+Nome da empresa:
 
-Empresa/Loja: [valor identificado ou "Não identificado na ligação"]
+Empresa/Loja:
 
-CNPJ: [CNPJ valido, Possível CNPJ informado ou "Não identificado na ligação"]
+CNPJ:
 
-Nome do Cliente: [valor identificado ou "Não identificado na ligação"]
+Nome do Cliente:
 
-Telefone de contato: [valor identificado ou "Não identificado na ligação"]
+Telefone de contato:
 
-E-mail Solicitante: [valor identificado ou "Não identificado na ligação"]
+E-mail Solicitante:
 
 Analista responsável: [nome do analista logado, se disponivel]
 
@@ -1073,7 +1173,7 @@ Descritivo da ocorrência do atendimento:
 Regras:
 - Nao escrever tudo em uma linha.
 - Nao inventar CNPJ, telefone, e-mail, empresa, cliente, erro, solucao ou status.
-- Se nao tiver a informacao na transcricao, preencha o campo com "Não identificado na ligação".
+- Se nao tiver a informacao na transcricao, deixe o campo vazio apos os dois pontos.
 - Escrever como documentacao para colar no Zendesk.
 - Nao usar markdown.
 - Nao usar bullets se nao houver passo a passo.
@@ -1082,10 +1182,13 @@ Regras:
 - Use somente uma categoria principal.
 - O campo descritivo_atendimento deve conter apenas o texto do descritivo, sem repetir os demais campos.
 - Se o CNPJ nao tiver exatamente 14 digitos claros, retorne vazio no JSON, exceto quando houver sequencia parecida com CNPJ.
+- Nao considerar e-mail valido sem @.
+- Nao preencher e-mail com dominio incompleto.
+- Para CNPJ, quando houver ambiguidade, sinalizar confirmacao em vez de afirmar.
 - Se a transcricao estiver confusa, curta ou cheia de ruido, escreva isso no descritivo de forma objetiva e nao transforme suposicoes em fatos.
 - Nao diga "foi identificado", "foi analisado", "foi orientado" ou "status final" se a transcricao nao mostrar isso claramente.
 - Se so houver pedido de acesso remoto, registre apenas que foi solicitado acesso remoto para verificacao.
-- Se a ligacao estiver em andamento ou sem conclusao clara, o status final deve ser "Não informado".
+- Se a ligacao estiver em andamento ou sem conclusao clara, registre no descritivo que nao houve conclusao clara.
 
 - Corrija termos fiscais comuns quando o contexto confirmar: ISDS-QN, ISQN ou ISS QN = ISSQN; Sintes Nacional ou Sintese Nacional = Simples Nacional; nota de servico = NFS-e; retencao de IS = retencao de ISS.
 - Use correcoes de termos apenas para vocabulario tecnico. Nao use isso para inventar CNPJ, telefone, e-mail, empresa, loja ou nome de cliente.
