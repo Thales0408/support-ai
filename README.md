@@ -48,7 +48,7 @@ O sistema captura audio da aba do 55PBX e do microfone, envia trechos de audio p
 - Analistas veem apenas seus proprios atendimentos.
 - Supervisor e admin tecnico podem ver "Meus atendimentos" ou "Todos os analistas".
 - Gravacao de audio da aba + microfone.
-- Envio de chunks de 30 segundos.
+- Envio de chunks configuraveis, com padrao de 60 segundos.
 - Transcricao por chunk.
 - Finalizacao com resumo pronto para Zendesk.
 - Registro de falhas de chunks sem derrubar o atendimento inteiro.
@@ -89,6 +89,7 @@ MAX_COST_PER_USER_PER_DAY=
 MAX_SYSTEM_COST_PER_DAY=
 MAX_CALL_DURATION_MINUTES=
 MAX_CHUNKS_PER_CALL=
+CHUNK_SECONDS=
 LOGIN_MAX_ATTEMPTS=
 LOGIN_BLOCK_MINUTES=
 ```

@@ -136,6 +136,7 @@ MAX_COST_PER_USER_PER_DAY=1.00
 MAX_SYSTEM_COST_PER_DAY=5.00
 MAX_CALL_DURATION_MINUTES=20
 MAX_CHUNKS_PER_CALL=999
+CHUNK_SECONDS=60
 LOGIN_MAX_ATTEMPTS=5
 LOGIN_BLOCK_MINUTES=15
 ```
@@ -221,7 +222,7 @@ Browser
 -> Permissao para capturar aba do 55PBX
 -> Permissao de microfone
 -> Backend cria atendimento
--> MediaRecorder envia chunks de 30 segundos
+-> MediaRecorder envia chunks configuraveis, com padrao de 60 segundos
 -> Flask/Railway recebe cada chunk
 -> Groq whisper-large-v3-turbo transcreve cada trecho
 -> Supabase salva chunks
@@ -336,7 +337,7 @@ http://127.0.0.1:8080/health
 - Trocado fluxo local de SQLite para Supabase/PostgreSQL.
 - Configurado Supabase Connection Pooler para evitar problema de IPv6.
 - Removido Faster Whisper do fluxo principal.
-- Implementada transcricao por chunks de 30 segundos.
+- Implementada transcricao por chunks configuraveis, com padrao de 60 segundos.
 - Implementado resumo final somente no encerramento da ligacao.
 - Adicionado `/health` com diagnostico seguro de banco.
 - Corrigido erro `Unexpected token '<'` causado por 500 no inicio da gravacao.
@@ -419,7 +420,7 @@ Estado atual:
 - Backend Flask em Python 3.11.
 - Deploy Railway.
 - Banco Supabase/PostgreSQL via pooler.
-- Transcricao por chunks de 30 segundos usando Groq whisper-large-v3-turbo.
+- Transcricao por chunks configuraveis, com padrao de 60 segundos, usando Groq whisper-large-v3-turbo.
 - Resumo final usando gpt-4.1-mini.
 - Usuarios com senha hash.
 - Tela admin para criar, editar, desativar, excluir e redefinir senha de usuarios.

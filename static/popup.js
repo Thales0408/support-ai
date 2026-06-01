@@ -28,7 +28,11 @@ let finalizando = false
 let limiteAtingido = false
 let pararSegmentoAtual = null
 
-const TAMANHO_CHUNK_MS = 30000
+const TAMANHO_CHUNK_MS =
+    Math.max(
+        10,
+        Number(window.SUPPORT_AI_CHUNK_SECONDS || 60)
+    ) * 1000
 async function lerRespostaJson(response, mensagemPadrao) {
 
     const contentType =

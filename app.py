@@ -32,6 +32,7 @@ from auth import (
     usuario_supervisor
 )
 from config import (
+    CHUNK_SECONDS,
     CORS_ORIGINS,
     GROQ_API_KEY,
     LOGIN_BLOCK_MINUTES,
@@ -759,6 +760,9 @@ Regras:
 - Se so houver pedido de acesso remoto, registre apenas que foi solicitado acesso remoto para verificacao.
 - Se a ligacao estiver em andamento ou sem conclusao clara, o status final deve ser "Não informado".
 
+- Corrija termos fiscais comuns quando o contexto confirmar: ISDS-QN, ISQN ou ISS QN = ISSQN; Sintes Nacional ou Sintese Nacional = Simples Nacional; nota de servico = NFS-e; retencao de IS = retencao de ISS.
+- Use correcoes de termos apenas para vocabulario tecnico. Nao use isso para inventar CNPJ, telefone, e-mail, empresa, loja ou nome de cliente.
+
 Analista logado:
 {normalizar_campo_zendesk(analista_responsavel, limite=120)}
 
@@ -1021,7 +1025,8 @@ def home():
         is_supervisor=usuario_supervisor(),
         mostrar_custo=usuario_admin_tecnico(),
         perfil=perfil_usuario(),
-        usuario_nome=session.get("usuario_nome")
+        usuario_nome=session.get("usuario_nome"),
+        chunk_seconds=CHUNK_SECONDS
     )
 
 
@@ -1831,7 +1836,7 @@ def finalizar_atendimento():
         segundos_transcritos = (
             min(
                 int(duracao_segundos or 0),
-                chunks_total * 30
+                chunks_total * CHUNK_SECONDS
             )
         )
 

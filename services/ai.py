@@ -62,11 +62,15 @@ def transcrever_chunk(arquivo):
             mime
         ),
         language="pt",
+        temperature=0,
         prompt=(
-            "Atendimento de suporte ERP em portugues do Brasil. "
-            "Priorize termos de ERP, fiscal, nota fiscal, caixa, venda, "
-            "cadastro, produto, cliente, financeiro, estoque, PDV, NFC-e, "
-            "NF-e, SAT, boleto, XML, Zendesk, AnyDesk e TeamViewer. "
+            "Transcreva em portugues do Brasil. "
+            "Contexto: atendimento de suporte tecnico para ERP, emissao de "
+            "nota fiscal, NFS-e, NF-e, NFC-e, ISSQN, Simples Nacional, "
+            "retencao de ISS, CNPJ, loja, cliente, certificado digital, XML, "
+            "Zendesk, AnyDesk, TeamViewer, caixa, venda, cadastro, produto, "
+            "financeiro, estoque, PDV, SAT e boleto. "
+            "Preserve numeros, CNPJ, nomes de empresa e termos fiscais. "
             "Nao invente palavras quando houver silencio, ruido, musica, "
             "eco ou fala inaudivel. Se um trecho estiver confuso, transcreva "
             "somente as palavras audiveis."
