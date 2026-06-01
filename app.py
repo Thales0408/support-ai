@@ -662,6 +662,27 @@ def normalizar_descritivo_zendesk(valor):
     return texto[:1200]
 
 
+def campo_zendesk_informado(valor):
+
+    texto = limpar_texto(valor or "")
+
+    if not texto:
+
+        return False
+
+    return texto.lower() not in [
+        "nao informado",
+        "não informado",
+        "nao informada",
+        "não informada",
+        "null",
+        "none",
+        "n/a",
+        "...",
+        "-"
+    ]
+
+
 def resumo_zendesk_exato(
     nome_empresa=None,
     empresa_loja=None,
@@ -685,19 +706,43 @@ def resumo_zendesk_exato(
             ])
         )
 
-    return "\n\n".join([
-        "Nome da empresa: " + normalizar_campo_zendesk(nome_empresa, limite=160),
-        "Empresa/Loja: " + normalizar_campo_zendesk(empresa_loja, limite=160),
-        "CNPJ: " + cnpj_final,
-        "Nome do Cliente: " + normalizar_campo_zendesk(cliente, limite=120),
-        "Telefone de contato: " + normalizar_campo_zendesk(telefone, limite=80),
-        "E-mail Solicitante: " + normalizar_campo_zendesk(email, limite=120),
+    campos = []
+
+    for rotulo, valor, limite in [
+        ("Nome da empresa", nome_empresa, 160),
+        ("Empresa/Loja", empresa_loja, 160),
+        ("Nome do Cliente", cliente, 120),
+        ("Telefone de contato", telefone, 80),
+        ("E-mail Solicitante", email, 120)
+    ]:
+
+        valor_normalizado = normalizar_campo_zendesk(
+            valor,
+            limite=limite
+        )
+
+        if campo_zendesk_informado(valor_normalizado):
+
+            campos.append(
+                f"{rotulo}: {valor_normalizado}"
+            )
+
+    if campo_zendesk_informado(cnpj_final):
+
+        campos.insert(
+            2 if len(campos) >= 2 else len(campos),
+            "CNPJ: " + cnpj_final
+        )
+
+    campos.extend([
         "Analista responsável: " + normalizar_campo_zendesk(analista, limite=120),
         (
             "Descritivo da ocorrência do atendimento:\n"
             + normalizar_descritivo_zendesk(descritivo)
         )
     ])
+
+    return "\n\n".join(campos)
 
 
 def extrair_secao_texto(texto, rotulos):
@@ -734,15 +779,6 @@ def texto_zendesk_formatado(conteudo):
     if not texto:
 
         return ""
-
-    if (
-        "Nome da empresa:" in texto
-        and "Descritivo da ocorrência do atendimento:" in texto
-        and "\n\nEmpresa/Loja:" in texto
-        and "Descritivo da ocorrência do atendimento:\n" in texto
-    ):
-
-        return texto
 
     texto_extracao = re.sub(
         (
@@ -924,19 +960,22 @@ Voce e um analista senior de suporte ERP.
 
 Gere um JSON valido para um atendimento de suporte ERP.
 
-O texto final para Zendesk DEVE seguir exatamente este formato, mantendo quebras de linha e linhas em branco entre campos:
+O texto final para Zendesk DEVE manter quebras de linha e linhas em branco entre campos.
+Inclua somente campos com informacao real capturada na transcricao.
+Nao inclua campos vazios ou marcados como "Não informado".
+Mantenha sempre os campos Analista responsavel e Descritivo da ocorrencia do atendimento.
 
-Nome da empresa: [se nao informado, usar "Não informado"]
+Nome da empresa: [somente se informado]
 
-Empresa/Loja: [se nao informado, usar "Não informado"]
+Empresa/Loja: [somente se informado]
 
-CNPJ: [se nao informado, usar "Não informado"]
+CNPJ: [somente se for valido ou Possível CNPJ informado]
 
-Nome do Cliente: [se nao informado, usar "Não informado"]
+Nome do Cliente: [somente se informado]
 
-Telefone de contato: [se nao informado, usar "Não informado"]
+Telefone de contato: [somente se informado]
 
-E-mail Solicitante: [se nao informado, usar "Não informado"]
+E-mail Solicitante: [somente se informado]
 
 Analista responsável: [nome do analista logado, se disponivel]
 
@@ -946,7 +985,7 @@ Descritivo da ocorrência do atendimento:
 Regras:
 - Nao escrever tudo em uma linha.
 - Nao inventar CNPJ, telefone, e-mail, empresa, cliente, erro, solucao ou status.
-- Se nao tiver a informacao na transcricao, escrever "Não informado".
+- Se nao tiver a informacao na transcricao, nao inclua o campo opcional no texto Zendesk.
 - Escrever como documentacao para colar no Zendesk.
 - Nao usar markdown.
 - Nao usar bullets se nao houver passo a passo.
@@ -954,7 +993,7 @@ Regras:
 - Preserve termos tecnicos do ERP quando aparecerem.
 - Use somente uma categoria principal.
 - O campo descritivo_atendimento deve conter apenas o texto do descritivo, sem repetir os demais campos.
-- Se o CNPJ nao tiver exatamente 14 digitos claros, retorne "Não informado".
+- Se o CNPJ nao tiver exatamente 14 digitos claros, retorne vazio no JSON, exceto quando houver sequencia parecida com CNPJ.
 - Se a transcricao estiver confusa, curta ou cheia de ruido, escreva isso no descritivo de forma objetiva e nao transforme suposicoes em fatos.
 - Nao diga "foi identificado", "foi analisado", "foi orientado" ou "status final" se a transcricao nao mostrar isso claramente.
 - Se so houver pedido de acesso remoto, registre apenas que foi solicitado acesso remoto para verificacao.
