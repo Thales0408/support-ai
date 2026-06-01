@@ -21,6 +21,7 @@ import uuid
 import traceback
 import json
 import logging
+import unicodedata
 
 from auth import (
     perfil_usuario,
@@ -414,23 +415,209 @@ def normalizar_campo_zendesk(valor, padrao="Não informado", limite=300):
     return texto
 
 
-def normalizar_cnpj(valor):
+def remover_acentos(texto):
+
+    return "".join(
+        caractere
+        for caractere in unicodedata.normalize(
+            "NFD",
+            str(texto or "")
+        )
+        if unicodedata.category(caractere) != "Mn"
+    )
+
+
+def validar_cnpj_digitos(digitos):
+
+    if (
+        len(digitos) != 14
+        or len(set(digitos)) == 1
+    ):
+
+        return False
+
+    pesos_primeiro = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    pesos_segundo = [6] + pesos_primeiro
+
+    def calcular(posicoes, pesos):
+
+        soma = sum(
+            int(digito) * peso
+            for digito, peso in zip(posicoes, pesos)
+        )
+        resto = soma % 11
+
+        return "0" if resto < 2 else str(11 - resto)
+
+    primeiro = calcular(digitos[:12], pesos_primeiro)
+    segundo = calcular(digitos[:12] + primeiro, pesos_segundo)
+
+    return digitos[-2:] == primeiro + segundo
+
+
+def formatar_cnpj(digitos):
+
+    return (
+        f"{digitos[0:2]}.{digitos[2:5]}.{digitos[5:8]}/"
+        f"{digitos[8:12]}-{digitos[12:14]}"
+    )
+
+
+def normalizar_cnpj(valor, permitir_possivel=False):
 
     texto = str(valor or "")
+
+    if texto.lower().startswith("possível cnpj informado:"):
+
+        return texto[:120]
+
     digitos = re.sub(
         r"\D",
         "",
         texto
     )
 
-    if len(digitos) != 14:
+    if len(digitos) == 14 and validar_cnpj_digitos(digitos):
 
-        return "Não informado"
+        return formatar_cnpj(digitos)
 
-    return (
-        f"{digitos[0:2]}.{digitos[2:5]}.{digitos[5:8]}/"
-        f"{digitos[8:12]}-{digitos[12:14]}"
+    if permitir_possivel and len(digitos) == 14:
+
+        return (
+            "Possível CNPJ informado: "
+            + formatar_cnpj(digitos)
+            + " — confirmar com cliente"
+        )
+
+    return "Não informado"
+
+
+def texto_para_digitos_cnpj(texto):
+
+    palavras_numero = {
+        "zero": "0",
+        "um": "1",
+        "uma": "1",
+        "hum": "1",
+        "dois": "2",
+        "duas": "2",
+        "tres": "3",
+        "quatro": "4",
+        "cinco": "5",
+        "seis": "6",
+        "meia": "6",
+        "sete": "7",
+        "oito": "8",
+        "nove": "9",
+        "mil": "000"
+    }
+
+    tokens = re.findall(
+        r"\d+|[A-Za-zÀ-ÿ]+",
+        str(texto or "").lower()
     )
+    partes = []
+
+    for token in tokens:
+
+        token_limpo = remover_acentos(token)
+
+        if token.isdigit():
+
+            partes.append(token)
+
+        elif token_limpo in palavras_numero:
+
+            partes.append(palavras_numero[token_limpo])
+
+    return "".join(partes)
+
+
+def fragmentos_com_evidencia_cnpj(texto):
+
+    texto = str(texto or "")
+    evidencias = [
+        "cnpj",
+        "c n p j",
+        "cadastro nacional",
+        "barra",
+        "traco",
+        "traço",
+        "contrario",
+        "contrário",
+        "contra"
+    ]
+
+    for match in re.finditer(
+        "|".join(re.escape(evidencia) for evidencia in evidencias),
+        texto,
+        flags=re.IGNORECASE
+    ):
+
+        inicio = max(0, match.start() - 80)
+        fim = min(len(texto), match.end() + 140)
+
+        yield texto[inicio:fim]
+
+    for match in re.finditer(
+        r"(?:\d[\d\s.,/\-]+){10,}",
+        texto
+    ):
+
+        inicio = max(0, match.start() - 30)
+        fim = min(len(texto), match.end() + 30)
+
+        yield texto[inicio:fim]
+
+
+def extrair_possivel_cnpj(texto):
+
+    melhor_possivel = ""
+
+    for fragmento in fragmentos_com_evidencia_cnpj(texto):
+
+        digitos = texto_para_digitos_cnpj(fragmento)
+        candidatos = []
+
+        for inicio in range(0, max(1, len(digitos) - 13)):
+
+            candidato = digitos[inicio:inicio + 14]
+
+            if len(candidato) == 14:
+
+                candidatos.append((candidato, False))
+
+        if (
+            len(digitos) == 13
+            and digitos[8:11] == "000"
+        ):
+
+            candidatos.append(
+                (
+                    digitos[:11] + "1" + digitos[11:],
+                    True
+                )
+            )
+
+        for candidato, inferido in dict.fromkeys(candidatos):
+
+            if validar_cnpj_digitos(candidato) and not inferido:
+
+                return formatar_cnpj(candidato)
+
+            if not melhor_possivel:
+
+                melhor_possivel = candidato
+
+    if melhor_possivel:
+
+        return (
+            "Possível CNPJ informado: "
+            + formatar_cnpj(melhor_possivel)
+            + " — confirmar com cliente"
+        )
+
+    return "Não informado"
 
 
 def normalizar_descritivo_zendesk(valor):
@@ -479,6 +666,7 @@ def resumo_zendesk_exato(
     nome_empresa=None,
     empresa_loja=None,
     cnpj=None,
+    cnpj_contexto=None,
     cliente=None,
     telefone=None,
     email=None,
@@ -486,10 +674,21 @@ def resumo_zendesk_exato(
     descritivo=None
 ):
 
+    cnpj_final = normalizar_cnpj(cnpj, permitir_possivel=True)
+
+    if cnpj_final == "Não informado":
+
+        cnpj_final = extrair_possivel_cnpj(
+            " ".join([
+                str(cnpj or ""),
+                str(cnpj_contexto or "")
+            ])
+        )
+
     return "\n\n".join([
         "Nome da empresa: " + normalizar_campo_zendesk(nome_empresa, limite=160),
         "Empresa/Loja: " + normalizar_campo_zendesk(empresa_loja, limite=160),
-        "CNPJ: " + normalizar_cnpj(cnpj),
+        "CNPJ: " + cnpj_final,
         "Nome do Cliente: " + normalizar_campo_zendesk(cliente, limite=120),
         "Telefone de contato: " + normalizar_campo_zendesk(telefone, limite=80),
         "E-mail Solicitante: " + normalizar_campo_zendesk(email, limite=120),
@@ -709,6 +908,7 @@ def texto_zendesk_formatado(conteudo):
         nome_empresa=nome_empresa,
         empresa_loja=empresa_loja,
         cnpj=cnpj,
+        cnpj_contexto=texto_extracao,
         cliente=cliente,
         telefone=telefone,
         email=email,
@@ -762,6 +962,8 @@ Regras:
 
 - Corrija termos fiscais comuns quando o contexto confirmar: ISDS-QN, ISQN ou ISS QN = ISSQN; Sintes Nacional ou Sintese Nacional = Simples Nacional; nota de servico = NFS-e; retencao de IS = retencao de ISS.
 - Use correcoes de termos apenas para vocabulario tecnico. Nao use isso para inventar CNPJ, telefone, e-mail, empresa, loja ou nome de cliente.
+- Nunca ignore um CNPJ parcialmente identificado.
+- Se houver uma sequencia parecida com CNPJ, mas incerta, informe como "Possível CNPJ informado" e peça confirmacao.
 
 Analista logado:
 {normalizar_campo_zendesk(analista_responsavel, limite=120)}
@@ -839,6 +1041,7 @@ Transcricao:
         nome_empresa=dados.get("nome_empresa"),
         empresa_loja=dados.get("empresa_loja"),
         cnpj=dados.get("cnpj"),
+        cnpj_contexto=transcricao,
         cliente=dados.get("nome_cliente"),
         telefone=dados.get("telefone_contato"),
         email=dados.get("email_solicitante"),
