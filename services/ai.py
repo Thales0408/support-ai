@@ -66,7 +66,10 @@ def transcrever_chunk(arquivo):
             "Atendimento de suporte ERP em portugues do Brasil. "
             "Priorize termos de ERP, fiscal, nota fiscal, caixa, venda, "
             "cadastro, produto, cliente, financeiro, estoque, PDV, NFC-e, "
-            "NF-e, SAT, boleto, XML e Zendesk."
+            "NF-e, SAT, boleto, XML, Zendesk, AnyDesk e TeamViewer. "
+            "Nao invente palavras quando houver silencio, ruido, musica, "
+            "eco ou fala inaudivel. Se um trecho estiver confuso, transcreva "
+            "somente as palavras audiveis."
         )
     )
 

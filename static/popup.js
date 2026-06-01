@@ -28,9 +28,6 @@ let finalizando = false
 let pararSegmentoAtual = null
 
 const TAMANHO_CHUNK_MS = 30000
-const LIMIAR_SILENCIO_RMS = 0.012
-const LIMIAR_SILENCIO_PICO = 0.035
-
 async function lerRespostaJson(response, mensagemPadrao) {
 
     const contentType =
@@ -237,92 +234,6 @@ async function finalizarAtendimento(duracao) {
     return data
 }
 
-async function medirVolume(blob) {
-
-    const buffer =
-        await blob.arrayBuffer()
-
-    const contexto =
-        new AudioContext()
-
-    try {
-
-        const audio =
-            await contexto.decodeAudioData(buffer)
-
-        let soma =
-            0
-
-        let pico =
-            0
-
-        let amostras =
-            0
-
-        for (
-            let canal = 0;
-            canal < audio.numberOfChannels;
-            canal++
-        ) {
-
-            const dados =
-                audio.getChannelData(canal)
-
-            const passo =
-                Math.max(
-                    1,
-                    Math.floor(dados.length / 12000)
-                )
-
-            for (
-                let i = 0;
-                i < dados.length;
-                i += passo
-            ) {
-
-                const valor =
-                    Math.abs(dados[i])
-
-                soma +=
-                    valor * valor
-
-                pico =
-                    Math.max(pico, valor)
-
-                amostras++
-            }
-        }
-
-        return {
-            rms: Math.sqrt(soma / Math.max(1, amostras)),
-            pico
-        }
-
-    } finally {
-
-        contexto.close()
-    }
-}
-
-async function deveIgnorarPorSilencio(blob) {
-
-    try {
-
-        const volume =
-            await medirVolume(blob)
-
-        return (
-            volume.rms < LIMIAR_SILENCIO_RMS &&
-            volume.pico < LIMIAR_SILENCIO_PICO
-        )
-
-    } catch (err) {
-
-        console.warn('Nao foi possivel medir silencio', err)
-        return false
-    }
-}
-
 function registrarUpload(blob, duracaoMs) {
 
     if (
@@ -337,38 +248,14 @@ function registrarUpload(blob, duracaoMs) {
     const ordemAtual =
         ordemChunk++
 
+    audioEnviadoMs +=
+        duracaoMs || TAMANHO_CHUNK_MS
+
     const upload =
-        deveIgnorarPorSilencio(blob)
-            .then(ignorar => {
-
-                if (ignorar) {
-
-                    chunksIgnorados++
-
-                    if (
-                        gravacaoAtiva &&
-                        !pausado
-                    ) {
-
-                        statusDiv.innerText =
-                            `Trecho silencioso ignorado (${chunksIgnorados})`
-                    }
-
-                    return {
-                        ok: true,
-                        ignorado: true,
-                        ordem: ordemAtual
-                    }
-                }
-
-                audioEnviadoMs +=
-                    duracaoMs || TAMANHO_CHUNK_MS
-
-                return enviarChunk(
-                    blob,
-                    ordemAtual
-                )
-            }).then(resultado => {
+        enviarChunk(
+            blob,
+            ordemAtual
+        ).then(resultado => {
 
             if (
                 resultado &&

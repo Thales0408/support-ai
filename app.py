@@ -403,6 +403,25 @@ def normalizar_campo_zendesk(valor, padrao="Não informado", limite=300):
     return texto
 
 
+def normalizar_cnpj(valor):
+
+    texto = str(valor or "")
+    digitos = re.sub(
+        r"\D",
+        "",
+        texto
+    )
+
+    if len(digitos) != 14:
+
+        return "Não informado"
+
+    return (
+        f"{digitos[0:2]}.{digitos[2:5]}.{digitos[5:8]}/"
+        f"{digitos[8:12]}-{digitos[12:14]}"
+    )
+
+
 def normalizar_descritivo_zendesk(valor):
 
     texto = str(valor or "").strip()
@@ -459,7 +478,7 @@ def resumo_zendesk_exato(
     return "\n\n".join([
         "Nome da empresa: " + normalizar_campo_zendesk(nome_empresa, limite=160),
         "Empresa/Loja: " + normalizar_campo_zendesk(empresa_loja, limite=160),
-        "CNPJ: " + normalizar_campo_zendesk(cnpj, limite=40),
+        "CNPJ: " + normalizar_cnpj(cnpj),
         "Nome do Cliente: " + normalizar_campo_zendesk(cliente, limite=120),
         "Telefone de contato: " + normalizar_campo_zendesk(telefone, limite=80),
         "E-mail Solicitante: " + normalizar_campo_zendesk(email, limite=120),
@@ -715,7 +734,7 @@ Descritivo da ocorrência do atendimento:
 
 Regras:
 - Nao escrever tudo em uma linha.
-- Nao inventar CNPJ, telefone, e-mail ou empresa.
+- Nao inventar CNPJ, telefone, e-mail, empresa, cliente, erro, solucao ou status.
 - Se nao tiver a informacao na transcricao, escrever "Não informado".
 - Escrever como documentacao para colar no Zendesk.
 - Nao usar markdown.
@@ -724,6 +743,11 @@ Regras:
 - Preserve termos tecnicos do ERP quando aparecerem.
 - Use somente uma categoria principal.
 - O campo descritivo_atendimento deve conter apenas o texto do descritivo, sem repetir os demais campos.
+- Se o CNPJ nao tiver exatamente 14 digitos claros, retorne "Não informado".
+- Se a transcricao estiver confusa, curta ou cheia de ruido, escreva isso no descritivo de forma objetiva e nao transforme suposicoes em fatos.
+- Nao diga "foi identificado", "foi analisado", "foi orientado" ou "status final" se a transcricao nao mostrar isso claramente.
+- Se so houver pedido de acesso remoto, registre apenas que foi solicitado acesso remoto para verificacao.
+- Se a ligacao estiver em andamento ou sem conclusao clara, o status final deve ser "Não informado".
 
 Analista logado:
 {normalizar_campo_zendesk(analista_responsavel, limite=120)}
