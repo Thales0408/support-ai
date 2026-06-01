@@ -144,6 +144,40 @@ def limpar_texto(texto):
     return texto.strip()
 
 
+def limpar_vazamento_prompt_transcricao(texto):
+
+    texto_limpo = str(texto or "")
+    frases_prompt = [
+        "Transcreva em português do Brasil",
+        "Transcreva em portugues do Brasil",
+        "Texto e atendimento de suporte",
+        "Atendimento de suporte ERP",
+        "Contexto: atendimento de suporte tecnico",
+        "Contexto: atendimento de suporte técnico",
+        "Não invente palavras quando houver silêncio",
+        "Nao invente palavras quando houver silencio",
+        "Não invente palavras quando houver silencio",
+        "Nao invente palavras quando houver silêncio"
+    ]
+
+    for frase in frases_prompt:
+
+        texto_limpo = re.sub(
+            re.escape(frase),
+            "",
+            texto_limpo,
+            flags=re.IGNORECASE
+        )
+
+    texto_limpo = re.sub(
+        r"\s+",
+        " ",
+        texto_limpo
+    )
+
+    return texto_limpo.strip(" .:-")
+
+
 def tamanho_arquivo_upload(arquivo):
 
     posicao_atual = (
@@ -738,6 +772,20 @@ def campo_zendesk_informado(valor):
     ]
 
 
+def valor_obrigatorio_zendesk(valor):
+
+    texto = normalizar_campo_zendesk(
+        valor,
+        limite=160
+    )
+
+    if campo_zendesk_informado(texto):
+
+        return texto
+
+    return "Não identificado na ligação"
+
+
 def resumo_zendesk_exato(
     nome_empresa=None,
     empresa_loja=None,
@@ -761,33 +809,18 @@ def resumo_zendesk_exato(
             ])
         )
 
-    campos = []
+    if not campo_zendesk_informado(cnpj_final):
 
-    for rotulo, valor, limite in [
-        ("Nome da empresa", nome_empresa, 160),
-        ("Empresa/Loja", empresa_loja, 160),
-        ("Nome do Cliente", cliente, 120),
-        ("Telefone de contato", telefone, 80),
-        ("E-mail Solicitante", email, 120)
-    ]:
+        cnpj_final = "Não identificado na ligação"
 
-        valor_normalizado = normalizar_campo_zendesk(
-            valor,
-            limite=limite
-        )
-
-        if campo_zendesk_informado(valor_normalizado):
-
-            campos.append(
-                f"{rotulo}: {valor_normalizado}"
-            )
-
-    if campo_zendesk_informado(cnpj_final):
-
-        campos.insert(
-            2 if len(campos) >= 2 else len(campos),
-            "CNPJ: " + cnpj_final
-        )
+    campos = [
+        "Nome da empresa: " + valor_obrigatorio_zendesk(nome_empresa),
+        "Empresa/Loja: " + valor_obrigatorio_zendesk(empresa_loja),
+        "CNPJ: " + cnpj_final,
+        "Nome do Cliente: " + valor_obrigatorio_zendesk(cliente),
+        "Telefone de contato: " + valor_obrigatorio_zendesk(telefone),
+        "E-mail Solicitante: " + valor_obrigatorio_zendesk(email)
+    ]
 
     campos.extend([
         "Analista responsável: " + normalizar_campo_zendesk(analista, limite=120),
@@ -1016,21 +1049,21 @@ Voce e um analista senior de suporte ERP.
 Gere um JSON valido para um atendimento de suporte ERP.
 
 O texto final para Zendesk DEVE manter quebras de linha e linhas em branco entre campos.
-Inclua somente campos com informacao real capturada na transcricao.
-Nao inclua campos vazios ou marcados como "Não informado".
-Mantenha sempre os campos Analista responsavel e Descritivo da ocorrencia do atendimento.
+Mantenha sempre todos os campos abaixo.
+Quando um campo nao for identificado na transcricao, use exatamente "Não identificado na ligação".
+Nao use "Não informado", null ou campo vazio.
 
-Nome da empresa: [somente se informado]
+Nome da empresa: [valor identificado ou "Não identificado na ligação"]
 
-Empresa/Loja: [somente se informado]
+Empresa/Loja: [valor identificado ou "Não identificado na ligação"]
 
-CNPJ: [somente se for valido ou Possível CNPJ informado]
+CNPJ: [CNPJ valido, Possível CNPJ informado ou "Não identificado na ligação"]
 
-Nome do Cliente: [somente se informado]
+Nome do Cliente: [valor identificado ou "Não identificado na ligação"]
 
-Telefone de contato: [somente se informado]
+Telefone de contato: [valor identificado ou "Não identificado na ligação"]
 
-E-mail Solicitante: [somente se informado]
+E-mail Solicitante: [valor identificado ou "Não identificado na ligação"]
 
 Analista responsável: [nome do analista logado, se disponivel]
 
@@ -1040,7 +1073,7 @@ Descritivo da ocorrência do atendimento:
 Regras:
 - Nao escrever tudo em uma linha.
 - Nao inventar CNPJ, telefone, e-mail, empresa, cliente, erro, solucao ou status.
-- Se nao tiver a informacao na transcricao, nao inclua o campo opcional no texto Zendesk.
+- Se nao tiver a informacao na transcricao, preencha o campo com "Não identificado na ligação".
 - Escrever como documentacao para colar no Zendesk.
 - Nao usar markdown.
 - Nao usar bullets se nao houver passo a passo.
@@ -1906,7 +1939,9 @@ def receber_chunk():
                 "motivo": "audio_muito_curto"
             })
 
-        texto = transcrever_chunk(arquivo)
+        texto = limpar_vazamento_prompt_transcricao(
+            transcrever_chunk(arquivo)
+        )
 
         with conectar_banco() as conn:
 
@@ -2106,8 +2141,10 @@ def finalizar_atendimento():
                 atendimento_id
             )
 
-    transcricao = limpar_texto(
-        " ".join(textos)
+    transcricao = limpar_vazamento_prompt_transcricao(
+        limpar_texto(
+            " ".join(textos)
+        )
     )
 
     chunks_total = max(
@@ -2416,7 +2453,9 @@ def transcrever_arquivo_unico():
 
                 return limite_resposta
 
-    texto = transcrever_chunk(arquivo)
+    texto = limpar_vazamento_prompt_transcricao(
+        transcrever_chunk(arquivo)
+    )
     analise = analisar_com_ia(
         texto,
         session.get("usuario_nome")
@@ -2875,7 +2914,9 @@ def reprocessar_resumo_atendimento(atendimento_id):
                 }), 404
 
             transcricao = (
-                limpar_texto(row[0] or "")
+                limpar_vazamento_prompt_transcricao(
+                    limpar_texto(row[0] or "")
+                )
             )
 
             if not transcricao:
