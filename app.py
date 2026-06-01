@@ -315,17 +315,27 @@ def validar_limites_custo_resumo(
 
     return erro_limite(
         limite["mensagem"],
+        tipo=limite["evento"],
+        deve_parar_gravacao=True,
         **limite["resposta"]
     )
 
 
-def erro_limite(mensagem, **dados):
+def erro_limite(
+    mensagem,
+    tipo="limite_uso",
+    deve_parar_gravacao=True,
+    **dados
+):
 
     return jsonify({
-        "erro": mensagem,
+        "erro": "limite_atingido",
         "limite": True,
+        "tipo": tipo,
+        "mensagem": mensagem,
+        "deve_parar_gravacao": deve_parar_gravacao,
         **dados
-    }), 429
+    }), 403
 
 
 def extrair_json_objeto(texto):
@@ -1427,6 +1437,8 @@ def iniciar_atendimento():
 
                 return erro_limite(
                     "Limite diario de atendimentos atingido.",
+                    tipo="limite_chamadas_dia",
+                    deve_parar_gravacao=False,
                     chamadas_hoje=uso["chamadas"],
                     limite_chamadas=MAX_CALLS_PER_DAY
                 )
@@ -1442,6 +1454,8 @@ def iniciar_atendimento():
 
                 return erro_limite(
                     "Limite diario de minutos de audio atingido.",
+                    tipo="limite_minutos_dia",
+                    deve_parar_gravacao=False,
                     minutos_hoje=round(uso["segundos"] / 60, 2),
                     limite_minutos=MAX_AUDIO_MINUTES_PER_DAY
                 )
@@ -1536,6 +1550,8 @@ def receber_chunk():
 
         return erro_limite(
             "Limite de trechos por atendimento atingido.",
+            tipo="limite_chunks_atendimento",
+            deve_parar_gravacao=True,
             limite_chunks=MAX_CHUNKS_PER_CALL
         )
 
@@ -1831,6 +1847,8 @@ def finalizar_atendimento():
 
         return erro_limite(
             "Limite de duracao por atendimento atingido.",
+            tipo="limite_duracao_atendimento",
+            deve_parar_gravacao=True,
             duracao_minutos=round(int(duracao_segundos or 0) / 60, 2),
             limite_minutos=MAX_CALL_DURATION_MINUTES
         )
@@ -1847,6 +1865,8 @@ def finalizar_atendimento():
 
         return erro_limite(
             "Limite de trechos por atendimento atingido.",
+            tipo="limite_chunks_atendimento",
+            deve_parar_gravacao=True,
             chunks_total=chunks_total,
             limite_chunks=MAX_CHUNKS_PER_CALL
         )
@@ -1859,17 +1879,11 @@ def finalizar_atendimento():
     if segundos_dia_total > MAX_AUDIO_MINUTES_PER_DAY * 60:
 
         log_evento(
-            "limite_minutos_finalizar",
+            "limite_minutos_finalizar_permitido",
             usuario_id=usuario_id,
             atendimento_id=atendimento_id,
             segundos_dia_total=segundos_dia_total,
             limite_segundos=MAX_AUDIO_MINUTES_PER_DAY * 60
-        )
-
-        return erro_limite(
-            "Limite diario de minutos de audio atingido.",
-            minutos_hoje=round(segundos_dia_total / 60, 2),
-            limite_minutos=MAX_AUDIO_MINUTES_PER_DAY
         )
 
     custo_estimado = estimar_custo_atendimento(
@@ -2046,6 +2060,8 @@ def transcrever_arquivo_unico():
 
                 return erro_limite(
                     "Limite diario de atendimentos atingido.",
+                    tipo="limite_chamadas_dia",
+                    deve_parar_gravacao=False,
                     chamadas_hoje=uso["chamadas"],
                     limite_chamadas=MAX_CALLS_PER_DAY
                 )
@@ -2061,6 +2077,8 @@ def transcrever_arquivo_unico():
 
                 return erro_limite(
                     "Limite diario de minutos de audio atingido.",
+                    tipo="limite_minutos_dia",
+                    deve_parar_gravacao=False,
                     minutos_hoje=round(uso["segundos"] / 60, 2),
                     limite_minutos=MAX_AUDIO_MINUTES_PER_DAY
                 )

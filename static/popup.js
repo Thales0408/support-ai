@@ -25,6 +25,7 @@ let uploadsPendentes = []
 let gravacaoAtiva = false
 let pausado = false
 let finalizando = false
+let limiteAtingido = false
 let pararSegmentoAtual = null
 
 const TAMANHO_CHUNK_MS = 30000
@@ -192,12 +193,67 @@ async function enviarChunk(blob, ordem) {
 
     if (!response.ok) {
 
-        throw new Error(
-            data.erro || 'Erro transcrevendo trecho'
-        )
+        const erro =
+            new Error(
+                data.mensagem ||
+                data.erro ||
+                'Erro transcrevendo trecho'
+            )
+
+        erro.limite =
+            Boolean(data.limite)
+
+        erro.tipo =
+            data.tipo
+
+        erro.devePararGravacao =
+            Boolean(data.deve_parar_gravacao)
+
+        throw erro
     }
 
     return data
+}
+
+async function pararGravacaoPorLimite(mensagem) {
+
+    if (
+        limiteAtingido ||
+        finalizando
+    ) {
+
+        return
+    }
+
+    limiteAtingido =
+        true
+
+    pausado =
+        true
+
+    limparTimerChunk()
+
+    atualizarBotaoPausa(false)
+
+    statusDiv.innerText =
+        mensagem ||
+        'Limite diario de minutos atingido. A gravacao foi pausada automaticamente. Finalize o atendimento para gerar o resumo com o conteudo ja capturado.'
+
+    startBtn.innerText =
+        'Finalizar Atendimento'
+
+    startBtn.disabled =
+        false
+
+    if (
+        recorder &&
+        recorder.state === 'recording'
+    ) {
+
+        recorder.stop()
+    }
+
+    pararStreams()
 }
 
 async function finalizarAtendimento(duracao) {
@@ -284,6 +340,23 @@ function registrarUpload(blob, duracaoMs) {
             console.error(err)
 
             chunksFalhos++
+
+            if (
+                err.devePararGravacao
+            ) {
+
+                pararGravacaoPorLimite(
+                    err.message ||
+                    'Limite diario de minutos atingido. A gravacao foi pausada automaticamente. Finalize o atendimento para gerar o resumo com o conteudo ja capturado.'
+                )
+
+                return {
+                    ok: false,
+                    ordem: ordemAtual,
+                    limite: true,
+                    erro: err.message
+                }
+            }
 
             statusDiv.innerText =
                 `Um trecho falhou, mas a gravacao continua (${chunksFalhos} falha(s))`
@@ -624,6 +697,7 @@ startBtn.onclick = async () => {
         gravacaoAtiva = false
         pausado = false
         finalizando = false
+        limiteAtingido = false
         pararSegmentoAtual = null
         atualizarBotaoPausa(false)
 
