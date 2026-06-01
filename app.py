@@ -46,6 +46,7 @@ from config import (
     SUMMARY_MODEL,
     TRANSCRIBE_MODEL,
     TRANSCRIBE_PROVIDER,
+    USD_BRL_RATE,
     ler_env
 )
 from services.ai import (
@@ -321,6 +322,60 @@ def validar_limites_custo_resumo(
         deve_parar_gravacao=True,
         **limite["resposta"]
     )
+
+
+def usuario_filtro_atendimentos():
+
+    usuario_id = usuario_logado()
+    analista = request.args.get("analista_id") or request.args.get("escopo")
+
+    if not usuario_supervisor():
+
+        return {
+            "where": "a.usuario_id = %s",
+            "params": [usuario_id],
+            "escopo": "meus",
+            "analista_id": usuario_id
+        }
+
+    if analista in [
+        "todos",
+        "all"
+    ]:
+
+        return {
+            "where": "1 = 1",
+            "params": [],
+            "escopo": "todos",
+            "analista_id": None
+        }
+
+    if (
+        not analista
+        or analista == "meus"
+    ):
+
+        return {
+            "where": "a.usuario_id = %s",
+            "params": [usuario_id],
+            "escopo": "meus",
+            "analista_id": usuario_id
+        }
+
+    try:
+
+        analista_id = int(analista)
+
+    except (TypeError, ValueError):
+
+        analista_id = usuario_id
+
+    return {
+        "where": "a.usuario_id = %s",
+        "params": [analista_id],
+        "escopo": "analista",
+        "analista_id": analista_id
+    }
 
 
 def erro_limite(
@@ -2447,93 +2502,69 @@ def resultados():
             "processando": []
         })
 
-    escopo = request.args.get(
-        "escopo",
-        "meus"
-    )
-
-    ver_todos = (
-        escopo == "todos"
-        and usuario_supervisor()
-    )
-
     mostrar_custo = usuario_admin_tecnico()
+    filtro_usuario = usuario_filtro_atendimentos()
 
     with conectar_banco() as conn:
 
         with conn.cursor() as cursor:
 
-            if ver_todos:
-
-                cursor.execute(
-                    """
-                    SELECT
-                        a.id,
-                        a.arquivo,
-                        a.conteudo,
-                        a.data,
-                        a.status,
-                        a.chunks_total,
-                        a.chunks_falhos,
-                        a.duracao_segundos,
-                        a.transcricao_completa,
-                        a.ticket_zendesk,
-                        a.chunks_ignorados,
-                        a.segundos_transcritos,
-                        a.custo_estimado_usd,
-                        a.resumo_editado,
-                        a.sentimento_cliente,
-                        a.urgencia,
-                        a.categoria,
-                        a.problema_principal,
-                        a.tags,
-                        u.usuario
-                    FROM atendimentos a
-                    LEFT JOIN usuarios u
-                    ON u.id = a.usuario_id
-                    ORDER BY a.id DESC
-                    LIMIT 300
-                    """
-                )
-
-            else:
-
-                cursor.execute(
-                    """
-                    SELECT
-                        a.id,
-                        a.arquivo,
-                        a.conteudo,
-                        a.data,
-                        a.status,
-                        a.chunks_total,
-                        a.chunks_falhos,
-                        a.duracao_segundos,
-                        a.transcricao_completa,
-                        a.ticket_zendesk,
-                        a.chunks_ignorados,
-                        a.segundos_transcritos,
-                        a.custo_estimado_usd,
-                        a.resumo_editado,
-                        a.sentimento_cliente,
-                        a.urgencia,
-                        a.categoria,
-                        a.problema_principal,
-                        a.tags,
-                        u.usuario
-                    FROM atendimentos a
-                    LEFT JOIN usuarios u
-                    ON u.id = a.usuario_id
-                    WHERE a.usuario_id = %s
-                    ORDER BY a.id DESC
-                    LIMIT 300
-                    """,
-                    (
-                        usuario_id,
-                    )
-                )
+            cursor.execute(
+                f"""
+                SELECT
+                    a.id,
+                    a.arquivo,
+                    a.conteudo,
+                    a.data,
+                    a.status,
+                    a.chunks_total,
+                    a.chunks_falhos,
+                    a.duracao_segundos,
+                    a.transcricao_completa,
+                    a.ticket_zendesk,
+                    a.chunks_ignorados,
+                    a.segundos_transcritos,
+                    a.custo_estimado_usd,
+                    a.resumo_editado,
+                    a.sentimento_cliente,
+                    a.urgencia,
+                    a.categoria,
+                    a.problema_principal,
+                    a.tags,
+                    u.usuario,
+                    a.usuario_id
+                FROM atendimentos a
+                LEFT JOIN usuarios u
+                ON u.id = a.usuario_id
+                WHERE {filtro_usuario["where"]}
+                ORDER BY a.id DESC
+                LIMIT 300
+                """,
+                filtro_usuario["params"]
+            )
 
             rows = cursor.fetchall()
+
+            usuarios = []
+
+            if usuario_supervisor():
+
+                cursor.execute(
+                    """
+                    SELECT id, usuario
+                    FROM usuarios
+                    WHERE ativo = TRUE
+                    ORDER BY usuario
+                    """
+                )
+
+                usuarios = [
+                    {
+                        "id": row[0],
+                        "usuario": row[1]
+                    }
+                    for row in cursor.fetchall()
+                ]
 
     itens = []
     processando = []
@@ -2564,8 +2595,15 @@ def resultados():
             "categoria": row[16] or "outro",
             "problema_principal": row[17] or "",
             "tags": row[18] or "",
-            "usuario": row[19] or "Nao informado"
+            "usuario": row[19] or "Nao informado",
+            "usuario_id": row[20]
         }
+
+        if mostrar_custo:
+
+            item["custo_estimado_brl"] = custo_brl(
+                item["custo_estimado_usd"]
+            )
 
         itens.append(item)
 
@@ -2576,11 +2614,14 @@ def resultados():
     return jsonify({
         "resultados": itens,
         "processando": processando,
-        "escopo": "todos" if ver_todos else "meus",
+        "escopo": filtro_usuario["escopo"],
+        "analista_id": filtro_usuario["analista_id"],
+        "usuarios": usuarios,
         "is_admin": usuario_admin_tecnico(),
         "is_supervisor": usuario_supervisor(),
         "mostrar_custo": mostrar_custo,
-        "perfil": perfil_usuario()
+        "perfil": perfil_usuario(),
+        "usd_brl_rate": USD_BRL_RATE if mostrar_custo else None
     })
 
 
@@ -2691,6 +2732,11 @@ def detalhe_atendimento(atendimento_id):
         "segundos_transcritos": row[10] or 0,
         "custo_estimado_usd": (
             float(row[11] or 0)
+            if usuario_admin_tecnico()
+            else 0
+        ),
+        "custo_estimado_brl": (
+            custo_brl(float(row[11] or 0))
             if usuario_admin_tecnico()
             else 0
         ),
@@ -2980,34 +3026,52 @@ def exportar():
         return redirect("/login")
 
     mostrar_custo = usuario_admin_tecnico()
+    filtro_usuario = usuario_filtro_atendimentos()
+    ids = [
+        int(valor)
+        for valor in re.findall(
+            r"\d+",
+            request.args.get("ids", "")
+        )
+    ]
 
     with conectar_banco() as conn:
 
         with conn.cursor() as cursor:
 
+            where = filtro_usuario["where"]
+            params = list(filtro_usuario["params"])
+
+            if ids:
+
+                where += " AND a.id = ANY(%s)"
+                params.append(ids)
+
             cursor.execute(
-                """
+                f"""
                 SELECT
-                    data,
-                    ticket_zendesk,
-                    conteudo,
-                    transcricao_completa,
-                    chunks_total,
-                    chunks_falhos,
-                    chunks_ignorados,
-                    segundos_transcritos,
-                    sentimento_cliente,
-                    urgencia,
-                    categoria,
-                    problema_principal,
-                    tags
-                FROM atendimentos
-                WHERE usuario_id = %s
-                ORDER BY id DESC
+                    a.data,
+                    u.usuario,
+                    a.ticket_zendesk,
+                    a.conteudo,
+                    a.transcricao_completa,
+                    a.chunks_total,
+                    a.chunks_falhos,
+                    a.chunks_ignorados,
+                    a.segundos_transcritos,
+                    a.custo_estimado_usd,
+                    a.sentimento_cliente,
+                    a.urgencia,
+                    a.categoria,
+                    a.problema_principal,
+                    a.tags
+                FROM atendimentos a
+                LEFT JOIN usuarios u
+                ON u.id = a.usuario_id
+                WHERE {where}
+                ORDER BY a.id DESC
                 """,
-                (
-                    usuario_id,
-                )
+                params
             )
 
             rows = cursor.fetchall()
@@ -3017,6 +3081,7 @@ def exportar():
 
     ws.append([
         "Data",
+        "Analista",
         "Ticket Zendesk",
         "Texto Zendesk",
         "Transcricao",
@@ -3033,30 +3098,39 @@ def exportar():
 
     if mostrar_custo:
 
-        ws.insert_cols(9)
+        ws.insert_cols(10)
         ws.cell(
             row=1,
-            column=9,
+            column=10,
             value="Custo estimado USD"
+        )
+        ws.insert_cols(11)
+        ws.cell(
+            row=1,
+            column=11,
+            value="Custo estimado BRL"
         )
 
     for row in rows:
 
         linha = list(row)
-        linha[2] = texto_zendesk_formatado(
-            linha[2]
+        linha[3] = texto_zendesk_formatado(
+            linha[3]
         )
 
         if mostrar_custo:
 
-            custo_estimado = estimar_custo_atendimento(
-                linha[7] or 0,
-                bool(linha[2])
+            custo_estimado_usd = float(
+                linha[9] or 0
             )
+            linha[9] = custo_estimado_usd
             linha.insert(
-                8,
-                custo_estimado
+                10,
+                custo_brl(custo_estimado_usd)
             )
+        else:
+
+            linha.pop(9)
 
         ws.append(linha)
 

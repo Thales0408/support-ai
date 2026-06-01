@@ -139,6 +139,7 @@
         .metric strong {
             display: block;
             font-size: 28px;
+            white-space: pre-line;
         }
 
         .workarea {
@@ -172,6 +173,18 @@
             gap: 10px;
             grid-template-columns: 1.5fr repeat(3, minmax(130px, 1fr));
             padding: 14px 16px;
+        }
+
+        .filter-field {
+            display: grid;
+            gap: 6px;
+        }
+
+        .filter-field label {
+            color: #9aa4b2;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
         }
 
         input,
@@ -255,6 +268,12 @@
             color: #ff8a8a;
         }
 
+        .badge-category {
+            background: #172f46;
+            color: #7cc4ff;
+            margin-top: 8px;
+        }
+
         .row-actions {
             display: flex;
             flex-wrap: wrap;
@@ -302,6 +321,10 @@
         .mini-item span {
             color: #9aa4b2;
             font-size: 13px;
+        }
+
+        .report-panel {
+            margin-bottom: 18px;
         }
 
         .modal {
@@ -415,9 +438,10 @@
                     </a>
                 {% endif %}
 
-                <a href="/exportar">
-                    <button class="btn-blue">Exportar Excel</button>
-                </a>
+                <button
+                    class="btn-blue"
+                    id="exportar-excel"
+                >Exportar Excel</button>
 
                 <button
                     class="btn-dark"
@@ -459,6 +483,32 @@
             </div>
         </section>
 
+        {% if is_supervisor %}
+            <section
+                class="panel report-panel"
+                id="painel-analistas"
+            >
+                <div class="panel-header">
+                    <h2>Atendimentos por analista</h2>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Analista</th>
+                                <th>Total</th>
+                                <th>Finalizados</th>
+                                <th>Em andamento</th>
+                                <th>Com falha</th>
+                                <th>TMA</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-analistas"></tbody>
+                    </table>
+                </div>
+            </section>
+        {% endif %}
+
         <section class="workarea">
             <div class="panel">
                 <div class="panel-header">
@@ -467,38 +517,44 @@
                 </div>
 
                 <div class="filters">
-                    <input
-                        id="filtro-busca"
-                        placeholder="Buscar por texto Zendesk, transcricao, analista, tag ou data"
+                    <div class="filter-field">
+                        <label for="filtro-busca">Buscar texto</label>
+                        <input
+                            id="filtro-busca"
+                            placeholder="Zendesk, transcricao, analista, tag ou data"
+                        >
+                    </div>
+
+                    <div class="filter-field">
+                        <label for="filtro-periodo">Periodo</label>
+                        <select id="filtro-periodo">
+                            <option value="todos">Todos os periodos</option>
+                            <option value="hoje">Hoje</option>
+                            <option value="7">Ultimos 7 dias</option>
+                            <option value="30">Ultimos 30 dias</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-field">
+                        <label for="filtro-status">Status</label>
+                        <select id="filtro-status">
+                            <option value="todos">Todos os status</option>
+                            <option value="finalizado">Finalizados</option>
+                            <option value="andamento">Em andamento</option>
+                            <option value="falha">Com falha</option>
+                        </select>
+                    </div>
+
+                    <div
+                        class="filter-field"
+                        {% if not is_supervisor %}style="display: none;"{% endif %}
                     >
-
-                    <select id="filtro-periodo">
-                        <option value="todos">Todos os periodos</option>
-                        <option value="hoje">Hoje</option>
-                        <option value="7">Ultimos 7 dias</option>
-                        <option value="30">Ultimos 30 dias</option>
-                    </select>
-
-                    <select id="filtro-status">
-                        <option value="todos">Todos os status</option>
-                        <option value="finalizado">Finalizados</option>
-                        <option value="andamento">Em andamento</option>
-                        <option value="falha">Com falha</option>
-                    </select>
-
-                    {% if is_supervisor %}
-                        <select id="filtro-escopo">
+                        <label for="filtro-analista">Analista</label>
+                        <select id="filtro-analista">
                             <option value="meus">Meus atendimentos</option>
                             <option value="todos">Todos os analistas</option>
                         </select>
-                    {% else %}
-                        <select
-                            id="filtro-escopo"
-                            disabled
-                        >
-                            <option value="meus">Meus atendimentos</option>
-                        </select>
-                    {% endif %}
+                    </div>
                 </div>
 
                 <div class="table-wrap">
@@ -508,6 +564,7 @@
                                 <th>Data</th>
                                 <th>Analista</th>
                                 <th>Status</th>
+                                <th>Categoria</th>
                                 <th>Texto Zendesk</th>
                                 <th>Tempo</th>
                                 <th>Acoes</th>
@@ -639,10 +696,12 @@
     <script>
         let atendimentos = []
         let atendimentosFiltrados = []
+        let usuariosAtivos = []
         let chart = null
         let detalheAtual = null
         const PERFIL_USUARIO = "{{ perfil }}"
         const MOSTRAR_CUSTO = {{ "true" if mostrar_custo else "false" }}
+        const IS_SUPERVISOR = {{ "true" if is_supervisor else "false" }}
 
         const tbody =
             document.getElementById("tbody-atendimentos")
@@ -659,8 +718,8 @@
         const filtroStatus =
             document.getElementById("filtro-status")
 
-        const filtroEscopo =
-            document.getElementById("filtro-escopo")
+        const filtroAnalista =
+            document.getElementById("filtro-analista")
 
         const modal =
             document.getElementById("modal-detalhe")
@@ -673,6 +732,13 @@
 
         function formatarCusto(valor) {
             return `US$ ${Number(valor || 0).toFixed(2)}`
+        }
+
+        function formatarCustoCompleto(valorUsd, valorBrl) {
+            return [
+                `US$ ${Number(valorUsd || 0).toFixed(2)}`,
+                `R$ ${Number(valorBrl || 0).toFixed(2).replace(".", ",")}`
+            ].join("\n")
         }
 
         function formatarDuracao(segundos) {
@@ -882,7 +948,14 @@
                 document.getElementById("metric-custo-label").innerText =
                     "Custo estimado"
                 document.getElementById("metric-custo").innerText =
-                    formatarCusto(custo)
+                    formatarCustoCompleto(
+                        custo,
+                        atendimentosFiltrados.reduce(
+                            (soma, item) =>
+                                soma + Number(item.custo_estimado_brl || 0),
+                            0
+                        )
+                    )
             } else {
                 document.getElementById("metric-custo-label").innerText =
                     "Sem ticket"
@@ -930,6 +1003,20 @@
 
                 tdStatus.appendChild(badge)
 
+                const tdCategoria =
+                    document.createElement("td")
+
+                const categoria =
+                    document.createElement("span")
+
+                categoria.className =
+                    "badge badge-category"
+
+                categoria.innerText =
+                    item.categoria || "Outro"
+
+                tdCategoria.appendChild(categoria)
+
                 const tdResumo =
                     document.createElement("td")
 
@@ -969,7 +1056,7 @@
 
                 tdTempo.innerText =
                     MOSTRAR_CUSTO
-                        ? `${formatarDuracao(item.duracao_segundos)}\n${formatarCusto(item.custo_estimado_usd)}`
+                        ? `${formatarDuracao(item.duracao_segundos)}\n${formatarCustoCompleto(item.custo_estimado_usd, item.custo_estimado_brl)}`
                         : formatarDuracao(item.duracao_segundos)
 
                 const tdAcoes =
@@ -1012,6 +1099,7 @@
                 tr.appendChild(tdData)
                 tr.appendChild(tdUsuario)
                 tr.appendChild(tdStatus)
+                tr.appendChild(tdCategoria)
                 tr.appendChild(tdResumo)
                 tr.appendChild(tdTempo)
                 tr.appendChild(tdAcoes)
@@ -1170,17 +1258,163 @@
             })
         }
 
+        function renderizarAnalistas() {
+            if (!IS_SUPERVISOR) {
+                return
+            }
+
+            const tbodyAnalistas =
+                document.getElementById("tbody-analistas")
+
+            if (!tbodyAnalistas) {
+                return
+            }
+
+            tbodyAnalistas.innerHTML = ""
+
+            const grupos = {}
+
+            atendimentosFiltrados.forEach(item => {
+                const nome =
+                    item.usuario || "Nao informado"
+
+                if (!grupos[nome]) {
+                    grupos[nome] = {
+                        analista: nome,
+                        total: 0,
+                        finalizados: 0,
+                        andamento: 0,
+                        falhas: 0,
+                        segundos: []
+                    }
+                }
+
+                grupos[nome].total += 1
+
+                if (item.status === "finalizado") {
+                    grupos[nome].finalizados += 1
+                } else {
+                    grupos[nome].andamento += 1
+                }
+
+                if (Number(item.chunks_falhos || 0) > 0) {
+                    grupos[nome].falhas += 1
+                }
+
+                if (Number(item.duracao_segundos || 0) > 0) {
+                    grupos[nome].segundos.push(
+                        Number(item.duracao_segundos || 0)
+                    )
+                }
+            })
+
+            Object.values(grupos)
+                .sort((a, b) => b.total - a.total)
+                .forEach(item => {
+                    const tr =
+                        document.createElement("tr")
+
+                    const media =
+                        item.segundos.length
+                            ? Math.round(
+                                item.segundos.reduce(
+                                    (soma, valor) => soma + valor,
+                                    0
+                                ) / item.segundos.length
+                            )
+                            : 0
+
+                    ;[
+                        item.analista,
+                        item.total,
+                        item.finalizados,
+                        item.andamento,
+                        item.falhas,
+                        formatarDuracao(media)
+                    ].forEach(valor => {
+                        const td =
+                            document.createElement("td")
+
+                        td.innerText =
+                            valor
+
+                        tr.appendChild(td)
+                    })
+
+                    tbodyAnalistas.appendChild(tr)
+                })
+        }
+
         function renderizarDashboard() {
             renderizarMetricas()
             renderizarTabela()
             renderizarGrafico()
             renderizarAlertas()
+            renderizarAnalistas()
+        }
+
+        function preencherFiltroAnalistas() {
+            if (
+                !IS_SUPERVISOR ||
+                !filtroAnalista
+            ) {
+                return
+            }
+
+            const valorAtual =
+                filtroAnalista.value || "meus"
+
+            filtroAnalista.innerHTML = ""
+
+            ;[
+                {
+                    id: "meus",
+                    usuario: "Meus atendimentos"
+                },
+                {
+                    id: "todos",
+                    usuario: "Todos os analistas"
+                },
+                ...usuariosAtivos
+            ].forEach(usuario => {
+                const option =
+                    document.createElement("option")
+
+                option.value =
+                    String(usuario.id)
+
+                option.innerText =
+                    usuario.usuario
+
+                filtroAnalista.appendChild(option)
+            })
+
+            filtroAnalista.value =
+                Array.from(filtroAnalista.options).some(
+                    option => option.value === valorAtual
+                )
+                    ? valorAtual
+                    : "meus"
+        }
+
+        function queryResultados() {
+            const params =
+                new URLSearchParams()
+
+            params.set(
+                "analista_id",
+                IS_SUPERVISOR && filtroAnalista
+                    ? filtroAnalista.value
+                    : "meus"
+            )
+
+            return params.toString()
         }
 
         async function carregarResultados() {
             const response =
                 await fetch(
-                    `/resultados?escopo=${encodeURIComponent(filtroEscopo.value)}`
+                    `/resultados?${queryResultados()}`
                 )
 
             const data =
@@ -1188,6 +1422,11 @@
 
             atendimentos =
                 data.resultados || []
+
+            usuariosAtivos =
+                data.usuarios || []
+
+            preencherFiltroAnalistas()
 
             document.getElementById("last-update").innerText =
                 "Atualizado agora"
@@ -1220,7 +1459,7 @@
 
             document.getElementById("modal-meta").value =
                 MOSTRAR_CUSTO
-                    ? `${formatarDuracao(data.duracao_segundos)} - ${formatarCusto(data.custo_estimado_usd)} - ${data.chunks_ignorados || 0} trecho(s) ignorado(s) - ${data.categoria || "outro"}`
+                    ? `${formatarDuracao(data.duracao_segundos)} - ${formatarCusto(data.custo_estimado_usd)} / R$ ${Number(data.custo_estimado_brl || 0).toFixed(2).replace(".", ",")} - ${data.chunks_ignorados || 0} trecho(s) ignorado(s) - ${data.categoria || "outro"}`
                     : `${formatarDuracao(data.duracao_segundos)} - ${data.sentimento_cliente || "neutro"} - ${data.urgencia || "media"} - ${data.categoria || "outro"}`
 
             document.getElementById("modal-transcricao").innerText =
@@ -1241,6 +1480,31 @@
             await navigator.clipboard.writeText(valor)
             statusArea.innerText =
                 "Texto Zendesk copiado para a area de transferencia."
+        }
+
+        function exportarExcel() {
+            const params =
+                new URLSearchParams(queryResultados())
+
+            const ids =
+                atendimentosFiltrados
+                    .map(item => item.id)
+                    .filter(Boolean)
+
+            if (ids.length) {
+                params.set(
+                    "ids",
+                    ids.join(",")
+                )
+            } else {
+                params.set(
+                    "ids",
+                    "0"
+                )
+            }
+
+            window.location.href =
+                `/exportar?${params.toString()}`
         }
 
         document.getElementById("fechar-modal").onclick =
@@ -1314,6 +1578,9 @@
                 await carregarResultados()
             }
 
+        document.getElementById("exportar-excel").onclick =
+            exportarExcel
+
         document.getElementById("abrir-senha").onclick =
             () => modalSenha.classList.add("open")
 
@@ -1372,8 +1639,10 @@
         filtroStatus.onchange =
             filtrarAtendimentos
 
-        filtroEscopo.onchange =
-            carregarResultados
+        if (filtroAnalista) {
+            filtroAnalista.onchange =
+                carregarResultados
+        }
 
         carregarResultados()
 
