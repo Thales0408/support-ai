@@ -23,7 +23,12 @@ O sistema captura audio da aba do 55PBX e do microfone, envia trechos de audio p
 
 ## Arquivos principais
 
-- `app.py`: backend Flask, rotas, banco, OpenAI e exportacao.
+- `app.py`: backend Flask e rotas principais.
+- `services/ai.py`: clientes e chamadas de IA/transcricao.
+- `services/database.py`: conexao e inicializacao do banco.
+- `services/usage.py`: limites diarios, custo e eventos de uso.
+- `auth.py`: helpers de autenticacao e perfis.
+- `config.py`: leitura e validacao de variaveis de ambiente.
 - `static/popup.js`: captura de audio, chunks, status da gravacao e finalizacao.
 - `templates/index.html`: dashboard operacional.
 - `templates/login.html`: tela de login.
@@ -118,9 +123,9 @@ Depois abra:
 http://127.0.0.1:8080/health
 ```
 
-## Primeiro acesso
+## Configuracao inicial de acesso
 
-O sistema nao cria mais credenciais padrao. Configure antes de subir:
+O sistema nao cria credenciais padrao. Configure um admin tecnico antes de subir:
 
 ```text
 ADMIN_USUARIO=seu_admin_tecnico
