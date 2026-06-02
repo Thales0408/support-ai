@@ -2,7 +2,7 @@
 
 Aplicacao Flask usada para apoiar atendimentos de suporte ERP feitos via 55PBX/Zendesk.
 
-O sistema captura audio da aba do 55PBX e do microfone, envia trechos de audio para o backend, transcreve com OpenAI, gera um resumo em formato pronto para Zendesk e salva o historico no Supabase/PostgreSQL.
+O sistema captura audio da aba do 55PBX e do microfone, envia trechos de audio para o backend, transcreve primeiro com Groq, usa OpenAI como fallback de transcricao quando necessario, gera o resumo com OpenAI e salva o historico no Supabase/PostgreSQL.
 
 ## Links
 
@@ -16,8 +16,9 @@ O sistema captura audio da aba do 55PBX e do microfone, envia trechos de audio p
 - Flask
 - Waitress
 - Supabase/PostgreSQL via Connection Pooler
-- Groq `whisper-large-v3-turbo` para transcricao de baixo custo
-- OpenAI `gpt-4.1-mini`
+- Groq `whisper-large-v3-turbo` como transcricao principal de baixo custo
+- OpenAI `whisper-1` como fallback de transcricao
+- OpenAI `gpt-4.1-mini` para resumo final
 - HTML, CSS e JavaScript
 - MediaRecorder, `getDisplayMedia`, `getUserMedia` e `AudioContext`
 
@@ -110,7 +111,7 @@ TRANSCRIBE_USD_HORA_GROQ=0.04
 TRANSCRIBE_USD_MINUTO_OPENAI=0.006
 ```
 
-O `OPENAI_API_KEY` continua sendo usado para gerar o resumo final e tambem para transcricao reserva quando `TRANSCRIBE_FALLBACK_PROVIDER=openai`. A transcricao tenta primeiro a Groq quando `TRANSCRIBE_PROVIDER=groq`; se a Groq retornar limite, indisponibilidade, timeout ou erro 5xx, o backend tenta OpenAI Whisper como fallback, respeitando os limites diarios de custo antes de enviar o audio.
+O `OPENAI_API_KEY` tem dois usos: gerar o resumo final e servir como fallback de transcricao quando `TRANSCRIBE_FALLBACK_PROVIDER=openai`. A transcricao principal e a Groq quando `TRANSCRIBE_PROVIDER=groq`; se a Groq retornar limite, indisponibilidade, timeout ou erro 5xx, o backend tenta OpenAI Whisper como fallback, respeitando os limites diarios de custo antes de enviar o audio.
 
 O backend prioriza `DB_*` quando `DB_PASSWORD` esta configurada. `DATABASE_URL` pode existir no Railway, mas nao deve ser a fonte principal enquanto o pooler do Supabase estiver configurado via `DB_*`.
 

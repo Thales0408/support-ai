@@ -535,6 +535,32 @@ def erro_rate_limit_transcricao(e):
     )
 
 
+def calcular_segundos_por_provider(chunks_transcritos, segundos_transcritos):
+
+    segundos_restantes = max(0, int(segundos_transcritos or 0))
+    segundos_por_provider = {}
+
+    for provider in chunks_transcritos:
+
+        if segundos_restantes <= 0:
+
+            break
+
+        segundos_chunk = min(
+            CHUNK_SECONDS,
+            segundos_restantes
+        )
+        provider_normalizado = provider or TRANSCRIBE_PROVIDER
+
+        segundos_por_provider[provider_normalizado] = (
+            segundos_por_provider.get(provider_normalizado, 0)
+            + segundos_chunk
+        )
+        segundos_restantes -= segundos_chunk
+
+    return segundos_por_provider
+
+
 def extrair_json_objeto(texto):
 
     bruto = (
@@ -2643,27 +2669,24 @@ def finalizar_atendimento():
 
             cursor.execute(
                 """
-                SELECT
-                    COALESCE(provider_usado, %s),
-                    COUNT(*)
+                SELECT COALESCE(provider_usado, %s)
                 FROM transcricoes_chunks
                 WHERE atendimento_id = %s
                 AND usuario_id = %s
                 AND status = 'transcrito'
-                GROUP BY COALESCE(provider_usado, %s)
+                ORDER BY ordem
                 """,
                 (
                     TRANSCRIBE_PROVIDER,
                     atendimento_id,
-                    usuario_id,
-                    TRANSCRIBE_PROVIDER
+                    usuario_id
                 )
             )
 
-            chunks_por_provider = {
-                row[0]: int(row[1] or 0)
+            chunks_transcritos_provider = [
+                row[0]
                 for row in cursor.fetchall()
-            }
+            ]
 
             uso = uso_diario_usuario(
                 cursor,
@@ -2755,10 +2778,10 @@ def finalizar_atendimento():
             limite_segundos=MAX_AUDIO_MINUTES_PER_DAY * 60
         )
 
-    segundos_por_provider = {
-        provider: quantidade * CHUNK_SECONDS
-        for provider, quantidade in chunks_por_provider.items()
-    }
+    segundos_por_provider = calcular_segundos_por_provider(
+        chunks_transcritos_provider,
+        segundos_transcritos
+    )
 
     custo_estimado = estimar_custo_transcricao_por_provedor(
         segundos_por_provider
@@ -2886,7 +2909,7 @@ def finalizar_atendimento():
         segundos_transcritos=segundos_transcritos,
         custo_estimado_usd=custo_estimado,
         custo_estimado_brl=custo_brl(custo_estimado),
-        chunks_por_provider=chunks_por_provider,
+        segundos_por_provider=segundos_por_provider,
         custo_dia_estimado_usd=round(
             uso["custo"] + float(custo_estimado or 0),
             4
