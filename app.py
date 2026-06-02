@@ -775,6 +775,22 @@ def extrair_possivel_cnpj(texto):
 def normalizar_descritivo_zendesk(valor):
 
     texto = str(valor or "").strip()
+    frases_metacomentario = [
+        r"O atendimento n[aã]o apresentou conclus[aã]o clara\.?",
+        r"A transcri[cç][aã]o est[aá] confusa\.?",
+        r"N[aã]o h[aá] informa[cç][oõ]es suficientes\.?",
+        r"N[aã]o foi poss[ií]vel identificar\.?",
+        r"A conclus[aã]o n[aã]o ficou clara\.?"
+    ]
+
+    for frase in frases_metacomentario:
+
+        texto = re.sub(
+            frase,
+            "",
+            texto,
+            flags=re.IGNORECASE
+        )
 
     texto = re.sub(
         r"\*\*|__|`",
@@ -797,6 +813,12 @@ def normalizar_descritivo_zendesk(valor):
     texto = re.sub(
         r"\n{3,}",
         "\n\n",
+        texto
+    ).strip()
+
+    texto = re.sub(
+        r"\s+([.!?])",
+        r"\1",
         texto
     ).strip()
 
@@ -858,6 +880,17 @@ def limpar_valor_estruturado(valor, limite=160):
         " ",
         texto
     ).strip()
+
+    if "possível cnpj informado" in texto.lower():
+
+        return ""
+
+    if re.search(
+        r"\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}",
+        texto
+    ):
+
+        return ""
 
     rotulos = [
         "Nome da empresa",
@@ -1247,10 +1280,11 @@ Regras:
 - Nao considerar e-mail valido sem @.
 - Nao preencher e-mail com dominio incompleto.
 - Para CNPJ, quando houver ambiguidade, sinalizar confirmacao em vez de afirmar.
-- Se a transcricao estiver confusa, curta ou cheia de ruido, escreva isso no descritivo de forma objetiva e nao transforme suposicoes em fatos.
+- Se a transcricao estiver confusa, curta ou cheia de ruido, documente apenas as informacoes uteis identificadas.
 - Nao diga "foi identificado", "foi analisado", "foi orientado" ou "status final" se a transcricao nao mostrar isso claramente.
 - Se so houver pedido de acesso remoto, registre apenas que foi solicitado acesso remoto para verificacao.
-- Se a ligacao estiver em andamento ou sem conclusao clara, registre no descritivo que nao houve conclusao clara.
+- Se nao houver conclusao explicita, finalize o descritivo com a ultima orientacao ou informacao util identificada.
+- Nunca escreva frases como "O atendimento nao apresentou conclusao clara", "A transcricao esta confusa", "Nao ha informacoes suficientes", "Nao foi possivel identificar" ou "A conclusao nao ficou clara".
 
 - Corrija termos fiscais comuns quando o contexto confirmar: ISDS-QN, ISQN ou ISS QN = ISSQN; Sintes Nacional ou Sintese Nacional = Simples Nacional; nota de servico = NFS-e; retencao de IS = retencao de ISS.
 - Use correcoes de termos apenas para vocabulario tecnico. Nao use isso para inventar CNPJ, telefone, e-mail, empresa, loja ou nome de cliente.
