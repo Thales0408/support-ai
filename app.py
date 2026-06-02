@@ -837,10 +837,7 @@ def campo_zendesk_informado(valor):
 
 def valor_obrigatorio_zendesk(valor):
 
-    texto = normalizar_campo_zendesk(
-        valor,
-        limite=160
-    )
+    texto = limpar_valor_estruturado(valor, limite=160)
 
     if campo_zendesk_informado(texto):
 
@@ -849,11 +846,61 @@ def valor_obrigatorio_zendesk(valor):
     return ""
 
 
-def normalizar_email_zendesk(valor):
+def limpar_valor_estruturado(valor, limite=160):
 
     texto = normalizar_campo_zendesk(
         valor,
         padrao="",
+        limite=limite
+    )
+    texto = re.sub(
+        r"\s+",
+        " ",
+        texto
+    ).strip()
+
+    rotulos = [
+        "Nome da empresa",
+        "Empresa/Loja",
+        "CNPJ",
+        "Nome do Cliente",
+        "Telefone de contato",
+        "E-mail Solicitante",
+        "Email Solicitante",
+        "Analista responsável",
+        "Analista responsavel",
+        "Descritivo da ocorrência do atendimento",
+        "Descritivo da ocorrencia do atendimento"
+    ]
+
+    for rotulo in rotulos:
+
+        if re.fullmatch(
+            re.escape(rotulo) + r"\s*:?",
+            texto,
+            flags=re.IGNORECASE
+        ):
+
+            return ""
+
+        texto = re.sub(
+            r"^" + re.escape(rotulo) + r"\s*:\s*",
+            "",
+            texto,
+            flags=re.IGNORECASE
+        ).strip()
+
+    if re.fullmatch(r"[A-Za-zÀ-ÿ /-]{2,45}\s*:", texto):
+
+        return ""
+
+    return texto[:limite]
+
+
+def normalizar_email_zendesk(valor):
+
+    texto = limpar_valor_estruturado(
+        valor,
         limite=120
     )
 
@@ -884,6 +931,34 @@ def normalizar_email_zendesk(valor):
         return ""
 
     return email
+
+
+def remover_rotulos_do_descritivo(valor):
+
+    texto = str(valor or "")
+    rotulos = [
+        "Nome da empresa",
+        "Empresa/Loja",
+        "CNPJ",
+        "Nome do Cliente",
+        "Telefone de contato",
+        "E-mail Solicitante",
+        "Email Solicitante",
+        "Analista responsável",
+        "Analista responsavel",
+        "Descritivo da ocorrência do atendimento",
+        "Descritivo da ocorrencia do atendimento"
+    ]
+
+    for rotulo in rotulos:
+
+        texto = re.sub(
+            r"(?im)^\s*" + re.escape(rotulo) + r"\s*:.*$",
+            "",
+            texto
+        )
+
+    return texto.strip()
 
 
 def resumo_zendesk_exato(
@@ -926,7 +1001,9 @@ def resumo_zendesk_exato(
         "Analista responsável: " + normalizar_campo_zendesk(analista, limite=120),
         (
             "Descritivo da ocorrência do atendimento:\n"
-            + normalizar_descritivo_zendesk(descritivo)
+            + normalizar_descritivo_zendesk(
+                remover_rotulos_do_descritivo(descritivo)
+            )
         )
     ])
 
@@ -1146,41 +1223,26 @@ def analisar_com_ia(transcricao, analista_responsavel=None):
     prompt = f"""
 Voce e um analista senior de suporte ERP.
 
-Gere um JSON valido para um atendimento de suporte ERP.
-
-O texto final para Zendesk DEVE manter quebras de linha e linhas em branco entre campos.
-Mantenha sempre todos os campos abaixo.
-Quando um campo nao for identificado na transcricao, deixe vazio apos os dois pontos.
-Nao use "Não informado", "Não identificado na ligação" ou null.
-
-Nome da empresa:
-
-Empresa/Loja:
-
-CNPJ:
-
-Nome do Cliente:
-
-Telefone de contato:
-
-E-mail Solicitante:
-
-Analista responsável: [nome do analista logado, se disponivel]
-
-Descritivo da ocorrência do atendimento:
-[Explique de forma clara o problema relatado, o que foi analisado, quais orientacoes foram passadas e o status final.]
+Gere apenas um JSON valido para um atendimento de suporte ERP.
+Nao gere o texto final do Zendesk.
+O backend montara o texto final em ordem fixa.
+Quando um campo nao for identificado na transcricao, retorne string vazia.
+Nao use "Não informado", "Não identificado na ligação", null ou rotulos como valor.
 
 Regras:
 - Nao escrever tudo em uma linha.
 - Nao inventar CNPJ, telefone, e-mail, empresa, cliente, erro, solucao ou status.
-- Se nao tiver a informacao na transcricao, deixe o campo vazio apos os dois pontos.
+- Se nao tiver a informacao na transcricao, retorne string vazia no JSON.
 - Escrever como documentacao para colar no Zendesk.
 - Nao usar markdown.
 - Nao usar bullets se nao houver passo a passo.
 - Se houver procedimento, separar em passos numerados.
 - Preserve termos tecnicos do ERP quando aparecerem.
 - Use somente uma categoria principal.
-- O campo descritivo_atendimento deve conter apenas o texto do descritivo, sem repetir os demais campos.
+- O campo descritivo deve conter apenas o texto do descritivo, sem repetir os demais campos.
+- Nunca coloque rotulos de campos dentro do descritivo.
+- Nunca deixe um rotulo virar valor de outro campo.
+- Se o valor de um campo seria apenas "Telefone de contato:" ou "E-mail Solicitante:", retorne string vazia.
 - Se o CNPJ nao tiver exatamente 14 digitos claros, retorne vazio no JSON, exceto quando houver sequencia parecida com CNPJ.
 - Nao considerar e-mail valido sem @.
 - Nao preencher e-mail com dominio incompleto.
@@ -1200,15 +1262,14 @@ Analista logado:
 
 Formato JSON:
 {{
-  "resumo_zendesk": "texto final no formato exato acima",
   "nome_empresa": "...",
   "empresa_loja": "...",
   "cnpj": "...",
   "nome_cliente": "...",
-  "telefone_contato": "...",
-  "email_solicitante": "...",
+  "telefone": "...",
+  "email": "...",
   "analista_responsavel": "...",
-  "descritivo_atendimento": "...",
+  "descritivo": "...",
   "sentimento_cliente": "positivo|neutro|negativo|frustrado",
   "urgencia": "baixa|media|alta|critica",
   "categoria": "fiscal|pdv|financeiro|estoque|cadastro|acesso|vendas|relatorios|integracao|outro",
@@ -1264,7 +1325,8 @@ Transcricao:
         }
 
     descritivo = normalizar_descritivo_zendesk(
-        dados.get("descritivo_atendimento")
+        dados.get("descritivo")
+        or dados.get("descritivo_atendimento")
     )
 
     resumo = resumo_zendesk_exato(
@@ -1273,8 +1335,14 @@ Transcricao:
         cnpj=dados.get("cnpj"),
         cnpj_contexto=transcricao,
         cliente=dados.get("nome_cliente"),
-        telefone=dados.get("telefone_contato"),
-        email=dados.get("email_solicitante"),
+        telefone=(
+            dados.get("telefone")
+            or dados.get("telefone_contato")
+        ),
+        email=(
+            dados.get("email")
+            or dados.get("email_solicitante")
+        ),
         analista=(
             analista_responsavel
             or dados.get("analista_responsavel")
