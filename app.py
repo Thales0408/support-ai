@@ -45,14 +45,18 @@ from config import (
     MAX_CHUNKS_PER_CALL,
     SECRET_KEY,
     SUMMARY_MODEL,
+    TRANSCRIBE_FALLBACK_PROVIDER,
     TRANSCRIBE_MODEL,
     TRANSCRIBE_PROVIDER,
     USD_BRL_RATE,
     ler_env
 )
 from services.ai import (
+    LimiteCustoFallbackTranscricao,
     cliente_resumo,
     estimar_custo_atendimento,
+    estimar_custo_transcricao,
+    estimar_custo_transcricao_por_provedor,
     transcrever_chunk
 )
 from services.database import (
@@ -61,6 +65,7 @@ from services.database import (
     inicializar_banco
 )
 from services.usage import (
+    avaliar_limites_custo_transcricao,
     avaliar_limites_custo_resumo,
     custo_brl,
     registrar_uso_evento,
@@ -359,6 +364,37 @@ def validar_limites_custo_resumo(
     )
 
 
+def validar_limite_custo_fallback_transcricao(
+    cursor,
+    usuario_id,
+    atendimento_id,
+    custo_estimado_usd
+):
+
+    limite = avaliar_limites_custo_transcricao(
+        cursor,
+        usuario_id,
+        atendimento_id,
+        custo_estimado_usd
+    )
+
+    if not limite:
+
+        return None
+
+    log_evento(
+        limite["evento"],
+        **limite["log"]
+    )
+
+    return erro_limite(
+        limite["mensagem"],
+        tipo=limite["evento"],
+        deve_parar_gravacao=True,
+        **limite["resposta"]
+    )
+
+
 def usuario_filtro_atendimentos():
 
     usuario_id = usuario_logado()
@@ -450,21 +486,24 @@ def registrar_erro_chunk(
                     ordem,
                     texto,
                     status,
-                    erro
+                    erro,
+                    provider_tentado
                 )
-                VALUES (%s, %s, %s, %s, 'erro', %s)
+                VALUES (%s, %s, %s, %s, 'erro', %s, %s)
                 ON CONFLICT (atendimento_id, ordem)
                 DO UPDATE SET
                     texto = EXCLUDED.texto,
                     status = 'erro',
-                    erro = EXCLUDED.erro
+                    erro = EXCLUDED.erro,
+                    provider_tentado = EXCLUDED.provider_tentado
                 """,
                 (
                     atendimento_id,
                     usuario_id,
                     ordem_int,
                     "",
-                    str(erro)[:500]
+                    str(erro)[:500],
+                    TRANSCRIBE_PROVIDER
                 )
             )
 
@@ -1982,6 +2021,7 @@ def health():
             "database": "ok",
             "db_config": diagnostico_banco(),
             "transcribe_provider": TRANSCRIBE_PROVIDER,
+            "transcribe_fallback_provider": TRANSCRIBE_FALLBACK_PROVIDER,
             "transcribe_model": TRANSCRIBE_MODEL,
             "groq_configurado": bool(GROQ_API_KEY),
             "openai_configurado": bool(OPENAI_API_KEY),
@@ -2211,13 +2251,72 @@ def receber_chunk():
                 "motivo": "audio_muito_curto"
             })
 
-        texto = limpar_vazamento_prompt_transcricao(
-            transcrever_chunk(arquivo)
+        def validar_fallback_openai():
+
+            custo_fallback = estimar_custo_transcricao(
+                CHUNK_SECONDS,
+                "openai"
+            )
+
+            with conectar_banco() as conn:
+
+                with conn.cursor() as cursor:
+
+                    limite_resposta = (
+                        validar_limite_custo_fallback_transcricao(
+                            cursor,
+                            usuario_id,
+                            atendimento_id,
+                            custo_fallback
+                        )
+                    )
+
+                    if limite_resposta:
+
+                        raise LimiteCustoFallbackTranscricao(
+                            limite_resposta
+                        )
+
+            log_evento(
+                "transcricao_fallback_openai",
+                usuario_id=usuario_id,
+                atendimento_id=atendimento_id,
+                ordem=ordem_int,
+                custo_estimado_usd=custo_fallback
+            )
+
+        transcricao_chunk = transcrever_chunk(
+            arquivo,
+            validar_fallback=validar_fallback_openai
         )
+
+        texto = limpar_vazamento_prompt_transcricao(
+            transcricao_chunk["texto"]
+        )
+        provider_tentado = transcricao_chunk["provider_tentado"]
+        provider_usado = transcricao_chunk["provider_usado"]
+        fallback_usado = transcricao_chunk["fallback_usado"]
 
         with conectar_banco() as conn:
 
             with conn.cursor() as cursor:
+
+                cursor.execute(
+                    """
+                    SELECT status, provider_usado, fallback_usado
+                    FROM transcricoes_chunks
+                    WHERE atendimento_id = %s
+                    AND usuario_id = %s
+                    AND ordem = %s
+                    """,
+                    (
+                        atendimento_id,
+                        usuario_id,
+                        ordem_int
+                    )
+                )
+
+                chunk_anterior = cursor.fetchone()
 
                 cursor.execute(
                     """
@@ -2227,20 +2326,29 @@ def receber_chunk():
                         ordem,
                         texto,
                         status,
-                        erro
+                        erro,
+                        provider_tentado,
+                        provider_usado,
+                        fallback_usado
                     )
-                    VALUES (%s, %s, %s, %s, 'transcrito', NULL)
+                    VALUES (%s, %s, %s, %s, 'transcrito', NULL, %s, %s, %s)
                     ON CONFLICT (atendimento_id, ordem)
                     DO UPDATE SET
                         texto = EXCLUDED.texto,
                         status = 'transcrito',
-                        erro = NULL
+                        erro = NULL,
+                        provider_tentado = EXCLUDED.provider_tentado,
+                        provider_usado = EXCLUDED.provider_usado,
+                        fallback_usado = EXCLUDED.fallback_usado
                     """,
                     (
                         atendimento_id,
                         usuario_id,
                         ordem_int,
-                        texto
+                        texto,
+                        provider_tentado,
+                        provider_usado,
+                        fallback_usado
                     )
                 )
 
@@ -2257,19 +2365,52 @@ def receber_chunk():
                     )
                 )
 
+                fallback_openai_ja_registrado = (
+                    chunk_anterior
+                    and chunk_anterior[0] == "transcrito"
+                    and chunk_anterior[1] == "openai"
+                    and chunk_anterior[2]
+                )
+
+                if (
+                    fallback_usado
+                    and provider_usado == "openai"
+                    and not fallback_openai_ja_registrado
+                ):
+
+                    registrar_uso_evento(
+                        cursor,
+                        usuario_id,
+                        atendimento_id,
+                        "transcricao_fallback",
+                        estimar_custo_transcricao(
+                            CHUNK_SECONDS,
+                            "openai"
+                        )
+                    )
+
         log_evento(
             "chunk_transcrito",
             usuario_id=usuario_id,
             atendimento_id=atendimento_id,
             ordem=ordem_int,
             tamanho_audio=tamanho_audio,
-            caracteres=len(texto)
+            caracteres=len(texto),
+            provider_tentado=provider_tentado,
+            provider_usado=provider_usado,
+            fallback_usado=fallback_usado
         )
 
         return jsonify({
             "status": "chunk_transcrito",
-            "texto": texto
+            "texto": texto,
+            "provider_usado": provider_usado,
+            "fallback_usado": fallback_usado
         })
+
+    except LimiteCustoFallbackTranscricao as e:
+
+        return e.limite_resposta
 
     except RateLimitError as e:
 
@@ -2282,6 +2423,27 @@ def receber_chunk():
             e,
             status_atendimento="limite_transcricao"
         )
+
+        if (
+            TRANSCRIBE_PROVIDER == "groq"
+            and TRANSCRIBE_FALLBACK_PROVIDER == "openai"
+        ):
+
+            log_evento(
+                "chunk_erro_fallback",
+                usuario_id=usuario_id,
+                atendimento_id=atendimento_id,
+                ordem=ordem_int,
+                provider_tentado="groq",
+                provider_usado="openai",
+                fallback_usado=True,
+                erro=str(e)[:500]
+            )
+
+            return jsonify({
+                "erro": "Nao foi possivel transcrever este trecho. Tente novamente.",
+                "status": "erro_chunk"
+            }), 500
 
         log_evento(
             "limite_transcricao_429",
@@ -2308,6 +2470,29 @@ def receber_chunk():
 
         logger.exception("ERRO AO TRANSCREVER CHUNK")
 
+        if getattr(e, "status_code", None) == 400:
+
+            registrar_erro_chunk(
+                usuario_id,
+                atendimento_id,
+                ordem_int,
+                e
+            )
+
+            log_evento(
+                "chunk_audio_invalido",
+                usuario_id=usuario_id,
+                atendimento_id=atendimento_id,
+                ordem=ordem_int,
+                provider_tentado=TRANSCRIBE_PROVIDER,
+                erro=str(e)[:500]
+            )
+
+            return jsonify({
+                "erro": "Audio invalido para transcricao.",
+                "status": "erro_chunk"
+            }), 400
+
         if erro_rate_limit_transcricao(e):
 
             registrar_erro_chunk(
@@ -2317,6 +2502,27 @@ def receber_chunk():
                 e,
                 status_atendimento="limite_transcricao"
             )
+
+            if (
+                TRANSCRIBE_PROVIDER == "groq"
+                and TRANSCRIBE_FALLBACK_PROVIDER == "openai"
+            ):
+
+                log_evento(
+                    "chunk_erro_fallback",
+                    usuario_id=usuario_id,
+                    atendimento_id=atendimento_id,
+                    ordem=ordem_int,
+                    provider_tentado="groq",
+                    provider_usado="openai",
+                    fallback_usado=True,
+                    erro=str(e)[:500]
+                )
+
+                return jsonify({
+                    "erro": "Nao foi possivel transcrever este trecho. Tente novamente.",
+                    "status": "erro_chunk"
+                }), 500
 
             log_evento(
                 "limite_transcricao_429",
@@ -2355,7 +2561,7 @@ def receber_chunk():
         )
 
         return jsonify({
-            "erro": "Falha ao transcrever este trecho",
+            "erro": "Nao foi possivel transcrever este trecho. Tente novamente.",
             "status": "erro_chunk"
         }), 500
 
@@ -2434,6 +2640,30 @@ def finalizar_atendimento():
             )
 
             total_banco, falhos_banco = cursor.fetchone()
+
+            cursor.execute(
+                """
+                SELECT
+                    COALESCE(provider_usado, %s),
+                    COUNT(*)
+                FROM transcricoes_chunks
+                WHERE atendimento_id = %s
+                AND usuario_id = %s
+                AND status = 'transcrito'
+                GROUP BY COALESCE(provider_usado, %s)
+                """,
+                (
+                    TRANSCRIBE_PROVIDER,
+                    atendimento_id,
+                    usuario_id,
+                    TRANSCRIBE_PROVIDER
+                )
+            )
+
+            chunks_por_provider = {
+                row[0]: int(row[1] or 0)
+                for row in cursor.fetchall()
+            }
 
             uso = uso_diario_usuario(
                 cursor,
@@ -2525,9 +2755,27 @@ def finalizar_atendimento():
             limite_segundos=MAX_AUDIO_MINUTES_PER_DAY * 60
         )
 
-    custo_estimado = estimar_custo_atendimento(
-        segundos_transcritos,
-        bool(transcricao)
+    segundos_por_provider = {
+        provider: quantidade * CHUNK_SECONDS
+        for provider, quantidade in chunks_por_provider.items()
+    }
+
+    custo_estimado = estimar_custo_transcricao_por_provedor(
+        segundos_por_provider
+    )
+    custo_transcricao_openai = estimar_custo_transcricao(
+        segundos_por_provider.get("openai", 0),
+        "openai"
+    )
+
+    if bool(transcricao):
+
+        custo_estimado += estimar_custo_atendimento(0, True)
+        custo_estimado = round(custo_estimado, 4)
+
+    custo_evento_final = round(
+        max(0, custo_estimado - custo_transcricao_openai),
+        4
     )
 
     if transcricao:
@@ -2540,7 +2788,7 @@ def finalizar_atendimento():
                     cursor,
                     usuario_id,
                     atendimento_id,
-                    custo_estimado
+                    custo_evento_final
                 )
 
                 if limite_resposta:
@@ -2625,7 +2873,7 @@ def finalizar_atendimento():
                     usuario_id,
                     atendimento_id,
                     "resumo",
-                    custo_estimado
+                    custo_evento_final
                 )
 
     log_evento(
@@ -2638,6 +2886,7 @@ def finalizar_atendimento():
         segundos_transcritos=segundos_transcritos,
         custo_estimado_usd=custo_estimado,
         custo_estimado_brl=custo_brl(custo_estimado),
+        chunks_por_provider=chunks_por_provider,
         custo_dia_estimado_usd=round(
             uso["custo"] + float(custo_estimado or 0),
             4
@@ -2753,9 +3002,78 @@ def transcrever_arquivo_unico():
 
                 return limite_resposta
 
+    def validar_fallback_openai_upload_unico():
+
+        custo_fallback = estimar_custo_transcricao(
+            30,
+            "openai"
+        )
+
+        with conectar_banco() as conn:
+
+            with conn.cursor() as cursor:
+
+                limite_resposta = (
+                    validar_limite_custo_fallback_transcricao(
+                        cursor,
+                        usuario_id,
+                        None,
+                        custo_fallback
+                    )
+                )
+
+                if limite_resposta:
+
+                    raise LimiteCustoFallbackTranscricao(
+                        limite_resposta
+                    )
+
+        log_evento(
+            "transcricao_fallback_openai",
+            usuario_id=usuario_id,
+            atendimento_id=None,
+            ordem=None,
+            custo_estimado_usd=custo_fallback
+        )
+
+    try:
+
+        transcricao_chunk = transcrever_chunk(
+            arquivo,
+            validar_fallback=validar_fallback_openai_upload_unico
+        )
+
+    except LimiteCustoFallbackTranscricao as e:
+
+        return e.limite_resposta
+
     texto = limpar_vazamento_prompt_transcricao(
-        transcrever_chunk(arquivo)
+        transcricao_chunk["texto"]
     )
+    custo_estimado = round(
+        estimar_custo_transcricao(
+            30,
+            transcricao_chunk["provider_usado"]
+        )
+        + estimar_custo_atendimento(0, True),
+        4
+    )
+
+    with conectar_banco() as conn:
+
+        with conn.cursor() as cursor:
+
+            limite_resposta = validar_limites_custo_resumo(
+                cursor,
+                usuario_id,
+                None,
+                custo_estimado
+            )
+
+            if limite_resposta:
+
+                return limite_resposta
+
     analise = analisar_com_ia(
         texto,
         session.get("usuario_nome")

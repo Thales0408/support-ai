@@ -207,3 +207,64 @@ def avaliar_limites_custo_resumo(
         }
 
     return None
+
+
+def avaliar_limites_custo_transcricao(
+    cursor,
+    usuario_id,
+    atendimento_id,
+    custo_estimado_usd
+):
+
+    uso_usuario = uso_eventos_diario(
+        cursor,
+        usuario_id
+    )
+    uso_sistema = uso_eventos_diario(cursor)
+    custo_projetado = custo_brl(custo_estimado_usd)
+
+    if (
+        uso_usuario["custo_brl"] + custo_projetado
+        > MAX_COST_PER_USER_PER_DAY
+    ):
+
+        return {
+            "evento": "limite_custo_usuario_transcricao",
+            "mensagem": "Limite diario de custo por usuario atingido.",
+            "log": {
+                "usuario_id": usuario_id,
+                "atendimento_id": atendimento_id,
+                "custo_brl_atual": uso_usuario["custo_brl"],
+                "custo_brl_projetado": custo_projetado,
+                "limite": MAX_COST_PER_USER_PER_DAY
+            },
+            "resposta": {
+                "custo_hoje_brl": round(uso_usuario["custo_brl"], 4),
+                "custo_projetado_brl": custo_projetado,
+                "limite_custo_usuario_brl": MAX_COST_PER_USER_PER_DAY
+            }
+        }
+
+    if (
+        uso_sistema["custo_brl"] + custo_projetado
+        > MAX_SYSTEM_COST_PER_DAY
+    ):
+
+        return {
+            "evento": "limite_custo_sistema_transcricao",
+            "mensagem": "Limite diario de custo total do sistema atingido.",
+            "log": {
+                "usuario_id": usuario_id,
+                "atendimento_id": atendimento_id,
+                "custo_brl_atual": uso_sistema["custo_brl"],
+                "custo_brl_projetado": custo_projetado,
+                "limite": MAX_SYSTEM_COST_PER_DAY
+            },
+            "resposta": {
+                "custo_sistema_hoje_brl": round(uso_sistema["custo_brl"], 4),
+                "custo_projetado_brl": custo_projetado,
+                "limite_custo_sistema_brl": MAX_SYSTEM_COST_PER_DAY
+            }
+        }
+
+    return None

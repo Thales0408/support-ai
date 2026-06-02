@@ -304,6 +304,27 @@ def inicializar_banco():
 
             cursor.execute(
                 """
+                ALTER TABLE transcricoes_chunks
+                ADD COLUMN IF NOT EXISTS provider_tentado TEXT
+                """
+            )
+
+            cursor.execute(
+                """
+                ALTER TABLE transcricoes_chunks
+                ADD COLUMN IF NOT EXISTS provider_usado TEXT
+                """
+            )
+
+            cursor.execute(
+                """
+                ALTER TABLE transcricoes_chunks
+                ADD COLUMN IF NOT EXISTS fallback_usado BOOLEAN DEFAULT FALSE
+                """
+            )
+
+            cursor.execute(
+                """
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_chunks_atendimento_ordem
                 ON transcricoes_chunks (atendimento_id, ordem)
                 """

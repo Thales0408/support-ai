@@ -1,4 +1,12 @@
-from openai import OpenAI
+from io import BytesIO
+
+from openai import (
+    APIConnectionError,
+    APIStatusError,
+    APITimeoutError,
+    OpenAI,
+    RateLimitError
+)
 
 import re
 
@@ -6,11 +14,23 @@ from config import (
     GROQ_API_KEY,
     GROQ_BASE_URL,
     OPENAI_API_KEY,
+    OPENAI_TRANSCRIBE_MODEL,
     SUMMARY_USD_POR_ATENDIMENTO,
+    TRANSCRIBE_FALLBACK_PROVIDER,
     TRANSCRIBE_MODEL,
     TRANSCRIBE_PROVIDER,
-    TRANSCRIBE_USD_HORA
+    TRANSCRIBE_USD_HORA,
+    TRANSCRIBE_USD_HORA_GROQ,
+    TRANSCRIBE_USD_MINUTO_OPENAI
 )
+
+
+class LimiteCustoFallbackTranscricao(Exception):
+
+    def __init__(self, limite_resposta):
+
+        super().__init__("Limite de custo para fallback de transcricao")
+        self.limite_resposta = limite_resposta
 
 
 summary_client = (
@@ -29,9 +49,23 @@ def cliente_resumo():
     return summary_client
 
 
-def cliente_transcricao():
+PROMPT_TRANSCRICAO = (
+    "Transcreva em portugues do Brasil. "
+    "Contexto: atendimento de suporte tecnico para ERP, emissao de "
+    "nota fiscal, NFS-e, NF-e, NFC-e, ISSQN, Simples Nacional, "
+    "retencao de ISS, CNPJ, loja, cliente, certificado digital, XML, "
+    "Zendesk, AnyDesk, TeamViewer, caixa, venda, cadastro, produto, "
+    "financeiro, estoque, PDV, SAT e boleto. "
+    "Preserve numeros, CNPJ, nomes de empresa e termos fiscais. "
+    "Nao invente palavras quando houver silencio, ruido, musica, "
+    "eco ou fala inaudivel. Se um trecho estiver confuso, transcreva "
+    "somente as palavras audiveis."
+)
 
-    if TRANSCRIBE_PROVIDER == "groq":
+
+def cliente_transcricao(provider):
+
+    if provider == "groq":
 
         if not GROQ_API_KEY:
 
@@ -42,39 +76,61 @@ def cliente_transcricao():
             base_url=GROQ_BASE_URL
         )
 
-    if not summary_client:
+    if provider == "openai":
 
-        raise RuntimeError("OPENAI_API_KEY nao configurada")
+        if not summary_client:
 
-    return summary_client
+            raise RuntimeError("OPENAI_API_KEY nao configurada")
+
+        return summary_client
+
+    raise RuntimeError(f"Provedor de transcricao invalido: {provider}")
 
 
-def transcrever_chunk(arquivo):
+def modelo_transcricao(provider):
 
-    nome = arquivo.filename or "chunk.webm"
-    mime = arquivo.mimetype or "audio/webm"
+    if provider == "openai":
 
-    resposta = cliente_transcricao().audio.transcriptions.create(
-        model=TRANSCRIBE_MODEL,
+        return OPENAI_TRANSCRIBE_MODEL
+
+    return TRANSCRIBE_MODEL
+
+
+def erro_permite_fallback(e):
+
+    status_code = getattr(e, "status_code", None)
+    texto = str(e).lower()
+
+    if status_code == 400:
+
+        return False
+
+    return (
+        isinstance(e, (RateLimitError, APITimeoutError, APIConnectionError))
+        or status_code == 429
+        or (status_code is not None and int(status_code) >= 500)
+        or "rate limit" in texto
+        or "too many requests" in texto
+        or "timeout" in texto
+        or "timed out" in texto
+        or "connection" in texto
+        or "unavailable" in texto
+        or "requests per day" in texto
+    )
+
+
+def transcrever_bytes(provider, audio_bytes, nome, mime):
+
+    resposta = cliente_transcricao(provider).audio.transcriptions.create(
+        model=modelo_transcricao(provider),
         file=(
             nome,
-            arquivo.stream,
+            BytesIO(audio_bytes),
             mime
         ),
         language="pt",
         temperature=0,
-        prompt=(
-            "Transcreva em portugues do Brasil. "
-            "Contexto: atendimento de suporte tecnico para ERP, emissao de "
-            "nota fiscal, NFS-e, NF-e, NFC-e, ISSQN, Simples Nacional, "
-            "retencao de ISS, CNPJ, loja, cliente, certificado digital, XML, "
-            "Zendesk, AnyDesk, TeamViewer, caixa, venda, cadastro, produto, "
-            "financeiro, estoque, PDV, SAT e boleto. "
-            "Preserve numeros, CNPJ, nomes de empresa e termos fiscais. "
-            "Nao invente palavras quando houver silencio, ruido, musica, "
-            "eco ou fala inaudivel. Se um trecho estiver confuso, transcreva "
-            "somente as palavras audiveis."
-        )
+        prompt=PROMPT_TRANSCRICAO
     )
 
     return re.sub(
@@ -84,10 +140,100 @@ def transcrever_chunk(arquivo):
     ).strip()
 
 
+def transcrever_chunk(arquivo, validar_fallback=None):
+
+    nome = arquivo.filename or "chunk.webm"
+    mime = arquivo.mimetype or "audio/webm"
+    audio_bytes = arquivo.read()
+    provider_tentado = TRANSCRIBE_PROVIDER
+    fallback_provider = TRANSCRIBE_FALLBACK_PROVIDER
+
+    try:
+
+        texto = transcrever_bytes(
+            provider_tentado,
+            audio_bytes,
+            nome,
+            mime
+        )
+
+        return {
+            "texto": texto,
+            "provider_tentado": provider_tentado,
+            "provider_usado": provider_tentado,
+            "fallback_usado": False
+        }
+
+    except Exception as e:
+
+        if (
+            provider_tentado != "groq"
+            or fallback_provider != "openai"
+            or not erro_permite_fallback(e)
+        ):
+
+            raise
+
+        if validar_fallback:
+
+            validar_fallback()
+
+        texto = transcrever_bytes(
+            fallback_provider,
+            audio_bytes,
+            nome,
+            mime
+        )
+
+        return {
+            "texto": texto,
+            "provider_tentado": provider_tentado,
+            "provider_usado": fallback_provider,
+            "fallback_usado": True,
+            "erro_provider_principal": str(e)[:500]
+        }
+
+
+def estimar_custo_transcricao(segundos_transcritos, provider="groq"):
+
+    segundos = max(0, int(segundos_transcritos or 0))
+
+    if provider == "openai":
+
+        return round(
+            (segundos / 60) * TRANSCRIBE_USD_MINUTO_OPENAI,
+            4
+        )
+
+    if provider == "groq":
+
+        return round(
+            (segundos / 3600) * TRANSCRIBE_USD_HORA_GROQ,
+            4
+        )
+
+    horas = segundos / 3600
+
+    return round(horas * TRANSCRIBE_USD_HORA, 4)
+
+
+def estimar_custo_transcricao_por_provedor(contagem_provedores):
+
+    custo = 0
+
+    for provider, segundos in contagem_provedores.items():
+
+        custo += estimar_custo_transcricao(segundos, provider)
+
+    return round(custo, 4)
+
+
 def estimar_custo_atendimento(segundos_transcritos, gerou_resumo=True):
 
-    horas = max(0, int(segundos_transcritos or 0)) / 3600
-    custo = horas * TRANSCRIBE_USD_HORA
+    custo = estimar_custo_transcricao(
+        segundos_transcritos,
+        TRANSCRIBE_PROVIDER
+    )
 
     if gerou_resumo:
 
