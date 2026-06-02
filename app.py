@@ -9,6 +9,7 @@ from flask import (
 )
 
 from flask_cors import CORS
+from openai import RateLimitError
 from waitress import serve
 from datetime import datetime
 from openpyxl import Workbook
@@ -427,6 +428,72 @@ def erro_limite(
         "deve_parar_gravacao": deve_parar_gravacao,
         **dados
     }), 403
+
+
+def registrar_erro_chunk(
+    usuario_id,
+    atendimento_id,
+    ordem_int,
+    erro,
+    status_atendimento="erro_chunk"
+):
+
+    with conectar_banco() as conn:
+
+        with conn.cursor() as cursor:
+
+            cursor.execute(
+                """
+                INSERT INTO transcricoes_chunks (
+                    atendimento_id,
+                    usuario_id,
+                    ordem,
+                    texto,
+                    status,
+                    erro
+                )
+                VALUES (%s, %s, %s, %s, 'erro', %s)
+                ON CONFLICT (atendimento_id, ordem)
+                DO UPDATE SET
+                    texto = EXCLUDED.texto,
+                    status = 'erro',
+                    erro = EXCLUDED.erro
+                """,
+                (
+                    atendimento_id,
+                    usuario_id,
+                    ordem_int,
+                    "",
+                    str(erro)[:500]
+                )
+            )
+
+            cursor.execute(
+                """
+                UPDATE atendimentos
+                SET status = %s
+                WHERE id = %s
+                AND usuario_id = %s
+                """,
+                (
+                    status_atendimento,
+                    atendimento_id,
+                    usuario_id
+                )
+            )
+
+
+def erro_rate_limit_transcricao(e):
+
+    status_code = getattr(e, "status_code", None)
+    texto = str(e).lower()
+
+    return (
+        status_code == 429
+        or "rate limit" in texto
+        or "too many requests" in texto
+        or "requests per day" in texto
+    )
 
 
 def extrair_json_objeto(texto):
@@ -2204,52 +2271,80 @@ def receber_chunk():
             "texto": texto
         })
 
+    except RateLimitError as e:
+
+        logger.exception("LIMITE DA TRANSCRICAO ATINGIDO")
+
+        registrar_erro_chunk(
+            usuario_id,
+            atendimento_id,
+            ordem_int,
+            e,
+            status_atendimento="limite_transcricao"
+        )
+
+        log_evento(
+            "limite_transcricao_429",
+            usuario_id=usuario_id,
+            atendimento_id=atendimento_id,
+            ordem=ordem_int,
+            erro=str(e)[:500]
+        )
+
+        return jsonify({
+            "erro": "limite_atingido",
+            "limite": True,
+            "tipo": "limite_transcricao_groq",
+            "mensagem": (
+                "Limite diario da transcricao atingido. "
+                "A gravacao foi pausada automaticamente. "
+                "Finalize o atendimento para gerar o resumo com o conteudo ja capturado."
+            ),
+            "deve_parar_gravacao": True,
+            "status": "limite_transcricao"
+        }), 429
+
     except Exception as e:
 
         logger.exception("ERRO AO TRANSCREVER CHUNK")
 
-        with conectar_banco() as conn:
+        if erro_rate_limit_transcricao(e):
 
-            with conn.cursor() as cursor:
+            registrar_erro_chunk(
+                usuario_id,
+                atendimento_id,
+                ordem_int,
+                e,
+                status_atendimento="limite_transcricao"
+            )
 
-                cursor.execute(
-                    """
-                    INSERT INTO transcricoes_chunks (
-                        atendimento_id,
-                        usuario_id,
-                        ordem,
-                        texto,
-                        status,
-                        erro
-                    )
-                    VALUES (%s, %s, %s, %s, 'erro', %s)
-                    ON CONFLICT (atendimento_id, ordem)
-                    DO UPDATE SET
-                        texto = EXCLUDED.texto,
-                        status = 'erro',
-                        erro = EXCLUDED.erro
-                    """,
-                    (
-                        atendimento_id,
-                        usuario_id,
-                        ordem_int,
-                        "",
-                        str(e)[:500]
-                    )
-                )
+            log_evento(
+                "limite_transcricao_429",
+                usuario_id=usuario_id,
+                atendimento_id=atendimento_id,
+                ordem=ordem_int,
+                erro=str(e)[:500]
+            )
 
-                cursor.execute(
-                    """
-                    UPDATE atendimentos
-                    SET status = 'erro_chunk'
-                    WHERE id = %s
-                    AND usuario_id = %s
-                    """,
-                    (
-                        atendimento_id,
-                        usuario_id
-                    )
-                )
+            return jsonify({
+                "erro": "limite_atingido",
+                "limite": True,
+                "tipo": "limite_transcricao_groq",
+                "mensagem": (
+                    "Limite diario da transcricao atingido. "
+                    "A gravacao foi pausada automaticamente. "
+                    "Finalize o atendimento para gerar o resumo com o conteudo ja capturado."
+                ),
+                "deve_parar_gravacao": True,
+                "status": "limite_transcricao"
+            }), 429
+
+        registrar_erro_chunk(
+            usuario_id,
+            atendimento_id,
+            ordem_int,
+            e
+        )
 
         log_evento(
             "chunk_erro",
