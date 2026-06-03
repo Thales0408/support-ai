@@ -3060,6 +3060,66 @@ def receber_chunk():
         }), 500
 
 
+def resposta_finalizacao_salva(row):
+
+    custo_estimado = float(row[6] or 0)
+    resposta = {
+        "status": "finalizado",
+        "resultado": texto_zendesk_formatado(row[1]),
+        "chunks_total": row[2] or 0,
+        "chunks_falhos": row[3] or 0,
+        "chunks_ignorados": row[4] or 0,
+        "segundos_transcritos": row[5] or 0,
+        "reutilizado": True
+    }
+
+    if usuario_admin_tecnico():
+
+        resposta["custo_estimado_usd"] = custo_estimado
+        resposta["custo_estimado_brl"] = custo_brl(custo_estimado)
+
+    return resposta
+
+
+def conteudo_resumo_persistido(conteudo):
+
+    if not campo_zendesk_informado(conteudo):
+
+        return False
+
+    comparacao = normalizar_para_comparacao(conteudo)
+
+    return not any(
+        marcador in comparacao
+        for marcador in [
+            "transcricao em andamento",
+            "gravando",
+            "processando"
+        ]
+    )
+
+
+def liberar_finalizacao_atendimento(usuario_id, atendimento_id):
+
+    with conectar_banco() as conn:
+
+        with conn.cursor() as cursor:
+
+            cursor.execute(
+                """
+                UPDATE atendimentos
+                SET status = 'transcrevendo'
+                WHERE id = %s
+                AND usuario_id = %s
+                AND status = 'finalizando'
+                """,
+                (
+                    atendimento_id,
+                    usuario_id
+                )
+            )
+
+
 @app.route(
     "/atendimentos/finalizar",
     methods=["POST"]
@@ -3088,6 +3148,77 @@ def finalizar_atendimento():
         return jsonify({
             "erro": "Atendimento ausente"
         }), 400
+
+    with conectar_banco() as conn:
+
+        with conn.cursor() as cursor:
+
+            cursor.execute(
+                """
+                SELECT
+                    status,
+                    conteudo,
+                    chunks_total,
+                    chunks_falhos,
+                    chunks_ignorados,
+                    segundos_transcritos,
+                    custo_estimado_usd
+                FROM atendimentos
+                WHERE id = %s
+                AND usuario_id = %s
+                FOR UPDATE
+                """,
+                (
+                    atendimento_id,
+                    usuario_id
+                )
+            )
+
+            atendimento_atual = cursor.fetchone()
+
+            if not atendimento_atual:
+
+                return jsonify({
+                    "erro": "Atendimento nao encontrado"
+                }), 404
+
+            if conteudo_resumo_persistido(atendimento_atual[1]):
+
+                log_evento(
+                    "finalizacao_reutilizada",
+                    usuario_id=usuario_id,
+                    atendimento_id=atendimento_id
+                )
+
+                return jsonify(
+                    resposta_finalizacao_salva(atendimento_atual)
+                )
+
+            if atendimento_atual[0] == "finalizando":
+
+                log_evento(
+                    "finalizacao_duplicada_ignorada",
+                    usuario_id=usuario_id,
+                    atendimento_id=atendimento_id
+                )
+
+                return jsonify({
+                    "status": "finalizando",
+                    "mensagem": "Resumo final ja esta sendo gerado."
+                }), 202
+
+            cursor.execute(
+                """
+                UPDATE atendimentos
+                SET status = 'finalizando'
+                WHERE id = %s
+                AND usuario_id = %s
+                """,
+                (
+                    atendimento_id,
+                    usuario_id
+                )
+            )
 
     with conectar_banco() as conn:
 
@@ -3230,6 +3361,11 @@ def finalizar_atendimento():
             limite=MAX_CHUNKS_PER_CALL
         )
 
+        liberar_finalizacao_atendimento(
+            usuario_id,
+            atendimento_id
+        )
+
         return erro_limite(
             "Limite de trechos por atendimento atingido.",
             tipo="limite_chunks_atendimento",
@@ -3291,14 +3427,37 @@ def finalizar_atendimento():
 
                 if limite_resposta:
 
+                    liberar_finalizacao_atendimento(
+                        usuario_id,
+                        atendimento_id
+                    )
+
                     return limite_resposta
 
     if transcricao:
 
-        analise = analisar_com_ia(
-            transcricao,
-            session.get("usuario_nome")
+        log_evento(
+            "resumo_ia_solicitado",
+            origem="finalizar_atendimento",
+            usuario_id=usuario_id,
+            atendimento_id=atendimento_id
         )
+
+        try:
+
+            analise = analisar_com_ia(
+                transcricao,
+                session.get("usuario_nome")
+            )
+
+        except Exception:
+
+            liberar_finalizacao_atendimento(
+                usuario_id,
+                atendimento_id
+            )
+
+            raise
 
         resultado = analise["resumo_zendesk"]
 
@@ -3569,6 +3728,13 @@ def transcrever_arquivo_unico():
             if limite_resposta:
 
                 return limite_resposta
+
+    log_evento(
+        "resumo_ia_solicitado",
+        origem="upload_unico",
+        usuario_id=usuario_id,
+        atendimento_id=None
+    )
 
     analise = analisar_com_ia(
         texto,
@@ -4056,6 +4222,13 @@ def reprocessar_resumo_atendimento(atendimento_id):
             if limite_resposta:
 
                 return limite_resposta
+
+            log_evento(
+                "resumo_ia_solicitado",
+                origem="reprocessar_resumo_manual",
+                usuario_id=usuario_id,
+                atendimento_id=atendimento_id
+            )
 
             analise = analisar_com_ia(
                 transcricao,
