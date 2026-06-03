@@ -1581,6 +1581,168 @@ def normalizar_entidades_faladas(texto):
     return normalizar_blocos_cnpj_falados(texto_base)
 
 
+def limpar_nome_participante(valor):
+
+    texto = limpar_texto(valor or "")
+    texto = re.split(
+        (
+            r"\b(?:tudo bem|bom dia|boa tarde|boa noite|como vai|"
+            r"suporte|atendimento|gestao|gestão|click)\b"
+        ),
+        texto,
+        maxsplit=1,
+        flags=re.IGNORECASE
+    )[0]
+    texto = re.sub(
+        r"^(?:o|a|eu sou|me chamo)\s+",
+        "",
+        texto,
+        flags=re.IGNORECASE
+    )
+    texto = re.sub(
+        r"[^A-Za-zÀ-ÿ\s'-]",
+        "",
+        texto
+    )
+    texto = re.sub(
+        r"\s+",
+        " ",
+        texto
+    ).strip()
+
+    partes = texto.split()
+
+    if not partes or len(partes) > 4:
+
+        return ""
+
+    if any(len(parte) <= 1 for parte in partes):
+
+        return ""
+
+    return " ".join(
+        parte[:1].upper() + parte[1:]
+        for parte in partes
+    )
+
+
+def nomes_iguais(nome_a, nome_b):
+
+    return (
+        bool(nome_a)
+        and bool(nome_b)
+        and normalizar_para_comparacao(nome_a)
+        == normalizar_para_comparacao(nome_b)
+    )
+
+
+def extrair_analista_nome(texto):
+
+    padroes = [
+        r"\bmeu nome (?:é|e)\s+([^,.;\n]{2,60})",
+        r"\bsou (?:o|a)?\s*([^,.;\n]{2,60})",
+        r"\bfala com\s+([^,.;\n]{2,60})",
+        r"\baqui (?:é|e)\s+([^,.;\n]{2,60})"
+    ]
+
+    for padrao in padroes:
+
+        match = re.search(
+            padrao,
+            str(texto or ""),
+            flags=re.IGNORECASE
+        )
+
+        if match:
+
+            nome = limpar_nome_participante(
+                match.group(1)
+            )
+
+            if nome:
+
+                return nome
+
+    return ""
+
+
+def extrair_cliente_nome(texto, analista_nome=""):
+
+    padroes = [
+        r"\bnome do cliente (?:é|e)\s+([^,.;\n]{2,60})",
+        r"\bcliente se chama\s+([^,.;\n]{2,60})",
+        r"\bcliente[:\s]+([^,.;\n]{2,60})"
+    ]
+
+    for padrao in padroes:
+
+        match = re.search(
+            padrao,
+            str(texto or ""),
+            flags=re.IGNORECASE
+        )
+
+        if match:
+
+            nome = limpar_nome_participante(
+                match.group(1)
+            )
+
+            if nome and not nomes_iguais(nome, analista_nome):
+
+                return nome
+
+    return ""
+
+
+def extrair_empresa_transcricao(texto):
+
+    padroes = [
+        r"\braz[aã]o social (?:é|e|da|do)?\s+([^,.;\n]{3,100})",
+        r"\bempresa (?:é|e|da|do)?\s+([^,.;\n]{3,100})",
+        r"\bloja (?:é|e|da|do)?\s+([^,.;\n]{3,100})"
+    ]
+
+    for padrao in padroes:
+
+        match = re.search(
+            padrao,
+            str(texto or ""),
+            flags=re.IGNORECASE
+        )
+
+        if match:
+
+            empresa = limpar_valor_estruturado(
+                match.group(1),
+                limite=120
+            )
+
+            if campo_zendesk_informado(empresa):
+
+                return empresa
+
+    return ""
+
+
+def extrair_telefone_transcricao(texto):
+
+    match = re.search(
+        r"(?:telefone|celular|whats(?:app)?)\D{0,20}(\+?\d[\d\s().-]{7,}\d)",
+        str(texto or ""),
+        flags=re.IGNORECASE
+    )
+
+    if not match:
+
+        return ""
+
+    return limpar_valor_estruturado(
+        match.group(1),
+        limite=40
+    )
+
+
 def limpar_transcricao_para_resumo(texto):
 
     texto = limpar_vazamento_prompt_transcricao(
@@ -1667,10 +1829,18 @@ def limpar_transcricao_para_resumo(texto):
 def extrair_entidades_transcricao(texto):
 
     texto_base = str(texto or "").strip()
+    analista_nome = extrair_analista_nome(texto_base)
 
     return {
+        "analista_nome": analista_nome,
+        "cliente_nome": extrair_cliente_nome(
+            texto_base,
+            analista_nome
+        ),
+        "empresa": extrair_empresa_transcricao(texto_base),
         "cnpj": extrair_possivel_cnpj(texto_base),
-        "email": normalizar_email_falado(texto_base)
+        "email": normalizar_email_falado(texto_base),
+        "telefone": extrair_telefone_transcricao(texto_base)
     }
 
 
@@ -1678,6 +1848,19 @@ def texto_entidades_extraidas(entidades):
 
     entidades = entidades or {}
     linhas = []
+
+    for chave in [
+        "analista_nome",
+        "cliente_nome",
+        "empresa",
+        "telefone"
+    ]:
+
+        if entidades.get(chave):
+
+            linhas.append(
+                chave + ": " + entidades[chave]
+            )
 
     if entidades.get("cnpj"):
 
@@ -2014,6 +2197,9 @@ Regras:
 - Nunca coloque rotulos de campos dentro do descritivo.
 - Nunca deixe um rotulo virar valor de outro campo.
 - Se o valor de um campo seria apenas "Telefone de contato:" ou "E-mail Solicitante:", retorne string vazia.
+- Nunca use nome presente em saudacao ou apresentacao do analista como nome do cliente.
+- Frases como "meu nome e", "sou o", "fala com" e "aqui e" normalmente indicam o analista, nao o cliente.
+- Se houver duvida entre analista e cliente, deixe nome_cliente vazio.
 - Se o CNPJ nao tiver exatamente 14 digitos claros, retorne vazio no JSON, exceto quando houver sequencia parecida com CNPJ.
 - Nao considerar e-mail valido sem @.
 - Nao preencher e-mail com dominio incompleto.
@@ -2103,9 +2289,31 @@ Entidades estruturadas extraidas pelo backend:
         dados.get("descritivo")
         or dados.get("descritivo_atendimento")
     )
+    analista_final = (
+        analista_responsavel
+        or entidades_extraidas.get("analista_nome")
+        or dados.get("analista_responsavel")
+    )
+    cliente_final = (
+        entidades_extraidas.get("cliente_nome")
+        or dados.get("nome_cliente")
+    )
+
+    if nomes_iguais(
+        cliente_final,
+        analista_final
+    ) or nomes_iguais(
+        cliente_final,
+        entidades_extraidas.get("analista_nome")
+    ):
+
+        cliente_final = ""
 
     resumo = resumo_zendesk_exato(
-        nome_empresa=dados.get("nome_empresa"),
+        nome_empresa=(
+            entidades_extraidas.get("empresa")
+            or dados.get("nome_empresa")
+        ),
         empresa_loja=dados.get("empresa_loja"),
         cnpj=(
             entidades_extraidas.get("cnpj")
@@ -2115,9 +2323,10 @@ Entidades estruturadas extraidas pelo backend:
             entidades_extraidas.get("cnpj")
             or transcricao
         ),
-        cliente=dados.get("nome_cliente"),
+        cliente=cliente_final,
         telefone=(
-            dados.get("telefone")
+            entidades_extraidas.get("telefone")
+            or dados.get("telefone")
             or dados.get("telefone_contato")
         ),
         email=(
@@ -2126,8 +2335,7 @@ Entidades estruturadas extraidas pelo backend:
             or dados.get("email_solicitante")
         ),
         analista=(
-            analista_responsavel
-            or dados.get("analista_responsavel")
+            analista_final
         ),
         descritivo=descritivo
     )

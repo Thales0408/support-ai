@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 import app
 
@@ -59,6 +60,13 @@ class EntidadesFaladasTest(unittest.TestCase):
         self.assertEqual(
             app.extrair_possivel_cnpj("CNPJ 09-114-915-1000-00"),
             self.POSSIVEL + "09.114.915/0001-00" + self.CONFIRMAR
+        )
+
+    def test_cnpj_1000_avalia_variante_0001_baixa_confianca(self):
+
+        self.assertEqual(
+            app.extrair_possivel_cnpj("CNPJ 43-405-954-1000-97"),
+            self.POSSIVEL + "43.405.954/0001-97" + self.CONFIRMAR
         )
 
     def test_cnpj_numericamente_blocos_1000_a_9000(self):
@@ -145,6 +153,61 @@ class EntidadesFaladasTest(unittest.TestCase):
             entidades["email"],
             "suporteequipamentos@gmail.com"
         )
+
+    def test_extrair_analista_nao_preenche_cliente_por_saudacao(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            "Meu nome e Thales, falo do suporte. Qual o CNPJ da empresa?"
+        )
+
+        self.assertEqual(entidades["analista_nome"], "Thales")
+        self.assertEqual(entidades["cliente_nome"], "")
+
+    def test_analisar_com_ia_remove_cliente_igual_analista(self):
+
+        class Mensagem:
+            content = (
+                '{"nome_empresa":"","empresa_loja":"","cnpj":"",'
+                '"nome_cliente":"Thales","telefone":"","email":"",'
+                '"analista_responsavel":"Thales",'
+                '"descritivo":"Solicitado acesso remoto.",'
+                '"sentimento_cliente":"neutro","urgencia":"media",'
+                '"categoria":"acesso","problema_principal":"Acesso remoto",'
+                '"tags":["acesso"]}'
+            )
+
+        class Choice:
+            message = Mensagem()
+
+        class Resposta:
+            choices = [Choice()]
+
+        class Completions:
+            def create(self, **kwargs):
+                return Resposta()
+
+        class Chat:
+            completions = Completions()
+
+        class Cliente:
+            chat = Chat()
+
+        with patch("app.cliente_resumo", return_value=Cliente()):
+            analise = app.analisar_com_ia(
+                "Meu nome e Thales. Cliente pediu acesso remoto.",
+                "Thales",
+                entidades_extraidas={
+                    "analista_nome": "Thales",
+                    "cliente_nome": "",
+                    "empresa": "",
+                    "cnpj": "",
+                    "email": "",
+                    "telefone": ""
+                }
+            )
+
+        self.assertIn("Analista responsável: Thales", analise["resumo_zendesk"])
+        self.assertIn("Nome do Cliente: \n", analise["resumo_zendesk"])
 
     def test_limpar_transcricao_para_resumo_remove_ruidos_sem_remover_numeros(self):
 
