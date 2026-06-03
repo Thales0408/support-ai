@@ -44,6 +44,18 @@ function csrfToken() {
         : ''
 }
 
+function csrfHeaders(headers = {}) {
+
+    const token =
+        csrfToken()
+
+    return {
+        ...headers,
+        'X-CSRF-Token': token,
+        'X-CSRFToken': token
+    }
+}
+
 async function lerRespostaJson(response, mensagemPadrao) {
 
     const contentType =
@@ -149,10 +161,9 @@ async function iniciarAtendimento() {
     const response =
         await fetch('/atendimentos/iniciar', {
             method: 'POST',
-            headers: {
+            headers: csrfHeaders({
                 'Content-Type': 'application/json',
-                'X-CSRF-Token': csrfToken()
-            },
+            }),
             body: JSON.stringify({
                 ticket_zendesk: ticketInput ? ticketInput.value : ''
             })
@@ -203,9 +214,7 @@ async function enviarChunk(blob, ordem, duracaoMs) {
     const response =
         await fetch('/atendimentos/chunk', {
             method: 'POST',
-            headers: {
-                'X-CSRF-Token': csrfToken()
-            },
+            headers: csrfHeaders(),
             body: formData
         })
 
@@ -285,10 +294,9 @@ async function finalizarAtendimento(duracao) {
     const response =
         await fetch('/atendimentos/finalizar', {
             method: 'POST',
-            headers: {
+            headers: csrfHeaders({
                 'Content-Type': 'application/json',
-                'X-CSRF-Token': csrfToken()
-            },
+            }),
             body: JSON.stringify({
                 atendimento_id: atendimentoId,
                 duracao_segundos: Math.floor(duracao / 1000),

@@ -718,6 +718,14 @@
                 .querySelector('meta[name="csrf-token"]')
                 .getAttribute("content")
 
+        function csrfHeaders(headers = {}) {
+            return {
+                ...headers,
+                "X-CSRF-Token": CSRF_TOKEN,
+                "X-CSRFToken": CSRF_TOKEN
+            }
+        }
+
         const tbody =
             document.getElementById("tbody-atendimentos")
 
@@ -1539,10 +1547,9 @@
                 const response =
                     await fetch(`/atendimentos/${detalheAtual.id}/resumo`, {
                         method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                            "X-CSRF-Token": CSRF_TOKEN
-                        },
+                        headers: csrfHeaders({
+                            "Content-Type": "application/json"
+                        }),
                         body: JSON.stringify({
                             resumo: document.getElementById("modal-resumo").value,
                             ticket_zendesk: document.getElementById("modal-ticket").value
@@ -1575,9 +1582,7 @@
                 const response =
                     await fetch(`/atendimentos/${detalheAtual.id}/reprocessar-resumo`, {
                         method: "POST",
-                        headers: {
-                            "X-CSRF-Token": CSRF_TOKEN
-                        }
+                        headers: csrfHeaders()
                     })
 
                 const data =
@@ -1611,10 +1616,9 @@
                 const response =
                     await fetch("/conta/senha", {
                         method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                            "X-CSRF-Token": CSRF_TOKEN
-                        },
+                        headers: csrfHeaders({
+                            "Content-Type": "application/json"
+                        }),
                         body: JSON.stringify({
                             senha_atual: document.getElementById("senha-atual").value,
                             nova_senha: document.getElementById("nova-senha").value

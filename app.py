@@ -126,6 +126,7 @@ def proteger_csrf():
     esperado = session.get("csrf_token")
     recebido = (
         request.headers.get("X-CSRF-Token")
+        or request.headers.get("X-CSRFToken")
         or request.form.get("csrf_token")
     )
 
