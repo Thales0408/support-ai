@@ -574,7 +574,8 @@ class FluxosIntegracaoTest(unittest.TestCase):
 
         self.assertEqual(chunk.status_code, 200)
         self.assertEqual(chunk.get_json()["status"], "chunk_transcrito")
-        self.assertIn("E-mail identificado", chunk.get_json()["texto"])
+        self.assertNotIn("E-mail identificado", chunk.get_json()["texto"])
+        self.assertNotIn("CNPJ identificado", chunk.get_json()["texto"])
 
         with patch("app.analisar_com_ia", return_value={
             "resumo_zendesk": app.resumo_zendesk_exato(
@@ -608,6 +609,22 @@ class FluxosIntegracaoTest(unittest.TestCase):
         self.assertIn("Nome da empresa:", resposta["resultado"])
         self.assertIn("E-mail Solicitante: suporteequipamentos@gmail.com", resposta["resultado"])
         self.assertEqual(mock_ia.call_count, 1)
+        self.assertNotIn(
+            "Possível CNPJ informado",
+            mock_ia.call_args.args[0]
+        )
+        self.assertIn(
+            "08 633 889 0001 56",
+            mock_ia.call_args.args[0]
+        )
+        self.assertEqual(
+            mock_ia.call_args.kwargs["entidades_extraidas"]["cnpj"],
+            "Possível CNPJ informado: 08.633.889/0001-56 — confirmar com cliente"
+        )
+        self.assertEqual(
+            mock_ia.call_args.kwargs["entidades_extraidas"]["email"],
+            "suporteequipamentos@gmail.com"
+        )
 
         with patch("app.analisar_com_ia") as mock_ia_repetida:
             repetida = self.post_json(

@@ -1077,6 +1077,15 @@ def candidatos_cnpj_por_grupos(fragmento):
             and len(final) >= 2
         ):
 
+            if re.fullmatch(r"[1-9]000", bloco):
+
+                candidatos.append(
+                    (
+                        base + "000" + bloco[0] + final[-2:],
+                        True
+                    )
+                )
+
             if bloco == "1000" and len(final) >= 3:
 
                 candidatos.append(
@@ -1536,32 +1545,37 @@ def normalizar_entidades_faladas(texto):
 
         return ""
 
-    enriquecimentos = []
-    comparacao = normalizar_para_comparacao(texto_base)
-    cnpj = extrair_possivel_cnpj(texto_base)
-    email = normalizar_email_falado(texto_base)
+    return normalizar_blocos_cnpj_falados(texto_base)
 
-    if cnpj and "cnpj identificado" not in comparacao:
 
-        enriquecimentos.append(
-            "CNPJ identificado: " + cnpj
+def extrair_entidades_transcricao(texto):
+
+    texto_base = str(texto or "").strip()
+
+    return {
+        "cnpj": extrair_possivel_cnpj(texto_base),
+        "email": normalizar_email_falado(texto_base)
+    }
+
+
+def texto_entidades_extraidas(entidades):
+
+    entidades = entidades or {}
+    linhas = []
+
+    if entidades.get("cnpj"):
+
+        linhas.append(
+            "cnpj: " + entidades["cnpj"]
         )
 
-    if email and "e-mail identificado" not in comparacao:
+    if entidades.get("email"):
 
-        enriquecimentos.append(
-            "E-mail identificado: " + email
+        linhas.append(
+            "email: " + entidades["email"]
         )
 
-    if not enriquecimentos:
-
-        return texto_base
-
-    return (
-        texto_base
-        + "\n"
-        + "\n".join(enriquecimentos)
-    )
+    return "\n".join(linhas)
 
 
 def remover_rotulos_do_descritivo(valor):
@@ -1849,7 +1863,17 @@ def texto_zendesk_formatado(conteudo):
     )
 
 
-def analisar_com_ia(transcricao, analista_responsavel=None):
+def analisar_com_ia(
+    transcricao,
+    analista_responsavel=None,
+    entidades_extraidas=None
+):
+
+    entidades_extraidas = entidades_extraidas or {}
+    entidades_texto = (
+        texto_entidades_extraidas(entidades_extraidas)
+        or "Nenhuma entidade estruturada extraida."
+    )
 
     prompt = f"""
 Voce e um analista senior de suporte ERP.
@@ -1911,6 +1935,9 @@ Formato JSON:
 
 Transcricao:
 {transcricao}
+
+Entidades estruturadas extraidas pelo backend:
+{entidades_texto}
 """
 
     resposta = cliente_resumo().chat.completions.create(
@@ -1964,15 +1991,22 @@ Transcricao:
     resumo = resumo_zendesk_exato(
         nome_empresa=dados.get("nome_empresa"),
         empresa_loja=dados.get("empresa_loja"),
-        cnpj=dados.get("cnpj"),
-        cnpj_contexto=transcricao,
+        cnpj=(
+            entidades_extraidas.get("cnpj")
+            or dados.get("cnpj")
+        ),
+        cnpj_contexto=(
+            entidades_extraidas.get("cnpj")
+            or transcricao
+        ),
         cliente=dados.get("nome_cliente"),
         telefone=(
             dados.get("telefone")
             or dados.get("telefone_contato")
         ),
         email=(
-            dados.get("email")
+            entidades_extraidas.get("email")
+            or dados.get("email")
             or dados.get("email_solicitante")
         ),
         analista=(
@@ -2781,10 +2815,9 @@ def receber_chunk():
             validar_fallback=validar_fallback_openai
         )
 
-        texto = limpar_vazamento_prompt_transcricao(
+        texto_original = limpar_vazamento_prompt_transcricao(
             transcricao_chunk["texto"]
         )
-        texto = normalizar_entidades_faladas(texto)
         provider_tentado = transcricao_chunk["provider_tentado"]
         provider_usado = transcricao_chunk["provider_usado"]
         fallback_usado = transcricao_chunk["fallback_usado"]
@@ -2839,7 +2872,7 @@ def receber_chunk():
                         atendimento_id,
                         usuario_id,
                         ordem_int,
-                        texto,
+                        texto_original,
                         provider_tentado,
                         provider_usado,
                         fallback_usado,
@@ -2890,7 +2923,7 @@ def receber_chunk():
             atendimento_id=atendimento_id,
             ordem=ordem_int,
             tamanho_audio=tamanho_audio,
-            caracteres=len(texto),
+            caracteres=len(texto_original),
             duracao_segundos=duracao_chunk_segundos,
             provider_tentado=provider_tentado,
             provider_usado=provider_usado,
@@ -2899,7 +2932,7 @@ def receber_chunk():
 
         return jsonify({
             "status": "chunk_transcrito",
-            "texto": texto,
+            "texto": texto_original,
             "provider_usado": provider_usado,
             "fallback_usado": fallback_usado
         })
@@ -3301,12 +3334,13 @@ def finalizar_atendimento():
                 atendimento_id
             )
 
-    transcricao = limpar_vazamento_prompt_transcricao(
+    transcricao_original = limpar_vazamento_prompt_transcricao(
         limpar_texto(
             " ".join(textos)
         )
     )
-    transcricao = normalizar_entidades_faladas(transcricao)
+    transcricao = normalizar_entidades_faladas(transcricao_original)
+    entidades_extraidas = extrair_entidades_transcricao(transcricao_original)
 
     chunks_total = max(
         int(chunks_total_cliente or 0),
@@ -3454,7 +3488,8 @@ def finalizar_atendimento():
 
             analise = analisar_com_ia(
                 transcricao,
-                session.get("usuario_nome")
+                session.get("usuario_nome"),
+                entidades_extraidas=entidades_extraidas
             )
 
         except Exception:
@@ -3708,10 +3743,11 @@ def transcrever_arquivo_unico():
 
         return e.limite_resposta
 
-    texto = limpar_vazamento_prompt_transcricao(
+    texto_original = limpar_vazamento_prompt_transcricao(
         transcricao_chunk["texto"]
     )
-    texto = normalizar_entidades_faladas(texto)
+    texto = normalizar_entidades_faladas(texto_original)
+    entidades_extraidas = extrair_entidades_transcricao(texto_original)
     custo_estimado = round(
         estimar_custo_transcricao(
             30,
@@ -3745,7 +3781,8 @@ def transcrever_arquivo_unico():
 
     analise = analisar_com_ia(
         texto,
-        session.get("usuario_nome")
+        session.get("usuario_nome"),
+        entidades_extraidas=entidades_extraidas
     )
     resultado = analise["resumo_zendesk"]
 
@@ -4205,7 +4242,9 @@ def reprocessar_resumo_atendimento(atendimento_id):
                     limpar_texto(row[0] or "")
                 )
             )
-            transcricao = normalizar_entidades_faladas(transcricao)
+            transcricao_original = transcricao
+            transcricao = normalizar_entidades_faladas(transcricao_original)
+            entidades_extraidas = extrair_entidades_transcricao(transcricao_original)
 
             if not transcricao:
 
@@ -4239,7 +4278,8 @@ def reprocessar_resumo_atendimento(atendimento_id):
 
             analise = analisar_com_ia(
                 transcricao,
-                row[3] or session.get("usuario_nome")
+                row[3] or session.get("usuario_nome"),
+                entidades_extraidas=entidades_extraidas
             )
             resumo = analise["resumo_zendesk"]
 
