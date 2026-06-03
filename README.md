@@ -84,6 +84,9 @@ TRANSCRIBE_USD_HORA_GROQ=
 TRANSCRIBE_USD_MINUTO_OPENAI=
 TRANSCRIBE_USD_HORA=
 SUMMARY_USD_POR_ATENDIMENTO=
+AUDIO_PREPROCESS_ENABLED=
+AUDIO_DIAGNOSTICS_DIR=
+FFMPEG_PATH=
 SECRET_KEY=
 ADMIN_USUARIO=
 ADMIN_SENHA=
@@ -109,9 +112,19 @@ OPENAI_TRANSCRIBE_MODEL=whisper-1
 GROQ_BASE_URL=https://api.groq.com/openai/v1
 TRANSCRIBE_USD_HORA_GROQ=0.04
 TRANSCRIBE_USD_MINUTO_OPENAI=0.006
+AUDIO_PREPROCESS_ENABLED=true
+CHUNK_SECONDS=45
 ```
 
 O `OPENAI_API_KEY` tem dois usos: gerar o resumo final e servir como fallback de transcricao quando `TRANSCRIBE_FALLBACK_PROVIDER=openai`. A transcricao principal e a Groq quando `TRANSCRIBE_PROVIDER=groq`; se a Groq retornar limite, indisponibilidade, timeout ou erro 5xx, o backend tenta OpenAI Whisper como fallback, respeitando os limites diarios de custo antes de enviar o audio.
+
+Para comparar modelos em um audio real:
+
+```text
+python tools/compare_transcription.py caminho/audio.webm
+```
+
+A ferramenta testa Groq `whisper-large-v3-turbo`, Groq `whisper-large-v3` e OpenAI `whisper-1`, exibindo tempo, custo estimado e diferencas principais.
 
 O backend prioriza `DB_*` quando `DB_PASSWORD` esta configurada. `DATABASE_URL` pode existir no Railway, mas nao deve ser a fonte principal enquanto o pooler do Supabase estiver configurado via `DB_*`.
 

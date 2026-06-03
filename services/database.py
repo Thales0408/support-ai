@@ -332,6 +332,83 @@ def inicializar_banco():
 
             cursor.execute(
                 """
+                ALTER TABLE transcricoes_chunks
+                ADD COLUMN IF NOT EXISTS transcricao_bruta TEXT
+                """
+            )
+
+            cursor.execute(
+                """
+                ALTER TABLE transcricoes_chunks
+                ADD COLUMN IF NOT EXISTS transcricao_normalizada TEXT
+                """
+            )
+
+            cursor.execute(
+                """
+                ALTER TABLE transcricoes_chunks
+                ADD COLUMN IF NOT EXISTS transcricao_limpa_para_resumo TEXT
+                """
+            )
+
+            cursor.execute(
+                """
+                ALTER TABLE transcricoes_chunks
+                ADD COLUMN IF NOT EXISTS modelo_usado TEXT
+                """
+            )
+
+            cursor.execute(
+                """
+                ALTER TABLE transcricoes_chunks
+                ADD COLUMN IF NOT EXISTS tamanho_audio_original INTEGER
+                """
+            )
+
+            cursor.execute(
+                """
+                ALTER TABLE transcricoes_chunks
+                ADD COLUMN IF NOT EXISTS tamanho_audio_processado INTEGER
+                """
+            )
+
+            cursor.execute(
+                """
+                ALTER TABLE transcricoes_chunks
+                ADD COLUMN IF NOT EXISTS audio_processado BOOLEAN DEFAULT FALSE
+                """
+            )
+
+            cursor.execute(
+                """
+                ALTER TABLE transcricoes_chunks
+                ADD COLUMN IF NOT EXISTS audio_original_path TEXT
+                """
+            )
+
+            cursor.execute(
+                """
+                ALTER TABLE transcricoes_chunks
+                ADD COLUMN IF NOT EXISTS audio_processado_path TEXT
+                """
+            )
+
+            cursor.execute(
+                """
+                ALTER TABLE transcricoes_chunks
+                ADD COLUMN IF NOT EXISTS tempo_transcricao_segundos NUMERIC(10, 4)
+                """
+            )
+
+            cursor.execute(
+                """
+                ALTER TABLE transcricoes_chunks
+                ADD COLUMN IF NOT EXISTS erro_preprocessamento TEXT
+                """
+            )
+
+            cursor.execute(
+                """
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_chunks_atendimento_ordem
                 ON transcricoes_chunks (atendimento_id, ordem)
                 """

@@ -31,8 +31,14 @@ let pararSegmentoAtual = null
 const TAMANHO_CHUNK_MS =
     Math.max(
         10,
-        Number(window.SUPPORT_AI_CHUNK_SECONDS || 60)
+        Number(window.SUPPORT_AI_CHUNK_SECONDS || 45)
     ) * 1000
+
+const GANHO_ABA =
+    Number(window.SUPPORT_AI_SYSTEM_GAIN || 1)
+
+const GANHO_MICROFONE =
+    Number(window.SUPPORT_AI_MIC_GAIN || 0.85)
 
 function csrfToken() {
 
@@ -422,12 +428,14 @@ function iniciarNovoSegmento() {
     const opcoesRecorder =
         MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
             ? {
-                mimeType: 'audio/webm;codecs=opus'
+                mimeType: 'audio/webm;codecs=opus',
+                audioBitsPerSecond: 128000
             }
             : (
                 MediaRecorder.isTypeSupported('audio/webm')
                     ? {
-                        mimeType: 'audio/webm'
+                        mimeType: 'audio/webm',
+                        audioBitsPerSecond: 128000
                     }
                     : undefined
             )
@@ -755,7 +763,12 @@ startBtn.onclick = async () => {
             await navigator
                 .mediaDevices
                 .getUserMedia({
-                    audio: true
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true,
+                        channelCount: 1
+                    }
                 })
 
         statusDiv.innerText =
@@ -775,6 +788,12 @@ startBtn.onclick = async () => {
             audioContext
                 .createMediaStreamDestination()
 
+        const channelMerger =
+            audioContext.createChannelMerger(2)
+
+        let conectouCanal =
+            false
+
         if (
             screenStream
                 .getAudioTracks()
@@ -790,9 +809,15 @@ startBtn.onclick = async () => {
                         ])
                     )
 
-            systemSource.connect(
-                destination
-            )
+            const systemGain =
+                audioContext.createGain()
+
+            systemGain.gain.value =
+                Number.isFinite(GANHO_ABA) ? GANHO_ABA : 1
+
+            systemSource.connect(systemGain)
+            systemGain.connect(channelMerger, 0, 0)
+            conectouCanal = true
         }
 
         if (
@@ -810,9 +835,22 @@ startBtn.onclick = async () => {
                         ])
                     )
 
-            micSource.connect(
-                destination
-            )
+            const micGain =
+                audioContext.createGain()
+
+            micGain.gain.value =
+                Number.isFinite(GANHO_MICROFONE) ? GANHO_MICROFONE : 0.85
+
+            micSource.connect(micGain)
+            micGain.connect(channelMerger, 0, 1)
+            conectouCanal = true
+        }
+
+        if (
+            conectouCanal
+        ) {
+
+            channelMerger.connect(destination)
         }
 
         finalStream =

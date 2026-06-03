@@ -1,5 +1,7 @@
 from io import BytesIO
 
+import time
+
 from openai import (
     APIConnectionError,
     APIStatusError,
@@ -23,6 +25,7 @@ from config import (
     TRANSCRIBE_USD_HORA_GROQ,
     TRANSCRIBE_USD_MINUTO_OPENAI
 )
+from services.audio import preprocessar_audio_transcricao
 
 
 class LimiteCustoFallbackTranscricao(Exception):
@@ -119,10 +122,10 @@ def erro_permite_fallback(e):
     )
 
 
-def transcrever_bytes(provider, audio_bytes, nome, mime):
+def transcrever_bytes(provider, audio_bytes, nome, mime, modelo=None):
 
     resposta = cliente_transcricao(provider).audio.transcriptions.create(
-        model=modelo_transcricao(provider),
+        model=modelo or modelo_transcricao(provider),
         file=(
             nome,
             BytesIO(audio_bytes),
@@ -140,28 +143,60 @@ def transcrever_bytes(provider, audio_bytes, nome, mime):
     ).strip()
 
 
+def transcrever_bytes_diagnostico(provider, audio_bytes, nome, mime):
+
+    modelo = modelo_transcricao(provider)
+    inicio = time.perf_counter()
+    texto = transcrever_bytes(
+        provider,
+        audio_bytes,
+        nome,
+        mime,
+        modelo=modelo
+    )
+
+    return {
+        "texto": texto,
+        "modelo_usado": modelo,
+        "tempo_transcricao_segundos": round(
+            time.perf_counter() - inicio,
+            4
+        )
+    }
+
+
 def transcrever_chunk(arquivo, validar_fallback=None):
 
     nome = arquivo.filename or "chunk.webm"
     mime = arquivo.mimetype or "audio/webm"
-    audio_bytes = arquivo.read()
+    audio_original = arquivo.read()
+    audio_preprocessado = preprocessar_audio_transcricao(
+        audio_original,
+        nome
+    )
+    audio_bytes = audio_preprocessado["audio_bytes"]
+    nome_transcricao = audio_preprocessado["nome"]
+    mime_transcricao = audio_preprocessado["mime"]
     provider_tentado = TRANSCRIBE_PROVIDER
     fallback_provider = TRANSCRIBE_FALLBACK_PROVIDER
 
     try:
 
-        texto = transcrever_bytes(
+        transcricao = transcrever_bytes_diagnostico(
             provider_tentado,
             audio_bytes,
-            nome,
-            mime
+            nome_transcricao,
+            mime_transcricao
         )
 
         return {
-            "texto": texto,
+            "texto": transcricao["texto"],
             "provider_tentado": provider_tentado,
             "provider_usado": provider_tentado,
-            "fallback_usado": False
+            "fallback_usado": False,
+            "modelo_usado": transcricao["modelo_usado"],
+            "tempo_transcricao_segundos": transcricao["tempo_transcricao_segundos"],
+            **audio_preprocessado
         }
 
     except Exception as e:
@@ -178,19 +213,22 @@ def transcrever_chunk(arquivo, validar_fallback=None):
 
             validar_fallback()
 
-        texto = transcrever_bytes(
+        transcricao = transcrever_bytes_diagnostico(
             fallback_provider,
             audio_bytes,
-            nome,
-            mime
+            nome_transcricao,
+            mime_transcricao
         )
 
         return {
-            "texto": texto,
+            "texto": transcricao["texto"],
             "provider_tentado": provider_tentado,
             "provider_usado": fallback_provider,
             "fallback_usado": True,
-            "erro_provider_principal": str(e)[:500]
+            "modelo_usado": transcricao["modelo_usado"],
+            "tempo_transcricao_segundos": transcricao["tempo_transcricao_segundos"],
+            "erro_provider_principal": str(e)[:500],
+            **audio_preprocessado
         }
 
 

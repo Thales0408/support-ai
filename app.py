@@ -1160,6 +1160,7 @@ def fragmentos_com_evidencia_cnpj(texto):
 def extrair_possivel_cnpj(texto):
 
     melhor_possivel = ""
+    melhor_bruto = ""
 
     for fragmento in fragmentos_com_evidencia_cnpj(texto):
 
@@ -1213,9 +1214,41 @@ def extrair_possivel_cnpj(texto):
 
                 melhor_possivel = candidato
 
+        if not melhor_bruto:
+
+            bruto = re.search(
+                r"\d[\d\s.,/\-]{7,}\d",
+                fragmento
+            )
+
+            if bruto:
+
+                valor_bruto = re.sub(
+                    r"\s+",
+                    " ",
+                    bruto.group(0)
+                ).strip(" ,.;:")
+                digitos_bruto = re.sub(
+                    r"\D",
+                    "",
+                    valor_bruto
+                )
+
+                if 8 <= len(digitos_bruto) < 14:
+
+                    melhor_bruto = valor_bruto
+
     if melhor_possivel:
 
         return possivel_cnpj_formatado(melhor_possivel)
+
+    if melhor_bruto:
+
+        return (
+            "Possível CNPJ informado: "
+            + melhor_bruto
+            + " — confirmar com cliente"
+        )
 
     return ""
 
@@ -1546,6 +1579,89 @@ def normalizar_entidades_faladas(texto):
         return ""
 
     return normalizar_blocos_cnpj_falados(texto_base)
+
+
+def limpar_transcricao_para_resumo(texto):
+
+    texto = limpar_vazamento_prompt_transcricao(
+        str(texto or "")
+    )
+    texto = re.sub(
+        r"\s+",
+        " ",
+        texto
+    ).strip()
+
+    if not texto:
+
+        return ""
+
+    ruidos = {
+        "nis",
+        "hum",
+        "uh",
+        "ahn",
+        "hã",
+        "ha",
+        "e aí",
+        "e ai"
+    }
+
+    frases = re.split(
+        r"(?<=[.!?])\s+|(?:\s+-\s+)",
+        texto
+    )
+    limpas = []
+
+    for frase in frases:
+
+        frase = frase.strip(" ,;:")
+
+        if not frase:
+
+            continue
+
+        comparacao = normalizar_para_comparacao(frase)
+
+        if comparacao in ruidos:
+
+            continue
+
+        if (
+            len(comparacao) <= 3
+            and not re.search(r"\d|@", frase)
+        ):
+
+            continue
+
+        limpas.append(frase)
+
+    texto = " ".join(limpas)
+
+    texto = re.sub(
+        r"\b(al[oô]\s*){3,}",
+        "alô ",
+        texto,
+        flags=re.IGNORECASE
+    )
+    texto = re.sub(
+        r"\b(nis[, ]+){2,}nis\b",
+        "",
+        texto,
+        flags=re.IGNORECASE
+    )
+    texto = re.sub(
+        r"\b(\w{2,})(?:\s+\1){2,}\b",
+        r"\1",
+        texto,
+        flags=re.IGNORECASE
+    )
+
+    return re.sub(
+        r"\s+",
+        " ",
+        texto
+    ).strip()
 
 
 def extrair_entidades_transcricao(texto):
@@ -2818,9 +2934,14 @@ def receber_chunk():
         texto_original = limpar_vazamento_prompt_transcricao(
             transcricao_chunk["texto"]
         )
+        texto_normalizado = normalizar_entidades_faladas(texto_original)
+        texto_limpo_para_resumo = limpar_transcricao_para_resumo(
+            texto_normalizado
+        )
         provider_tentado = transcricao_chunk["provider_tentado"]
         provider_usado = transcricao_chunk["provider_usado"]
         fallback_usado = transcricao_chunk["fallback_usado"]
+        modelo_usado = transcricao_chunk.get("modelo_usado")
 
         with conectar_banco() as conn:
 
@@ -2855,9 +2976,23 @@ def receber_chunk():
                         provider_tentado,
                         provider_usado,
                         fallback_usado,
-                        duracao_segundos
+                        duracao_segundos,
+                        transcricao_bruta,
+                        transcricao_normalizada,
+                        transcricao_limpa_para_resumo,
+                        modelo_usado,
+                        tamanho_audio_original,
+                        tamanho_audio_processado,
+                        audio_processado,
+                        audio_original_path,
+                        audio_processado_path,
+                        tempo_transcricao_segundos,
+                        erro_preprocessamento
                     )
-                    VALUES (%s, %s, %s, %s, 'transcrito', NULL, %s, %s, %s, %s)
+                    VALUES (
+                        %s, %s, %s, %s, 'transcrito', NULL, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    )
                     ON CONFLICT (atendimento_id, ordem)
                     DO UPDATE SET
                         texto = EXCLUDED.texto,
@@ -2866,17 +3001,39 @@ def receber_chunk():
                         provider_tentado = EXCLUDED.provider_tentado,
                         provider_usado = EXCLUDED.provider_usado,
                         fallback_usado = EXCLUDED.fallback_usado,
-                        duracao_segundos = EXCLUDED.duracao_segundos
+                        duracao_segundos = EXCLUDED.duracao_segundos,
+                        transcricao_bruta = EXCLUDED.transcricao_bruta,
+                        transcricao_normalizada = EXCLUDED.transcricao_normalizada,
+                        transcricao_limpa_para_resumo = EXCLUDED.transcricao_limpa_para_resumo,
+                        modelo_usado = EXCLUDED.modelo_usado,
+                        tamanho_audio_original = EXCLUDED.tamanho_audio_original,
+                        tamanho_audio_processado = EXCLUDED.tamanho_audio_processado,
+                        audio_processado = EXCLUDED.audio_processado,
+                        audio_original_path = EXCLUDED.audio_original_path,
+                        audio_processado_path = EXCLUDED.audio_processado_path,
+                        tempo_transcricao_segundos = EXCLUDED.tempo_transcricao_segundos,
+                        erro_preprocessamento = EXCLUDED.erro_preprocessamento
                     """,
                     (
                         atendimento_id,
                         usuario_id,
                         ordem_int,
-                        texto_original,
+                        texto_limpo_para_resumo,
                         provider_tentado,
                         provider_usado,
                         fallback_usado,
-                        duracao_chunk_segundos
+                        duracao_chunk_segundos,
+                        texto_original,
+                        texto_normalizado,
+                        texto_limpo_para_resumo,
+                        modelo_usado,
+                        transcricao_chunk.get("tamanho_audio_original", tamanho_audio),
+                        transcricao_chunk.get("tamanho_audio_processado", tamanho_audio),
+                        bool(transcricao_chunk.get("audio_processado")),
+                        transcricao_chunk.get("audio_original_path", ""),
+                        transcricao_chunk.get("audio_processado_path", ""),
+                        transcricao_chunk.get("tempo_transcricao_segundos", 0),
+                        transcricao_chunk.get("erro_preprocessamento", "")
                     )
                 )
 
@@ -2923,18 +3080,27 @@ def receber_chunk():
             atendimento_id=atendimento_id,
             ordem=ordem_int,
             tamanho_audio=tamanho_audio,
-            caracteres=len(texto_original),
+            tamanho_audio_original=transcricao_chunk.get("tamanho_audio_original", tamanho_audio),
+            tamanho_audio_processado=transcricao_chunk.get("tamanho_audio_processado", tamanho_audio),
+            audio_processado=bool(transcricao_chunk.get("audio_processado")),
+            caracteres_bruto=len(texto_original),
+            caracteres_limpo=len(texto_limpo_para_resumo),
             duracao_segundos=duracao_chunk_segundos,
             provider_tentado=provider_tentado,
             provider_usado=provider_usado,
-            fallback_usado=fallback_usado
+            modelo_usado=modelo_usado,
+            fallback_usado=fallback_usado,
+            tempo_transcricao_segundos=transcricao_chunk.get("tempo_transcricao_segundos", 0),
+            erro_preprocessamento=transcricao_chunk.get("erro_preprocessamento", "")
         )
 
         return jsonify({
             "status": "chunk_transcrito",
-            "texto": texto_original,
+            "texto": texto_limpo_para_resumo,
             "provider_usado": provider_usado,
-            "fallback_usado": fallback_usado
+            "modelo_usado": modelo_usado,
+            "fallback_usado": fallback_usado,
+            "audio_processado": bool(transcricao_chunk.get("audio_processado"))
         })
 
     except LimiteCustoFallbackTranscricao as e:
@@ -3261,7 +3427,10 @@ def finalizar_atendimento():
 
             cursor.execute(
                 """
-                SELECT texto, status
+                SELECT
+                    COALESCE(transcricao_limpa_para_resumo, texto),
+                    status,
+                    COALESCE(transcricao_bruta, texto)
                 FROM transcricoes_chunks
                 WHERE atendimento_id = %s
                 AND usuario_id = %s
@@ -3273,11 +3442,22 @@ def finalizar_atendimento():
                 )
             )
 
+            linhas_transcricao = cursor.fetchall()
+
             textos = [
                 row[0]
-                for row in cursor.fetchall()
+                for row in linhas_transcricao
                 if row[0]
             ]
+            textos_brutos = [
+                row[2]
+                for row in linhas_transcricao
+                if row[2]
+            ]
+
+            if not textos_brutos:
+
+                textos_brutos = textos
 
             cursor.execute(
                 """
@@ -3336,10 +3516,16 @@ def finalizar_atendimento():
 
     transcricao_original = limpar_vazamento_prompt_transcricao(
         limpar_texto(
-            " ".join(textos)
+            " ".join(textos_brutos)
         )
     )
-    transcricao = normalizar_entidades_faladas(transcricao_original)
+    transcricao = limpar_transcricao_para_resumo(
+        normalizar_entidades_faladas(
+            limpar_texto(
+                " ".join(textos)
+            )
+        )
+    )
     entidades_extraidas = extrair_entidades_transcricao(transcricao_original)
 
     chunks_total = max(

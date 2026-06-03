@@ -149,9 +149,19 @@ MAX_COST_PER_USER_PER_DAY = ler_float("MAX_COST_PER_USER_PER_DAY", "2.00")
 MAX_SYSTEM_COST_PER_DAY = ler_float("MAX_SYSTEM_COST_PER_DAY", "10.00")
 MAX_CALL_DURATION_MINUTES = ler_int("MAX_CALL_DURATION_MINUTES", "20")
 MAX_CHUNKS_PER_CALL = ler_int("MAX_CHUNKS_PER_CALL", "999")
-CHUNK_SECONDS = ler_int("CHUNK_SECONDS", "60")
+CHUNK_SECONDS = ler_int("CHUNK_SECONDS", "45")
 LOGIN_MAX_ATTEMPTS = ler_int("LOGIN_MAX_ATTEMPTS", "5")
 LOGIN_BLOCK_MINUTES = ler_int("LOGIN_BLOCK_MINUTES", "15")
+
+AUDIO_PREPROCESS_ENABLED = (
+    ler_env("AUDIO_PREPROCESS_ENABLED", "true").lower()
+    in ["1", "true", "sim", "yes", "on"]
+)
+AUDIO_DIAGNOSTICS_DIR = ler_env(
+    "AUDIO_DIAGNOSTICS_DIR",
+    "uploads/audio_diagnostics"
+)
+FFMPEG_PATH = ler_env("FFMPEG_PATH", "ffmpeg")
 
 CORS_ORIGINS = [
     origem.strip()

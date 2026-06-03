@@ -95,6 +95,26 @@ class FakeCursor:
             ] if chunk else []
             return
 
+        if "insert into transcricoes_chunks" in sql_lower and "'erro'" in sql_lower:
+
+            key = (int(params[0]), int(params[2]))
+            self.state["chunks"][key] = {
+                "atendimento_id": int(params[0]),
+                "usuario_id": int(params[1]),
+                "ordem": int(params[2]),
+                "texto": params[3],
+                "status": "erro",
+                "provider_tentado": params[5],
+                "provider_usado": "",
+                "fallback_usado": False,
+                "duracao_segundos": 0,
+                "transcricao_bruta": "",
+                "transcricao_normalizada": "",
+                "transcricao_limpa_para_resumo": ""
+            }
+            self.result = []
+            return
+
         if "insert into transcricoes_chunks" in sql_lower:
 
             key = (int(params[0]), int(params[2]))
@@ -107,7 +127,14 @@ class FakeCursor:
                 "provider_tentado": params[4],
                 "provider_usado": params[5],
                 "fallback_usado": bool(params[6]),
-                "duracao_segundos": int(params[7])
+                "duracao_segundos": int(params[7]),
+                "transcricao_bruta": params[8],
+                "transcricao_normalizada": params[9],
+                "transcricao_limpa_para_resumo": params[10],
+                "modelo_usado": params[11],
+                "tamanho_audio_original": params[12],
+                "tamanho_audio_processado": params[13],
+                "audio_processado": bool(params[14])
             }
             self.result = []
             return
@@ -146,7 +173,7 @@ class FakeCursor:
             )]
             return
 
-        if "select texto, status from transcricoes_chunks" in sql_lower:
+        if "coalesce(transcricao_limpa_para_resumo, texto)" in sql_lower:
 
             atendimento_id = int(params[0])
             usuario_id = int(params[1])
@@ -158,8 +185,9 @@ class FakeCursor:
             ]
             self.result = [
                 (
-                    chunk["texto"],
-                    chunk["status"]
+                    chunk.get("transcricao_limpa_para_resumo") or chunk["texto"],
+                    chunk["status"],
+                    chunk.get("transcricao_bruta") or chunk["texto"]
                 )
                 for chunk in sorted(chunks, key=lambda item: item["ordem"])
             ]
@@ -737,7 +765,7 @@ class FallbackTranscricaoTest(unittest.TestCase):
 
         chamadas = []
 
-        def fake_transcrever_bytes(provider, audio_bytes, nome, mime):
+        def fake_transcrever_bytes(provider, audio_bytes, nome, mime, modelo=None):
 
             chamadas.append(provider)
             if provider == "groq":

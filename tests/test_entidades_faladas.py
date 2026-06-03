@@ -74,6 +74,15 @@ class EntidadesFaladasTest(unittest.TestCase):
                     self.POSSIVEL + f"09.114.915/000{numero}-00" + self.CONFIRMAR
                 )
 
+    def test_cnpj_deformado_curto_fica_como_possivel_bruto(self):
+
+        self.assertEqual(
+            app.extrair_possivel_cnpj(
+                "Cliente informou o CNPJ da empresa 1,005-911730 para cadastro"
+            ),
+            self.POSSIVEL + "1,005-911730" + self.CONFIRMAR
+        )
+
     def test_email_gmail_falado(self):
 
         self.assertEqual(
@@ -136,6 +145,16 @@ class EntidadesFaladasTest(unittest.TestCase):
             entidades["email"],
             "suporteequipamentos@gmail.com"
         )
+
+    def test_limpar_transcricao_para_resumo_remove_ruidos_sem_remover_numeros(self):
+
+        texto = app.limpar_transcricao_para_resumo(
+            "nis, nis, nis. alo alo alo. CNPJ 1,005-911730. fiscal fiscal fiscal"
+        )
+
+        self.assertIn("1,005-911730", texto)
+        self.assertNotIn("nis, nis", texto.lower())
+        self.assertIn("fiscal", texto.lower())
 
 
 if __name__ == "__main__":
