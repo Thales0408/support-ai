@@ -16,6 +16,7 @@ from datetime import datetime
 from openpyxl import Workbook
 from werkzeug.security import generate_password_hash
 
+from io import BytesIO
 import os
 import psycopg2
 import re
@@ -3344,6 +3345,11 @@ def finalizar_atendimento():
             limite_segundos=MAX_CALL_DURATION_MINUTES * 60
         )
 
+        liberar_finalizacao_atendimento(
+            usuario_id,
+            atendimento_id
+        )
+
         return erro_limite(
             "Limite de duracao por atendimento atingido.",
             tipo="limite_duracao_atendimento",
@@ -4474,12 +4480,18 @@ def exportar():
 
         ws.append(linha)
 
-    nome = "atendimentos.xlsx"
-    wb.save(nome)
+    arquivo_excel = BytesIO()
+    wb.save(arquivo_excel)
+    arquivo_excel.seek(0)
 
     return send_file(
-        nome,
-        as_attachment=True
+        arquivo_excel,
+        as_attachment=True,
+        download_name="atendimentos.xlsx",
+        mimetype=(
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
+        )
     )
 
 
