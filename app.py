@@ -830,31 +830,74 @@ def possivel_cnpj_formatado(digitos):
     )
 
 
-def texto_para_digitos_cnpj(texto):
+PALAVRAS_NUMERO_CNPJ = {
+    "zero": "0",
+    "um": "1",
+    "uma": "1",
+    "hum": "1",
+    "dois": "2",
+    "duas": "2",
+    "tres": "3",
+    "três": "3",
+    "quatro": "4",
+    "cinco": "5",
+    "seis": "6",
+    "meia": "6",
+    "sete": "7",
+    "oito": "8",
+    "nove": "9"
+}
 
-    palavras_numero = {
-        "zero": "0",
-        "um": "1",
-        "uma": "1",
-        "hum": "1",
-        "dois": "2",
-        "duas": "2",
-        "tres": "3",
-        "quatro": "4",
-        "cinco": "5",
-        "seis": "6",
-        "meia": "6",
-        "sete": "7",
-        "oito": "8",
-        "nove": "9",
-        "mil": "000"
-    }
 
+PALAVRAS_DEZENA_CNPJ = {
+    "dez": 10,
+    "onze": 11,
+    "doze": 12,
+    "treze": 13,
+    "quatorze": 14,
+    "catorze": 14,
+    "quinze": 15,
+    "dezesseis": 16,
+    "dezessete": 17,
+    "dezoito": 18,
+    "dezenove": 19,
+    "vinte": 20,
+    "trinta": 30,
+    "quarenta": 40,
+    "cinquenta": 50,
+    "sessenta": 60,
+    "setenta": 70,
+    "oitenta": 80,
+    "noventa": 90
+}
+
+
+def valor_numero_cnpj(token):
+
+    token_limpo = remover_acentos(token)
+
+    if token_limpo.isdigit():
+
+        valor = int(token_limpo)
+
+        if 1 <= valor <= 9:
+
+            return valor
+
+    if token_limpo in PALAVRAS_NUMERO_CNPJ:
+
+        return int(PALAVRAS_NUMERO_CNPJ[token_limpo])
+
+    return None
+
+
+def contar_digitos_cnpj_simples(texto):
+
+    total = 0
     tokens = re.findall(
-        r"\d+|[A-Za-zÀ-ÿ]+",
+        r"\d+|[^\W\d_]+",
         str(texto or "").lower()
     )
-    partes = []
 
     for token in tokens:
 
@@ -862,11 +905,145 @@ def texto_para_digitos_cnpj(texto):
 
         if token.isdigit():
 
+            total += len(token)
+
+        elif token_limpo in PALAVRAS_NUMERO_CNPJ:
+
+            total += 1
+
+        elif token_limpo in PALAVRAS_DEZENA_CNPJ:
+
+            total += 2
+
+    return total
+
+
+def normalizar_blocos_cnpj_falados(texto):
+
+    texto_normalizado = str(texto or "")
+
+    def bloco(prefixo):
+
+        numero = valor_numero_cnpj(prefixo or "um") or 1
+
+        return f"000{numero}"
+
+    def substituir_posfixo(match):
+
+        prefixo = match.group(1)
+
+        if prefixo:
+
+            digitos_antes = contar_digitos_cnpj_simples(
+                texto_normalizado[:match.start(1)]
+            )
+
+            if digitos_antes in [6, 7]:
+
+                return prefixo + " 0001"
+
+        return bloco(prefixo)
+
+    padrao_posfixo = re.compile(
+        (
+            r"\b(?:(um|uma|hum|dois|duas|tres|tr[eê]s|quatro|cinco|"
+            r"seis|sete|oito|nove|[1-9])\s+)?mil\s+"
+            r"(?:contra|contr[aá]rio|de\s+r[eé]|dere|dre|barra)\b"
+        ),
+        flags=re.IGNORECASE
+    )
+
+    texto_normalizado = padrao_posfixo.sub(
+        substituir_posfixo,
+        texto_normalizado
+    )
+
+    padrao_barra = re.compile(
+        (
+            r"\bbarra\s+(?:(um|uma|hum|dois|duas|tres|tr[eê]s|quatro|"
+            r"cinco|seis|sete|oito|nove|[1-9])\s+)?mil\b"
+        ),
+        flags=re.IGNORECASE
+    )
+
+    return padrao_barra.sub(
+        lambda match: bloco(match.group(1)),
+        texto_normalizado
+    )
+
+
+def tem_bloco_cnpj_falado(texto):
+
+    texto_normalizado = normalizar_para_comparacao(texto)
+
+    return bool(
+        re.search(
+            (
+                r"(?:^|\s)(?:(?:um|uma|hum|dois|duas|tres|quatro|cinco|"
+                r"seis|sete|oito|nove|[1-9])\s+)?mil\s+"
+                r"(?:contra|contrario|de re|dere|dre|barra)(?:\s|$)"
+                r"|(?:^|\s)barra\s+(?:(?:um|uma|hum|dois|duas|tres|quatro|"
+                r"cinco|seis|sete|oito|nove|[1-9])\s+)?mil(?:\s|$)"
+            ),
+            texto_normalizado
+        )
+    )
+
+
+def texto_para_digitos_cnpj(texto):
+
+    texto = normalizar_blocos_cnpj_falados(texto)
+
+    tokens = re.findall(
+        r"\d+|[^\W\d_]+",
+        str(texto or "").lower()
+    )
+    partes = []
+    indice = 0
+
+    while indice < len(tokens):
+
+        token = tokens[indice]
+        token_limpo = remover_acentos(token)
+
+        if token.isdigit():
+
             partes.append(token)
+            indice += 1
+            continue
 
-        elif token_limpo in palavras_numero:
+        if token_limpo in PALAVRAS_NUMERO_CNPJ:
 
-            partes.append(palavras_numero[token_limpo])
+            partes.append(PALAVRAS_NUMERO_CNPJ[token_limpo])
+            indice += 1
+            continue
+
+        if token_limpo in PALAVRAS_DEZENA_CNPJ:
+
+            valor = PALAVRAS_DEZENA_CNPJ[token_limpo]
+
+            if (
+                indice + 2 < len(tokens)
+                and remover_acentos(tokens[indice + 1]) == "e"
+                and remover_acentos(tokens[indice + 2])
+                in PALAVRAS_NUMERO_CNPJ
+            ):
+
+                valor += int(
+                    PALAVRAS_NUMERO_CNPJ[
+                        remover_acentos(tokens[indice + 2])
+                    ]
+                )
+                indice += 3
+
+            else:
+
+                indice += 1
+
+            partes.append(str(valor).zfill(2))
+            continue
+
+        indice += 1
 
     return "".join(partes)
 
@@ -881,6 +1058,8 @@ def grupos_numericos_cnpj(texto):
 
 def candidatos_cnpj_por_grupos(fragmento):
 
+    inferido_contexto = tem_bloco_cnpj_falado(fragmento)
+    fragmento = normalizar_blocos_cnpj_falados(fragmento)
     grupos = grupos_numericos_cnpj(fragmento)
     candidatos = []
 
@@ -914,7 +1093,7 @@ def candidatos_cnpj_por_grupos(fragmento):
             candidatos.append(
                 (
                     base + bloco + final[-2:],
-                    False
+                    inferido_contexto
                 )
             )
 
@@ -937,7 +1116,12 @@ def fragmentos_com_evidencia_cnpj(texto):
         "traço",
         "contrario",
         "contrário",
-        "contra"
+        "contra",
+        "de re",
+        "de rÃ©",
+        "dere",
+        "dre",
+        "mil"
     ]
 
     for match in re.finditer(
@@ -970,6 +1154,7 @@ def extrair_possivel_cnpj(texto):
 
         digitos = texto_para_digitos_cnpj(fragmento)
         candidatos = candidatos_cnpj_por_grupos(fragmento)
+        inferido_por_fala = tem_bloco_cnpj_falado(fragmento)
 
         for inicio in range(0, max(1, len(digitos) - 13)):
 
@@ -977,7 +1162,7 @@ def extrair_possivel_cnpj(texto):
 
             if len(candidato) == 14:
 
-                candidatos.append((candidato, False))
+                candidatos.append((candidato, inferido_por_fala))
 
         if (
             len(digitos) == 13
@@ -987,6 +1172,18 @@ def extrair_possivel_cnpj(texto):
             candidatos.append(
                 (
                     digitos[:11] + "1" + digitos[11:],
+                    True
+                )
+            )
+
+        if (
+            len(digitos) == 13
+            and inferido_por_fala
+        ):
+
+            candidatos.append(
+                (
+                    "0" + digitos,
                     True
                 )
             )
@@ -1175,7 +1372,7 @@ def normalizar_email_zendesk(valor):
 
     if not match:
 
-        return ""
+        return normalizar_email_falado(texto)
 
     email = match.group(0)
     dominio = email.split("@", 1)[1]
@@ -1190,6 +1387,179 @@ def normalizar_email_zendesk(valor):
         return ""
 
     return email
+
+
+def montar_parte_email_falado(tokens):
+
+    partes = []
+
+    for token in tokens:
+
+        token = remover_acentos(token).lower()
+
+        if token == "ponto":
+
+            partes.append(".")
+
+        elif token in [
+            "underline",
+            "sublinhado"
+        ]:
+
+            partes.append("_")
+
+        elif token in [
+            "traco",
+            "hifen"
+        ]:
+
+            partes.append("-")
+
+        elif token in [
+            "e",
+            "email",
+            "e-mail"
+        ]:
+
+            continue
+
+        else:
+
+            partes.append(
+                re.sub(
+                    r"[^a-z0-9]",
+                    "",
+                    token
+                )
+            )
+
+    return "".join(partes).strip(".-_")
+
+
+def normalizar_email_falado(texto):
+
+    texto_original = str(texto or "")
+    match_formatado = re.search(
+        r"[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}",
+        texto_original,
+        flags=re.IGNORECASE
+    )
+
+    if match_formatado:
+
+        return match_formatado.group(0).lower()
+
+    texto_normalizado = normalizar_para_comparacao(texto_original)
+    tokens = re.findall(
+        r"[a-z0-9]+",
+        texto_normalizado
+    )
+
+    if "arroba" not in tokens:
+
+        return ""
+
+    indice = tokens.index("arroba")
+    palavras_parada = {
+        "meu",
+        "minha",
+        "email",
+        "e",
+        "mail",
+        "solicitante",
+        "cliente",
+        "favor",
+        "por",
+        "para"
+    }
+
+    antes = []
+
+    for token in reversed(tokens[:indice]):
+
+        if token in palavras_parada and antes:
+
+            break
+
+        if token in palavras_parada:
+
+            continue
+
+        antes.append(token)
+
+        if len(antes) >= 6:
+
+            break
+
+    local = montar_parte_email_falado(
+        list(reversed(antes))
+    )
+
+    depois = []
+
+    for token in tokens[indice + 1:]:
+
+        if token in palavras_parada and depois:
+
+            break
+
+        if token in palavras_parada:
+
+            continue
+
+        depois.append(token)
+
+        if len(depois) >= 8:
+
+            break
+
+    dominio = montar_parte_email_falado(depois)
+    candidato = f"{local}@{dominio}".lower()
+
+    if re.fullmatch(
+        r"[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}",
+        candidato
+    ):
+
+        return candidato
+
+    return ""
+
+
+def normalizar_entidades_faladas(texto):
+
+    texto_base = str(texto or "").strip()
+
+    if not texto_base:
+
+        return ""
+
+    enriquecimentos = []
+    comparacao = normalizar_para_comparacao(texto_base)
+    cnpj = extrair_possivel_cnpj(texto_base)
+    email = normalizar_email_falado(texto_base)
+
+    if cnpj and "cnpj identificado" not in comparacao:
+
+        enriquecimentos.append(
+            "CNPJ identificado: " + cnpj
+        )
+
+    if email and "e-mail identificado" not in comparacao:
+
+        enriquecimentos.append(
+            "E-mail identificado: " + email
+        )
+
+    if not enriquecimentos:
+
+        return texto_base
+
+    return (
+        texto_base
+        + "\n"
+        + "\n".join(enriquecimentos)
+    )
 
 
 def remover_rotulos_do_descritivo(valor):
@@ -2412,6 +2782,7 @@ def receber_chunk():
         texto = limpar_vazamento_prompt_transcricao(
             transcricao_chunk["texto"]
         )
+        texto = normalizar_entidades_faladas(texto)
         provider_tentado = transcricao_chunk["provider_tentado"]
         provider_usado = transcricao_chunk["provider_usado"]
         fallback_usado = transcricao_chunk["fallback_usado"]
@@ -2802,6 +3173,7 @@ def finalizar_atendimento():
             " ".join(textos)
         )
     )
+    transcricao = normalizar_entidades_faladas(transcricao)
 
     chunks_total = max(
         int(chunks_total_cliente or 0),
@@ -3173,6 +3545,7 @@ def transcrever_arquivo_unico():
     texto = limpar_vazamento_prompt_transcricao(
         transcricao_chunk["texto"]
     )
+    texto = normalizar_entidades_faladas(texto)
     custo_estimado = round(
         estimar_custo_transcricao(
             30,
@@ -3659,6 +4032,7 @@ def reprocessar_resumo_atendimento(atendimento_id):
                     limpar_texto(row[0] or "")
                 )
             )
+            transcricao = normalizar_entidades_faladas(transcricao)
 
             if not transcricao:
 
