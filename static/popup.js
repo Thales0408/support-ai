@@ -33,6 +33,17 @@ const TAMANHO_CHUNK_MS =
         10,
         Number(window.SUPPORT_AI_CHUNK_SECONDS || 60)
     ) * 1000
+
+function csrfToken() {
+
+    const meta =
+        document.querySelector('meta[name="csrf-token"]')
+
+    return meta
+        ? meta.getAttribute('content')
+        : ''
+}
+
 async function lerRespostaJson(response, mensagemPadrao) {
 
     const contentType =
@@ -139,7 +150,8 @@ async function iniciarAtendimento() {
         await fetch('/atendimentos/iniciar', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': csrfToken()
             },
             body: JSON.stringify({
                 ticket_zendesk: ticketInput ? ticketInput.value : ''
@@ -162,7 +174,7 @@ async function iniciarAtendimento() {
     return data.atendimento_id
 }
 
-async function enviarChunk(blob, ordem) {
+async function enviarChunk(blob, ordem, duracaoMs) {
 
     const formData =
         new FormData()
@@ -178,6 +190,11 @@ async function enviarChunk(blob, ordem) {
     )
 
     formData.append(
+        'duracao_segundos',
+        Math.floor((duracaoMs || TAMANHO_CHUNK_MS) / 1000)
+    )
+
+    formData.append(
         'audio',
         blob,
         `chunk-${ordem}.webm`
@@ -186,6 +203,9 @@ async function enviarChunk(blob, ordem) {
     const response =
         await fetch('/atendimentos/chunk', {
             method: 'POST',
+            headers: {
+                'X-CSRF-Token': csrfToken()
+            },
             body: formData
         })
 
@@ -266,7 +286,8 @@ async function finalizarAtendimento(duracao) {
         await fetch('/atendimentos/finalizar', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': csrfToken()
             },
             body: JSON.stringify({
                 atendimento_id: atendimentoId,
@@ -314,7 +335,8 @@ function registrarUpload(blob, duracaoMs) {
     const upload =
         enviarChunk(
             blob,
-            ordemAtual
+            ordemAtual,
+            duracaoMs
         ).then(resultado => {
 
             if (

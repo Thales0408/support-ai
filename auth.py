@@ -50,15 +50,11 @@ def senha_valida(senha_digitada, senha_salva):
 
     try:
 
-        if check_password_hash(senha_salva, senha_digitada):
-
-            return True
+        return check_password_hash(senha_salva, senha_digitada)
 
     except Exception:
 
-        pass
-
-    return senha_digitada == senha_salva
+        return False
 
 
 def senha_esta_em_hash(senha_salva):

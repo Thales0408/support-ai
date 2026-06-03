@@ -5,7 +5,8 @@ from flask import (
     render_template,
     redirect,
     session,
-    send_file
+    send_file,
+    abort
 )
 
 from flask_cors import CORS
@@ -23,6 +24,8 @@ import traceback
 import json
 import logging
 import unicodedata
+import secrets
+import hmac
 
 from auth import (
     perfil_usuario,
@@ -36,7 +39,6 @@ from auth import (
 from config import (
     CHUNK_SECONDS,
     CORS_ORIGINS,
-    GROQ_API_KEY,
     LOGIN_BLOCK_MINUTES,
     LOGIN_MAX_ATTEMPTS,
     MAX_AUDIO_MINUTES_PER_DAY,
@@ -46,10 +48,8 @@ from config import (
     SECRET_KEY,
     SUMMARY_MODEL,
     TRANSCRIBE_FALLBACK_PROVIDER,
-    TRANSCRIBE_MODEL,
     TRANSCRIBE_PROVIDER,
     USD_BRL_RATE,
-    ler_env
 )
 from services.ai import (
     LimiteCustoFallbackTranscricao,
@@ -61,7 +61,6 @@ from services.ai import (
 )
 from services.database import (
     conectar_banco,
-    diagnostico_banco,
     inicializar_banco
 )
 from services.usage import (
@@ -97,15 +96,57 @@ if CORS_ORIGINS:
     )
 
 
-def metadados_railway():
+def obter_csrf_token():
+
+    token = session.get("csrf_token")
+
+    if not token:
+
+        token = secrets.token_urlsafe(32)
+        session["csrf_token"] = token
+
+    return token
+
+
+@app.context_processor
+def contexto_csrf():
 
     return {
-        "service": ler_env("RAILWAY_SERVICE_NAME"),
-        "environment": ler_env("RAILWAY_ENVIRONMENT_NAME"),
-        "project": ler_env("RAILWAY_PROJECT_NAME"),
-        "commit": ler_env("RAILWAY_GIT_COMMIT_SHA"),
-        "public_domain": ler_env("RAILWAY_PUBLIC_DOMAIN")
+        "csrf_token": obter_csrf_token
     }
+
+
+@app.before_request
+def proteger_csrf():
+
+    if request.method != "POST":
+
+        return None
+
+    esperado = session.get("csrf_token")
+    recebido = (
+        request.headers.get("X-CSRF-Token")
+        or request.form.get("csrf_token")
+    )
+
+    if (
+        not esperado
+        or not recebido
+        or not hmac.compare_digest(str(esperado), str(recebido))
+    ):
+
+        if request.path.startswith((
+            "/atendimentos",
+            "/conta"
+        )):
+
+            return jsonify({
+                "erro": "Token CSRF invalido"
+            }), 403
+
+        abort(403)
+
+    return None
 
 
 # =========================================
@@ -540,14 +581,14 @@ def calcular_segundos_por_provider(chunks_transcritos, segundos_transcritos):
     segundos_restantes = max(0, int(segundos_transcritos or 0))
     segundos_por_provider = {}
 
-    for provider in chunks_transcritos:
+    for provider, duracao_chunk in chunks_transcritos:
 
         if segundos_restantes <= 0:
 
             break
 
         segundos_chunk = min(
-            CHUNK_SECONDS,
+            max(1, int(duracao_chunk or CHUNK_SECONDS)),
             segundos_restantes
         )
         provider_normalizado = provider or TRANSCRIBE_PROVIDER
@@ -603,7 +644,7 @@ def extrair_json_objeto(texto):
     return json.loads(bruto)
 
 
-def normalizar_campo(valor, padrao="Nao informado", limite=300):
+def normalizar_campo(valor, padrao="", limite=300):
 
     texto = (
         limpar_texto(valor or "")
@@ -616,20 +657,16 @@ def normalizar_campo(valor, padrao="Nao informado", limite=300):
     return texto[:limite]
 
 
-def normalizar_campo_zendesk(valor, padrao="Não informado", limite=300):
+def normalizar_campo_zendesk(valor, padrao="", limite=300):
 
     texto = normalizar_campo(
         valor,
         padrao,
         limite
     )
+    texto = remover_frases_proibidas_zendesk(texto)
 
-    if texto.lower() in [
-        "nao informado",
-        "não informado",
-        "nao informada",
-        "não informada"
-    ]:
+    if not texto:
 
         return padrao
 
@@ -646,6 +683,77 @@ def remover_acentos(texto):
         )
         if unicodedata.category(caractere) != "Mn"
     )
+
+
+FRASES_PROIBIDAS_ZENDESK = [
+    "nao " + "informado",
+    "nao informada",
+    "nao identificado",
+    "nao identificada",
+    "resumo nao disponivel pela transcricao",
+    "transcricao confusa",
+    "nao ha informacoes suficientes",
+    "nao foi possivel identificar",
+    "nao apresentou conclusao clara",
+    "a conclusao nao ficou clara"
+]
+
+
+ROTULOS_ZENDESK = [
+    "Nome da empresa",
+    "Empresa/Loja",
+    "CNPJ",
+    "Nome do Cliente",
+    "Telefone de contato",
+    "E-mail Solicitante",
+    "Email Solicitante",
+    "Analista responsavel",
+    "Analista responsável",
+    "Descritivo da ocorrencia do atendimento",
+    "Descritivo da ocorrência do atendimento"
+]
+
+
+def normalizar_para_comparacao(texto):
+
+    return remover_acentos(
+        str(texto or "")
+    ).lower().strip()
+
+
+def remover_frases_proibidas_zendesk(texto):
+
+    resultado = str(texto or "")
+    padroes = [
+        r"N[aã]o informado\.?",
+        r"N[aã]o informada\.?",
+        r"N[aã]o identificado(?: na liga[cç][aã]o)?\.?",
+        r"N[aã]o identificada(?: na liga[cç][aã]o)?\.?",
+        r"Resumo n[aã]o dispon[ií]vel pela transcri[cç][aã]o\.?",
+        r"A transcri[cç][aã]o est[aá] confusa\.?",
+        r"Transcri[cç][aã]o confusa\.?",
+        r"N[aã]o h[aá] informa[cç][oõ]es suficientes\.?",
+        r"N[aã]o foi poss[ií]vel identificar\.?",
+        r"O atendimento n[aã]o apresentou conclus[aã]o clara\.?",
+        r"A conclus[aã]o n[aã]o ficou clara\.?"
+    ]
+
+    for padrao in padroes:
+
+        resultado = re.sub(
+            padrao,
+            "",
+            resultado,
+            flags=re.IGNORECASE
+        )
+
+    comparacao = normalizar_para_comparacao(resultado)
+
+    if any(frase in comparacao for frase in FRASES_PROIBIDAS_ZENDESK):
+
+        return ""
+
+    return resultado.strip()
 
 
 def validar_cnpj_digitos(digitos):
@@ -710,7 +818,7 @@ def normalizar_cnpj(valor, permitir_possivel=False):
             + " — confirmar com cliente"
         )
 
-    return "Não informado"
+    return ""
 
 
 def possivel_cnpj_formatado(digitos):
@@ -901,28 +1009,13 @@ def extrair_possivel_cnpj(texto):
 
         return possivel_cnpj_formatado(melhor_possivel)
 
-    return "Não informado"
+    return ""
 
 
 def normalizar_descritivo_zendesk(valor):
 
     texto = str(valor or "").strip()
-    frases_metacomentario = [
-        r"O atendimento n[aã]o apresentou conclus[aã]o clara\.?",
-        r"A transcri[cç][aã]o est[aá] confusa\.?",
-        r"N[aã]o h[aá] informa[cç][oõ]es suficientes\.?",
-        r"N[aã]o foi poss[ií]vel identificar\.?",
-        r"A conclus[aã]o n[aã]o ficou clara\.?"
-    ]
-
-    for frase in frases_metacomentario:
-
-        texto = re.sub(
-            frase,
-            "",
-            texto,
-            flags=re.IGNORECASE
-        )
+    texto = remover_frases_proibidas_zendesk(texto)
 
     texto = re.sub(
         r"\*\*|__|`",
@@ -956,31 +1049,32 @@ def normalizar_descritivo_zendesk(valor):
 
     if not texto:
 
-        return "Resumo não disponível pela transcrição."
+        return ""
 
-    if texto.lower() in [
-        "nao informado",
-        "não informado"
-    ]:
+    if not campo_zendesk_informado(texto):
 
-        return "Resumo não disponível pela transcrição."
+        return ""
 
     return texto[:1200]
 
 
 def campo_zendesk_informado(valor):
 
-    texto = limpar_texto(valor or "")
+    texto = limpar_texto(
+        remover_frases_proibidas_zendesk(valor)
+    )
 
     if not texto:
 
         return False
 
-    return texto.lower() not in [
-        "nao informado",
-        "não informado",
+    comparacao = normalizar_para_comparacao(texto)
+
+    return comparacao not in [
+        "nao " + "informado",
         "nao informada",
-        "não informada",
+        "nao identificado",
+        "nao identificada",
         "null",
         "none",
         "n/a",
@@ -1012,8 +1106,11 @@ def limpar_valor_estruturado(valor, limite=160):
         " ",
         texto
     ).strip()
+    texto = remover_frases_proibidas_zendesk(texto)
 
-    if "possível cnpj informado" in texto.lower():
+    comparacao = normalizar_para_comparacao(texto)
+
+    if "possivel cnpj informado" in comparacao:
 
         return ""
 
@@ -1024,21 +1121,7 @@ def limpar_valor_estruturado(valor, limite=160):
 
         return ""
 
-    rotulos = [
-        "Nome da empresa",
-        "Empresa/Loja",
-        "CNPJ",
-        "Nome do Cliente",
-        "Telefone de contato",
-        "E-mail Solicitante",
-        "Email Solicitante",
-        "Analista responsável",
-        "Analista responsavel",
-        "Descritivo da ocorrência do atendimento",
-        "Descritivo da ocorrencia do atendimento"
-    ]
-
-    for rotulo in rotulos:
+    for rotulo in ROTULOS_ZENDESK:
 
         if re.fullmatch(
             re.escape(rotulo) + r"\s*:?",
@@ -1048,12 +1131,23 @@ def limpar_valor_estruturado(valor, limite=160):
 
             return ""
 
-        texto = re.sub(
-            r"^" + re.escape(rotulo) + r"\s*:\s*",
-            "",
+        if re.match(
+            r"^" + re.escape(rotulo) + r"\s*:",
             texto,
             flags=re.IGNORECASE
-        ).strip()
+        ):
+
+            return ""
+
+        match_rotulo = re.search(
+            r"\s+" + re.escape(rotulo) + r"\s*:",
+            texto,
+            flags=re.IGNORECASE
+        )
+
+        if match_rotulo:
+
+            texto = texto[:match_rotulo.start()].strip()
 
     if re.fullmatch(r"[A-Za-zÀ-ÿ /-]{2,45}\s*:", texto):
 
@@ -1140,7 +1234,7 @@ def resumo_zendesk_exato(
 
     cnpj_final = normalizar_cnpj(cnpj, permitir_possivel=True)
 
-    if cnpj_final == "Não informado":
+    if not cnpj_final:
 
         cnpj_final = extrair_possivel_cnpj(
             " ".join([
@@ -1343,7 +1437,7 @@ def texto_zendesk_formatado(conteudo):
             orientacao,
             resultado
         ]
-        if parte and parte.lower() != "nao informado"
+        if campo_zendesk_informado(parte)
     ]
 
     if not partes_descritivo:
@@ -1391,8 +1485,8 @@ Voce e um analista senior de suporte ERP.
 Gere apenas um JSON valido para um atendimento de suporte ERP.
 Nao gere o texto final do Zendesk.
 O backend montara o texto final em ordem fixa.
-Quando um campo nao for identificado na transcricao, retorne string vazia.
-Nao use "Não informado", "Não identificado na ligação", null ou rotulos como valor.
+Quando um campo nao aparecer na transcricao, retorne string vazia.
+Nao use texto padrao de ausencia, null ou rotulos como valor.
 
 Regras:
 - Nao escrever tudo em uma linha.
@@ -1475,13 +1569,13 @@ Transcricao:
         )
 
         dados = {
-            "nome_empresa": "Nao informado",
-            "empresa_loja": "Nao informado",
-            "cnpj": "Nao informado",
-            "nome_cliente": "Nao informado",
-            "telefone_contato": "Nao informado",
-            "email_solicitante": "Nao informado",
-            "analista_responsavel": analista_responsavel or "Nao informado",
+            "nome_empresa": "",
+            "empresa_loja": "",
+            "cnpj": "",
+            "nome_cliente": "",
+            "telefone_contato": "",
+            "email_solicitante": "",
+            "analista_responsavel": analista_responsavel or "",
             "descritivo_atendimento": descritivo,
             "sentimento_cliente": "neutro",
             "urgencia": "media",
@@ -1607,18 +1701,24 @@ def login():
 
                 user = cursor.fetchone()
 
-                if (
-                    user
+                senha_hash = (
+                    senha_esta_em_hash(user[1])
+                    if user
+                    else False
+                )
+                senha_ok = (
+                    bool(user)
                     and user[3]
-                    and senha_valida(
-                        senha,
-                        user[1]
+                    and (
+                        senha_valida(senha, user[1])
+                        if senha_hash
+                        else senha == user[1]
                     )
-                ):
+                )
 
-                    if not senha_esta_em_hash(
-                        user[1]
-                    ):
+                if senha_ok:
+
+                    if not senha_hash:
 
                         cursor.execute(
                             """
@@ -2034,33 +2134,9 @@ def admin_excluir_usuario(usuario_id):
 @app.route("/health")
 def health():
 
-    try:
-
-        with conectar_banco() as conn:
-
-            with conn.cursor() as cursor:
-
-                cursor.execute("SELECT 1")
-
-        return jsonify({
-            "status": "ok",
-            "database": "ok",
-            "db_config": diagnostico_banco(),
-            "transcribe_provider": TRANSCRIBE_PROVIDER,
-            "transcribe_fallback_provider": TRANSCRIBE_FALLBACK_PROVIDER,
-            "transcribe_model": TRANSCRIBE_MODEL,
-            "groq_configurado": bool(GROQ_API_KEY),
-            "openai_configurado": bool(OPENAI_API_KEY),
-            "railway": metadados_railway()
-        })
-
-    except Exception as e:
-
-        return jsonify({
-            "status": "erro",
-            "database": str(e),
-            "db_config": diagnostico_banco()
-        }), 500
+    return jsonify({
+        "status": "ok"
+    })
 
 
 # =========================================
@@ -2194,6 +2270,7 @@ def receber_chunk():
 
     atendimento_id = request.form.get("atendimento_id")
     ordem = request.form.get("ordem")
+    duracao_segundos_form = request.form.get("duracao_segundos")
 
     if not atendimento_id or ordem is None:
 
@@ -2210,6 +2287,22 @@ def receber_chunk():
         return jsonify({
             "erro": "Ordem invalida"
         }), 400
+
+    try:
+
+        duracao_chunk_segundos = int(duracao_segundos_form or CHUNK_SECONDS)
+
+    except ValueError:
+
+        duracao_chunk_segundos = CHUNK_SECONDS
+
+    duracao_chunk_segundos = max(
+        1,
+        min(
+            duracao_chunk_segundos,
+            MAX_CALL_DURATION_MINUTES * 60
+        )
+    )
 
     if ordem_int >= MAX_CHUNKS_PER_CALL:
 
@@ -2280,7 +2373,7 @@ def receber_chunk():
         def validar_fallback_openai():
 
             custo_fallback = estimar_custo_transcricao(
-                CHUNK_SECONDS,
+                duracao_chunk_segundos,
                 "openai"
             )
 
@@ -2355,9 +2448,10 @@ def receber_chunk():
                         erro,
                         provider_tentado,
                         provider_usado,
-                        fallback_usado
+                        fallback_usado,
+                        duracao_segundos
                     )
-                    VALUES (%s, %s, %s, %s, 'transcrito', NULL, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, 'transcrito', NULL, %s, %s, %s, %s)
                     ON CONFLICT (atendimento_id, ordem)
                     DO UPDATE SET
                         texto = EXCLUDED.texto,
@@ -2365,7 +2459,8 @@ def receber_chunk():
                         erro = NULL,
                         provider_tentado = EXCLUDED.provider_tentado,
                         provider_usado = EXCLUDED.provider_usado,
-                        fallback_usado = EXCLUDED.fallback_usado
+                        fallback_usado = EXCLUDED.fallback_usado,
+                        duracao_segundos = EXCLUDED.duracao_segundos
                     """,
                     (
                         atendimento_id,
@@ -2374,7 +2469,8 @@ def receber_chunk():
                         texto,
                         provider_tentado,
                         provider_usado,
-                        fallback_usado
+                        fallback_usado,
+                        duracao_chunk_segundos
                     )
                 )
 
@@ -2410,7 +2506,7 @@ def receber_chunk():
                         atendimento_id,
                         "transcricao_fallback",
                         estimar_custo_transcricao(
-                            CHUNK_SECONDS,
+                            duracao_chunk_segundos,
                             "openai"
                         )
                     )
@@ -2422,6 +2518,7 @@ def receber_chunk():
             ordem=ordem_int,
             tamanho_audio=tamanho_audio,
             caracteres=len(texto),
+            duracao_segundos=duracao_chunk_segundos,
             provider_tentado=provider_tentado,
             provider_usado=provider_usado,
             fallback_usado=fallback_usado
@@ -2669,7 +2766,9 @@ def finalizar_atendimento():
 
             cursor.execute(
                 """
-                SELECT COALESCE(provider_usado, %s)
+                SELECT
+                    COALESCE(provider_usado, %s),
+                    COALESCE(duracao_segundos, %s)
                 FROM transcricoes_chunks
                 WHERE atendimento_id = %s
                 AND usuario_id = %s
@@ -2678,13 +2777,17 @@ def finalizar_atendimento():
                 """,
                 (
                     TRANSCRIBE_PROVIDER,
+                    CHUNK_SECONDS,
                     atendimento_id,
                     usuario_id
                 )
             )
 
             chunks_transcritos_provider = [
-                row[0]
+                (
+                    row[0],
+                    row[1]
+                )
                 for row in cursor.fetchall()
             ]
 
@@ -2831,10 +2934,7 @@ def finalizar_atendimento():
 
         resultado = resumo_zendesk_exato(
             analista=session.get("usuario_nome"),
-            descritivo=(
-                "Não foi possível gerar resumo: "
-                "nenhuma transcrição foi capturada."
-            )
+            descritivo=""
         )
         analise = {
             "sentimento_cliente": "neutro",
@@ -3276,7 +3376,7 @@ def resultados():
             "categoria": row[16] or "outro",
             "problema_principal": row[17] or "",
             "tags": row[18] or "",
-            "usuario": row[19] or "Nao informado",
+            "usuario": row[19] or "",
             "usuario_id": row[20]
         }
 
@@ -3423,7 +3523,7 @@ def detalhe_atendimento(atendimento_id):
         "categoria": row[15] or "outro",
         "problema_principal": row[16] or "",
         "tags": row[17] or "",
-        "usuario": row[18] or "Nao informado"
+        "usuario": row[18] or ""
     }
 
     if usuario_admin_tecnico():

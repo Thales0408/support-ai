@@ -8,6 +8,10 @@
         name="viewport"
         content="width=device-width, initial-scale=1.0"
     >
+    <meta
+        name="csrf-token"
+        content="{{ csrf_token() }}"
+    >
     <title>55PBX AI</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -709,6 +713,10 @@
         const PERFIL_USUARIO = "{{ perfil }}"
         const MOSTRAR_CUSTO = {{ "true" if mostrar_custo else "false" }}
         const IS_SUPERVISOR = {{ "true" if is_supervisor else "false" }}
+        const CSRF_TOKEN =
+            document
+                .querySelector('meta[name="csrf-token"]')
+                .getAttribute("content")
 
         const tbody =
             document.getElementById("tbody-atendimentos")
@@ -1283,7 +1291,7 @@
 
             atendimentosFiltrados.forEach(item => {
                 const nome =
-                    item.usuario || "Nao informado"
+                    item.usuario || ""
 
                 if (!grupos[nome]) {
                     grupos[nome] = {
@@ -1532,7 +1540,8 @@
                     await fetch(`/atendimentos/${detalheAtual.id}/resumo`, {
                         method: "POST",
                         headers: {
-                            "Content-Type": "application/json"
+                            "Content-Type": "application/json",
+                            "X-CSRF-Token": CSRF_TOKEN
                         },
                         body: JSON.stringify({
                             resumo: document.getElementById("modal-resumo").value,
@@ -1565,7 +1574,10 @@
 
                 const response =
                     await fetch(`/atendimentos/${detalheAtual.id}/reprocessar-resumo`, {
-                        method: "POST"
+                        method: "POST",
+                        headers: {
+                            "X-CSRF-Token": CSRF_TOKEN
+                        }
                     })
 
                 const data =
@@ -1600,7 +1612,8 @@
                     await fetch("/conta/senha", {
                         method: "POST",
                         headers: {
-                            "Content-Type": "application/json"
+                            "Content-Type": "application/json",
+                            "X-CSRF-Token": CSRF_TOKEN
                         },
                         body: JSON.stringify({
                             senha_atual: document.getElementById("senha-atual").value,
