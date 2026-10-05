@@ -468,63 +468,51 @@ def inicializar_banco():
                 """
             )
 
-            cursor.execute(
-                """
-                DO $
-                BEGIN
-                    IF EXISTS (
-                        SELECT 1
-                        FROM pg_constraint
-                        WHERE conname = 'atendimentos_usuario_id_fkey'
-                        AND confdeltype <> 'r'
-                    ) THEN
-                        ALTER TABLE atendimentos
-                        DROP CONSTRAINT atendimentos_usuario_id_fkey;
-                    END IF;
+            for tabela, constraint in [
+                (
+                    "atendimentos",
+                    "atendimentos_usuario_id_fkey"
+                ),
+                (
+                    "transcricoes_chunks",
+                    "transcricoes_chunks_usuario_id_fkey"
+                )
+            ]:
 
-                    IF NOT EXISTS (
-                        SELECT 1
-                        FROM pg_constraint
-                        WHERE conname = 'atendimentos_usuario_id_fkey'
-                    ) THEN
-                        ALTER TABLE atendimentos
-                        ADD CONSTRAINT atendimentos_usuario_id_fkey
+                cursor.execute(
+                    """
+                    SELECT confdeltype
+                    FROM pg_constraint
+                    WHERE conname = %s
+                    """,
+                    (
+                        constraint,
+                    )
+                )
+
+                fk_atual = cursor.fetchone()
+
+                if fk_atual and fk_atual[0] != "r":
+
+                    cursor.execute(
+                        f"""
+                        ALTER TABLE {tabela}
+                        DROP CONSTRAINT {constraint}
+                        """
+                    )
+                    fk_atual = None
+
+                if not fk_atual:
+
+                    cursor.execute(
+                        f"""
+                        ALTER TABLE {tabela}
+                        ADD CONSTRAINT {constraint}
                         FOREIGN KEY (usuario_id)
                         REFERENCES usuarios(id)
-                        ON DELETE RESTRICT;
-                    END IF;
-                END $;
-                """
-            )
-
-            cursor.execute(
-                """
-                DO $
-                BEGIN
-                    IF EXISTS (
-                        SELECT 1
-                        FROM pg_constraint
-                        WHERE conname = 'transcricoes_chunks_usuario_id_fkey'
-                        AND confdeltype <> 'r'
-                    ) THEN
-                        ALTER TABLE transcricoes_chunks
-                        DROP CONSTRAINT transcricoes_chunks_usuario_id_fkey;
-                    END IF;
-
-                    IF NOT EXISTS (
-                        SELECT 1
-                        FROM pg_constraint
-                        WHERE conname = 'transcricoes_chunks_usuario_id_fkey'
-                    ) THEN
-                        ALTER TABLE transcricoes_chunks
-                        ADD CONSTRAINT transcricoes_chunks_usuario_id_fkey
-                        FOREIGN KEY (usuario_id)
-                        REFERENCES usuarios(id)
-                        ON DELETE RESTRICT;
-                    END IF;
-                END $;
-                """
-            )
+                        ON DELETE RESTRICT
+                        """
+                    )
 
             cursor.execute(
                 """
