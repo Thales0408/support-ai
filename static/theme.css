@@ -786,10 +786,8 @@ html[data-theme="dark"] .theme-icon-sun {
     font-size: 10px;
     font-weight: 800;
     letter-spacing: 0.06em;
-    position: sticky;
+    position: static;
     text-transform: uppercase;
-    top: 72px;
-    z-index: 2;
 }
 
 .dashboard-page td {
@@ -863,6 +861,66 @@ html[data-theme="dark"] .theme-icon-sun {
 
 .dashboard-page .report-panel {
     margin-bottom: 18px;
+}
+
+.dashboard-page .report-panel .table-wrap {
+    overflow: hidden;
+}
+
+.dashboard-page .analyst-table {
+    table-layout: fixed;
+}
+
+.dashboard-page .analyst-table th,
+.dashboard-page .analyst-table td {
+    padding: 11px 14px;
+    vertical-align: middle;
+}
+
+.dashboard-page .analyst-table tbody td {
+    font-variant-numeric: tabular-nums;
+}
+
+.dashboard-page .analyst-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.dashboard-page .analyst-table .table-empty {
+    color: var(--muted);
+    font-size: 12px;
+    padding: 22px 14px;
+    text-align: center;
+}
+
+.dashboard-page .main-table {
+    min-width: 980px;
+}
+
+.dashboard-page .main-table th,
+.dashboard-page .main-table td {
+    vertical-align: middle;
+}
+
+.dashboard-page .main-table td:nth-child(1) {
+    min-width: 118px;
+    white-space: nowrap;
+}
+
+.dashboard-page .main-table td:nth-child(2) {
+    min-width: 92px;
+}
+
+.dashboard-page .main-table td:nth-child(6) {
+    min-width: 88px;
+    white-space: nowrap;
+}
+
+.dashboard-page .main-table td:nth-child(7) {
+    min-width: 150px;
+}
+
+.dashboard-page .main-table-wrap {
+    position: relative;
 }
 
 .dashboard-page .insights {

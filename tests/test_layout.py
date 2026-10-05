@@ -31,6 +31,9 @@ class LayoutTests(unittest.TestCase):
         self.assertIn('name="csrf-token"', html)
         self.assertIn('/static/theme.css', html)
         self.assertIn('/static/theme.js', html)
+        self.assertIn('/static/favicon.svg', html)
+        self.assertIn('class="analyst-table"', html)
+        self.assertIn('class="main-table"', html)
         self.assertIn('data-theme-toggle', html)
 
     def test_custo_so_para_admin_tecnico(self):
@@ -58,6 +61,8 @@ class LayoutTests(unittest.TestCase):
         self.assertIn('data-theme-toggle', admin)
         self.assertIn('/static/theme.js', login)
         self.assertIn('/static/theme.js', admin)
+        self.assertIn('/static/favicon.svg', login)
+        self.assertIn('/static/favicon.svg', admin)
         self.assertIn("Support AI", login)
         self.assertIn("Administração de usuários", admin)
         self.assertNotIn("<style>", login)
