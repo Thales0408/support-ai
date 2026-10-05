@@ -91,7 +91,7 @@ def obter_pool():
 
                 _pool = ThreadedConnectionPool(
                     max(1, DB_POOL_MIN),
-                    max(DB_POOL_MIN, DB_POOL_MAX),
+                    max(1, DB_POOL_MIN, DB_POOL_MAX),
                     dsn,
                     **parametros
                 )
@@ -127,11 +127,33 @@ def conectar_banco():
         yield conn
         conn.commit()
 
-    except Exception:
+    except Exception as exc:
+
+        descartar = isinstance(
+            exc,
+            psycopg2.OperationalError
+        )
 
         if conn and not conn.closed:
 
-            conn.rollback()
+            try:
+
+                conn.rollback()
+
+            except Exception:
+
+                descartar = True
+
+        if conn and pool:
+
+            pool.putconn(
+                conn,
+                close=(
+                    descartar
+                    or bool(conn.closed)
+                )
+            )
+            conn = None
 
         raise
 
