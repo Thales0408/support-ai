@@ -74,6 +74,8 @@ def pontuacao_ruido_transcricao(texto):
         "transcreva somente as palavras",
         "transcreva em portugues",
         "contexto: atendimento",
+        "atendimento de suporte tecnico erp",
+        "vocabulario frequente",
         "trisk",
         "trishul",
         "tristra",
