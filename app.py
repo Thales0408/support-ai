@@ -1698,37 +1698,6 @@ def extrair_cliente_nome(texto, analista_nome=""):
     return ""
 
 
-def validar_nome_cliente_ia(valor, transcricao, analista_nome=""):
-
-    nome = nome_participante_confiavel(
-        valor,
-        analista_nome
-    )
-
-    if not nome:
-
-        return ""
-
-    texto_comparacao = normalizar_para_comparacao(transcricao)
-    nome_comparacao = normalizar_para_comparacao(nome)
-
-    if nome_comparacao not in texto_comparacao:
-
-        return ""
-
-    evidencias = [
-        r"meu nome (?:e|é)\s+" + re.escape(nome_comparacao),
-        r"me chamo\s+" + re.escape(nome_comparacao),
-        r"nome do cliente (?:e|é)\s+" + re.escape(nome_comparacao),
-        r"cliente se chama\s+" + re.escape(nome_comparacao)
-    ]
-
-    return nome if any(
-        re.search(padrao, texto_comparacao)
-        for padrao in evidencias
-    ) else ""
-
-
 def validar_valor_ia_na_transcricao(valor, transcricao, limite=160):
 
     valor_limpo = limpar_valor_estruturado(
