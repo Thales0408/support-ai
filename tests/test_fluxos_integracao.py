@@ -757,6 +757,61 @@ class FluxosIntegracaoTest(unittest.TestCase):
             "limite_duracao_atendimento"
         )
 
+    def test_finalizacao_contabiliza_fallback_de_qualidade(self):
+
+        self.set_session()
+        inicio = self.post_json("/atendimentos/iniciar")
+        atendimento_id = inicio.get_json()["atendimento_id"]
+        self.state["chunks"][(atendimento_id, 0)] = {
+            "atendimento_id": atendimento_id,
+            "usuario_id": 1,
+            "ordem": 0,
+            "texto": "Cliente informou problema fiscal.",
+            "status": "transcrito",
+            "provider_tentado": "groq",
+            "provider_usado": "openai",
+            "fallback_usado": True,
+            "motivo_fallback": "baixa_qualidade",
+            "duracao_segundos": 45,
+            "transcricao_bruta": "Cliente informou problema fiscal.",
+            "transcricao_normalizada": "Cliente informou problema fiscal.",
+            "transcricao_limpa_para_resumo": "Cliente informou problema fiscal."
+        }
+
+        with patch("app.analisar_com_ia", return_value={
+            "resumo_zendesk": app.resumo_zendesk_exato(
+                analista="analista",
+                descritivo="Cliente informou problema fiscal."
+            ),
+            "sentimento_cliente": "neutro",
+            "urgencia": "media",
+            "categoria": "fiscal",
+            "problema_principal": "Problema fiscal",
+            "tags": "fiscal"
+        }):
+
+            response = self.post_json(
+                "/atendimentos/finalizar",
+                {
+                    "atendimento_id": atendimento_id,
+                    "duracao_segundos": 45,
+                    "chunks_total": 1,
+                    "segundos_transcritos": 45
+                }
+            )
+
+        self.assertEqual(response.status_code, 200)
+        esperado = (
+            app.estimar_custo_transcricao(45, "openai")
+            + app.estimar_custo_transcricao(45, "groq")
+            + app.estimar_custo_atendimento(0, True)
+        )
+        self.assertAlmostEqual(
+            float(self.state["atendimentos"][atendimento_id]["custo_estimado_usd"]),
+            round(esperado, 4),
+            places=4
+        )
+
     def test_permissoes_custos_dashboard_detalhe_exportacao(self):
 
         self.set_session(usuario_id=1, perfil="analista", nome="analista")
