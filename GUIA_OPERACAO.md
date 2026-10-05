@@ -67,7 +67,7 @@ Recomendacao: prefira `Desativar` quando quiser preservar historico.
 7. Ao terminar, clicar em `Parar Gravacao`.
 8. Aguardar o sistema gerar o resumo final.
 
-Durante a gravacao, o sistema envia chunks de 30 segundos.
+Durante a gravacao, o sistema envia chunks de 45 segundos por padrao, configuraveis por `CHUNK_SECONDS`.
 
 Se um chunk falhar, a gravacao continua. O atendimento final fica com aviso de falha para revisao.
 
