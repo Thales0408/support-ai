@@ -15,101 +15,6 @@
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
 
-    <style>
-
-        * {
-
-            margin: 0;
-            padding: 0;
-
-            box-sizing: border-box;
-        }
-
-        body {
-
-            background: #0f1115;
-
-            color: white;
-
-            font-family: Arial;
-
-            display: flex;
-
-            justify-content: center;
-
-            align-items: center;
-
-            height: 100vh;
-        }
-
-        .login-box {
-
-            background: #1b1f27;
-
-            padding: 40px;
-
-            border-radius: 15px;
-
-            width: 350px;
-        }
-
-        h1 {
-
-            margin-bottom: 25px;
-
-            text-align: center;
-        }
-
-        input {
-
-            width: 100%;
-
-            padding: 12px;
-
-            margin-bottom: 15px;
-
-            border: none;
-
-            border-radius: 8px;
-
-            background: #2a2f3a;
-
-            color: white;
-        }
-
-        button {
-
-            width: 100%;
-
-            padding: 12px;
-
-            border: none;
-
-            border-radius: 8px;
-
-            background: #2962ff;
-
-            color: white;
-
-            font-weight: bold;
-
-            cursor: pointer;
-        }
-
-        .erro {
-
-            background: #421616;
-
-            border-left: 5px solid #d50000;
-
-            padding: 12px;
-
-            border-radius: 8px;
-
-            margin-bottom: 15px;
-        }
-
-    </style>
     <link rel="stylesheet" href="{{ url_for('static', filename='theme.css') }}">
 
 </head>
@@ -127,12 +32,9 @@
             value="{{ csrf_token() }}"
         >
 
-        <h1>
-
-            55PBX AI
-
-        </h1>
-        <p class="login-subtitle">Acesse seus atendimentos</p>
+        <span class="login-kicker">Support AI</span>
+        <h1>55PBX AI</h1>
+        <p class="login-subtitle">Acesse o painel de documentação dos atendimentos.</p>
 
         {% if erro %}
             <div class="erro">
