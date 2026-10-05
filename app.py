@@ -3345,26 +3345,36 @@ def health():
         )
     )
 
-    return jsonify({
-        "status": (
-            "ok"
-            if (
-                banco == "ok"
-                and (
-                    not AUDIO_PREPROCESS_ENABLED
-                    or ffmpeg == "ok"
-                )
+    status_geral = (
+        "ok"
+        if (
+            banco == "ok"
+            and (
+                not AUDIO_PREPROCESS_ENABLED
+                or ffmpeg == "ok"
             )
-            else "degradado"
-        ),
+        )
+        else "degradado"
+    )
+
+    return jsonify({
+        "status": status_geral,
         "database": banco,
         "audio_preprocess": (
             "ativo"
             if AUDIO_PREPROCESS_ENABLED
             else "desativado"
         ),
-        "ffmpeg": ffmpeg
-    })
+        "ffmpeg": ffmpeg,
+        "release": os.getenv(
+            "RAILWAY_GIT_COMMIT_SHA",
+            ""
+        )[:12]
+    }), (
+        200
+        if status_geral == "ok"
+        else 503
+    )
 
 
 # =========================================
