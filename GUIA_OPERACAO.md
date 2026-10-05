@@ -1,147 +1,127 @@
 # Guia de operacao
 
-Este guia explica como usar o Support AI / 55PBX AI no dia a dia.
+Este guia descreve a operacao atual do Support AI / 55PBX AI.
 
 ## Perfis
 
-### Admin
-
-O admin pode:
-
-- Criar usuarios.
-- Editar login de usuario.
-- Redefinir senha.
-- Ativar ou desativar usuarios.
-- Excluir usuarios.
-- Ver os proprios atendimentos.
-- Alternar o dashboard para ver todos os analistas.
-
 ### Analista
 
-O analista pode:
+- Grava atendimentos.
+- Ve apenas os proprios atendimentos.
+- Copia o texto ClickDesk.
+- Abre detalhes e transcricao.
+- Exporta o proprio historico.
+- Altera a propria senha.
 
-- Fazer login.
-- Gravar atendimento.
-- Ver apenas os proprios atendimentos.
-- Copiar resumo para ClickDesk.
-- Abrir detalhes e transcricao completa.
-- Exportar o proprio historico para Excel.
+### Supervisor
 
-## Como cadastrar usuarios
+- Possui as funcoes do analista.
+- Pode alternar entre seus atendimentos, todos os analistas ou um analista especifico.
+- Nao ve custos tecnicos.
 
-1. Entrar como admin.
-2. Clicar em `Usuarios`.
-3. Preencher `Usuario`.
-4. Preencher `Senha inicial`.
-5. Marcar `Administrador` apenas se a pessoa tambem deve gerenciar usuarios e ver todos os atendimentos.
-6. Clicar em `Criar usuario`.
+### Admin tecnico
 
-Depois disso, o analista acessa:
+- Possui visao operacional completa.
+- Ve custos estimados.
+- Cria usuarios e altera nome, perfil, senha e status.
+- Contas com atendimentos vinculados nao sao apagadas: sao desativadas para preservar o historico.
 
-```text
-https://web-production-b7e8f.up.railway.app/
-```
+## Criar e administrar usuarios
 
-E entra com o usuario e senha criados pelo admin.
+1. Abra `Conta > Usuarios`. A tela abre em nova aba para nao interromper uma gravacao ativa.
+2. Informe usuario, senha inicial e perfil.
+3. A senha deve respeitar `PASSWORD_MIN_LENGTH` (padrao 12).
+4. Para editar um usuario, expanda o cartao correspondente.
+5. Prefira `Desativar` quando a pessoa sair da equipe.
 
-## Como editar usuarios
+Acoes administrativas sensiveis ficam registradas na trilha `auditoria_eventos`.
 
-Na tela `Usuarios`:
+## Gravar atendimento
 
-- Alterar login: edite o campo na linha do usuario e clique em `Salvar`.
-- Redefinir senha: digite a nova senha e clique em `Redefinir`.
-- Desativar: bloqueia o login sem apagar historico.
-- Ativar: libera novamente o login.
-- Excluir: remove o usuario e tambem remove os atendimentos vinculados a ele.
+1. Abra o painel.
+2. Informe o ticket ClickDesk, quando disponivel.
+3. Clique em `Iniciar gravacao`.
+4. Selecione a aba do 55PBX/ClickDesk e compartilhe o audio da aba.
+5. Permita o microfone.
+6. Atenda normalmente.
+7. Use `Pausar` apenas quando necessario.
+8. Clique em `Finalizar atendimento` ao terminar.
+9. Aguarde o texto final e revise os campos estruturados antes de colar no ClickDesk.
 
-Recomendacao: prefira `Desativar` quando quiser preservar historico.
+A aba que iniciou o MediaRecorder precisa continuar aberta. Telas administrativas abrem em nova aba. Se tentar fechar/atualizar a aba de gravacao durante um atendimento, o navegador exibe um aviso.
 
-## Como gravar um atendimento
+## Transcricao e fallback
 
-1. Entrar no sistema.
-2. Clicar em `Iniciar Gravacao`.
-3. Escolher a aba do 55PBX.
-4. Marcar compartilhamento de audio da aba, se o navegador mostrar essa opcao.
-5. Permitir o microfone.
-6. Fazer o atendimento normalmente.
-7. Ao terminar, clicar em `Parar Gravacao`.
-8. Aguardar o sistema gerar o resumo final.
+- Chunks usam `CHUNK_SECONDS` (padrao 45 segundos).
+- Trechos silenciosos podem ser ignorados para reduzir custo.
+- Groq e o provedor principal no ambiente recomendado.
+- OpenAI e fallback para erros de provedor e sinais fortes de baixa qualidade.
+- No fallback de qualidade, o audio original e enviado ao segundo provedor.
+- Se um trecho falhar, o atendimento pode continuar e a falha fica sinalizada.
 
-Durante a gravacao, o sistema envia chunks de 45 segundos por padrao, configuraveis por `CHUNK_SECONDS`.
+## Campos ClickDesk
 
-Se um chunk falhar, a gravacao continua. O atendimento final fica com aviso de falha para revisao.
+Campos ausentes permanecem vazios. O sistema prefere campo vazio a informacao inventada.
+
+CNPJ reconstruido a partir de fala ambigua pode aparecer como:
+
+`Possivel CNPJ informado: XX.XXX.XXX/XXXX-XX — confirmar com cliente`
+
+O descritivo e gerado separadamente dos campos estruturados.
 
 ## Dashboard
 
-O dashboard mostra:
+Indicadores:
 
 - Total no filtro.
 - Finalizados.
 - Em andamento.
 - Com falha.
 - TMA.
-- Grafico de volume por dia.
+- Custo estimado apenas para admin tecnico.
+- Volume por dia.
 - Pontos de atencao.
-- Lista de atendimentos.
 
-Filtros disponiveis:
+Filtros:
 
-- Busca por resumo, transcricao, analista ou data.
+- Busca textual.
 - Periodo.
 - Status.
-- Escopo.
+- Analista/escopo para supervisor e admin.
 
-Escopo:
+## Exportacao
 
-- `Meus atendimentos`: mostra somente atendimentos do usuario logado.
-- `Todos os analistas`: aparece apenas para admin.
+A exportacao respeita o escopo/perfil atual. Custos tecnicos so aparecem para admin tecnico.
 
-## Copiar resumo para ClickDesk
+## Limites e custos
 
-Na lista de atendimentos:
+O backend aplica limites configuraveis de:
 
-1. Localize o atendimento.
-2. Clique em `Copiar`.
-3. Cole no ticket do ClickDesk.
+- atendimentos por dia;
+- minutos de audio por dia;
+- resumos por dia;
+- custo diario por usuario em BRL;
+- custo diario total em BRL;
+- duracao por atendimento;
+- chunks por atendimento;
+- tamanho de upload.
 
-Tambem e possivel clicar em `Detalhes` e copiar a partir do modal.
+Ao atingir um limite durante a chamada, novos chunks podem ser bloqueados, mas a finalizacao continua permitida para preservar o que ja foi capturado.
 
-## Ver transcricao completa
+## Operacao segura
 
-1. Clique em `Detalhes`.
-2. Leia `Texto ClickDesk`.
-3. Leia `Transcricao completa`.
+- Nao compartilhe logins.
+- Desative acessos imediatamente quando necessario; uma sessao aberta e revalidada contra o status do usuario.
+- Nao ative `AUDIO_DIAGNOSTICS_KEEP` fora de investigacoes controladas.
+- Revise atendimentos marcados com falha.
+- Nao considere um deploy concluido sem healthcheck verde.
+- O `/health` deve retornar HTTP 200, banco OK e FFmpeg OK quando o preprocessamento estiver ativo.
 
-Use isso para revisar atendimentos com falha ou resumo incompleto.
+## Limitacoes conhecidas
 
-## Exportar Excel
-
-Clique em `Exportar Excel`.
-
-O arquivo inclui:
-
-- Data.
-- Resumo.
-- Transcricao.
-- Total de trechos.
-- Trechos com falha.
-
-Analistas exportam o proprio historico. Admin, no estado atual da rota de exportacao, exporta o proprio historico.
-
-## Boas praticas
-
-- Criar um usuario por analista.
-- Nao compartilhar login.
-- Manter o usuario admin apenas para gestao.
-- Desativar usuarios desligados em vez de excluir, se o historico precisar ser preservado.
-- Fazer testes com ligacoes reais curtas antes de liberar para todos.
-- Revisar atendimentos marcados com falha.
-
-## Limitacoes atuais
-
-- O usuario comum ainda nao troca a propria senha.
-- Ainda nao ha integracao automatica com ClickDesk.
-- Ainda nao ha logs estruturados ou painel de erros.
-- Ainda nao ha reprocessamento manual de resumo/chunk.
-- Exportacao do admin ainda nao alterna entre "meus" e "todos".
-- Custo mensal da OpenAI ainda precisa ser medido em uso real.
+- Nao ha integracao automatica de comentario no ClickDesk.
+- A captura depende da aba do navegador permanecer aberta.
+- O audio e convertido para mono antes da transcricao; identificacao de speakers ainda e heuristica.
+- Nao ha overlap entre chunks.
+- O modelo de dados atual e single-tenant; uma unica instancia nao deve atender empresas independentes sem isolamento por organizacao.
+- A politica de retencao de transcricoes/LGPD deve ser definida antes de uso comercial externo.
