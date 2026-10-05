@@ -170,7 +170,7 @@
                                     <span><i data-lucide="user-cog"></i></span>
                                     <div>
                                         <strong>Conta</strong>
-                                        <small>Desative temporariamente ou exclua.</small>
+                                        <small>Contas com histórico são apenas desativadas para preservar os atendimentos.</small>
                                     </div>
                                 </div>
 
@@ -185,7 +185,7 @@
                                         {% endif %}
                                     </form>
 
-                                    <form method="POST" action="/admin/usuarios/{{ item[0] }}/excluir" onsubmit="return confirm('Excluir este usuário e todos os atendimentos vinculados?')">
+                                    <form method="POST" action="/admin/usuarios/{{ item[0] }}/excluir" onsubmit="return confirm('Excluir este usuário? Se houver atendimentos vinculados, a conta será apenas desativada e o histórico será preservado.')">
                                         <button class="perigo" type="submit" {% if item[0] == usuario_id %}disabled{% endif %}><i data-lucide="trash-2"></i> Excluir</button>
                                     </form>
                                 </div>
