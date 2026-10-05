@@ -62,6 +62,62 @@ PROMPT_TRANSCRICAO = (
 )
 
 
+def pontuacao_ruido_transcricao(texto):
+
+    texto = str(texto or "")
+    comparacao = texto.lower()
+    pontos = 0
+
+    marcadores_fortes = [
+        "transcreva somente as palavras",
+        "transcreva em portugues",
+        "contexto: atendimento",
+        "trisk",
+        "trishul",
+        "tristra",
+        "trisonso",
+        "drishuizsorvagencia"
+    ]
+
+    for marcador in marcadores_fortes:
+
+        if marcador in comparacao:
+
+            pontos += 4
+
+    if re.search(
+        r"\b([\wÀ-ÿ]{2,})(?:[\s,.;:-]+\1){2,}\b",
+        comparacao,
+        flags=re.IGNORECASE
+    ):
+
+        pontos += 3
+
+    palavras = re.findall(
+        r"[A-Za-zÀ-ÿ0-9]+",
+        comparacao
+    )
+
+    if len(palavras) >= 12:
+
+        curtas = sum(
+            1
+            for palavra in palavras
+            if len(palavra) <= 2
+        )
+
+        if curtas / len(palavras) > 0.45:
+
+            pontos += 2
+
+    return pontos
+
+
+def transcricao_parece_baixa_qualidade(texto):
+
+    return pontuacao_ruido_transcricao(texto) >= 4
+
+
 def cliente_transcricao(provider):
 
     if provider == "groq":
@@ -185,6 +241,39 @@ def transcrever_chunk(arquivo, validar_fallback=None):
             mime_transcricao
         )
 
+        if (
+            provider_tentado == "groq"
+            and fallback_provider == "openai"
+            and transcricao_parece_baixa_qualidade(
+                transcricao["texto"]
+            )
+        ):
+
+            if validar_fallback:
+
+                validar_fallback()
+
+            fallback = transcrever_bytes_diagnostico(
+                fallback_provider,
+                audio_bytes,
+                nome_transcricao,
+                mime_transcricao
+            )
+
+            return {
+                "texto": fallback["texto"],
+                "provider_tentado": provider_tentado,
+                "provider_usado": fallback_provider,
+                "fallback_usado": True,
+                "motivo_fallback": "baixa_qualidade",
+                "modelo_usado": fallback["modelo_usado"],
+                "tempo_transcricao_segundos": (
+                    transcricao["tempo_transcricao_segundos"]
+                    + fallback["tempo_transcricao_segundos"]
+                ),
+                **audio_preprocessado
+            }
+
         return {
             "texto": transcricao["texto"],
             "provider_tentado": provider_tentado,
@@ -221,6 +310,7 @@ def transcrever_chunk(arquivo, validar_fallback=None):
             "provider_tentado": provider_tentado,
             "provider_usado": fallback_provider,
             "fallback_usado": True,
+            "motivo_fallback": "erro_provider_principal",
             "modelo_usado": transcricao["modelo_usado"],
             "tempo_transcricao_segundos": transcricao["tempo_transcricao_segundos"],
             "erro_provider_principal": str(e)[:500],
