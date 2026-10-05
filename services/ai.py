@@ -11,6 +11,7 @@ from openai import (
 )
 
 import re
+import unicodedata
 
 from config import (
     GROQ_API_KEY,
@@ -64,23 +65,28 @@ PROMPT_TRANSCRICAO = (
 )
 
 
+def normalizar_ruido_transcricao(texto):
+
+    return "".join(
+        caractere
+        for caractere in unicodedata.normalize(
+            "NFD",
+            str(texto or "").lower()
+        )
+        if unicodedata.category(caractere) != "Mn"
+    )
+
+
 def pontuacao_ruido_transcricao(texto):
 
-    texto = str(texto or "")
-    comparacao = texto.lower()
+    comparacao = normalizar_ruido_transcricao(texto)
     pontos = 0
 
     marcadores_fortes = [
-        "transcreva somente as palavras",
-        "transcreva em portugues",
+        "transcreva",
         "contexto: atendimento",
         "atendimento de suporte tecnico erp",
-        "vocabulario frequente",
-        "trisk",
-        "trishul",
-        "tristra",
-        "trisonso",
-        "drishuizsorvagencia"
+        "vocabulario frequente"
     ]
 
     for marcador in marcadores_fortes:
@@ -90,7 +96,18 @@ def pontuacao_ruido_transcricao(texto):
             pontos += 4
 
     if re.search(
-        r"\b([\wÀ-ÿ]{2,})(?:[\s,.;:-]+\1){2,}\b",
+        (
+            r"\b(?:tristanius|tristao|tristra|tristares|trishul|trisk|"
+            r"trisonso|trisha|trishui|drishuizsorvagencia)\b"
+        ),
+        comparacao,
+        flags=re.IGNORECASE
+    ):
+
+        pontos += 4
+
+    if re.search(
+        r"\b([a-z0-9]{2,})(?:[\s,.;:-]+\1){2,}\b",
         comparacao,
         flags=re.IGNORECASE
     ):
@@ -98,7 +115,7 @@ def pontuacao_ruido_transcricao(texto):
         pontos += 3
 
     palavras = re.findall(
-        r"[A-Za-zÀ-ÿ0-9]+",
+        r"[a-z0-9]+",
         comparacao
     )
 
