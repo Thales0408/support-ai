@@ -82,13 +82,22 @@ class EntidadesFaladasTest(unittest.TestCase):
                     self.POSSIVEL + f"09.114.915/000{numero}-00" + self.CONFIRMAR
                 )
 
-    def test_cnpj_deformado_curto_fica_como_possivel_bruto(self):
+    def test_cnpj_deformado_curto_nao_vai_para_documentacao(self):
 
         self.assertEqual(
             app.extrair_possivel_cnpj(
                 "Cliente informou o CNPJ da empresa 1,005-911730 para cadastro"
             ),
-            self.POSSIVEL + "1,005-911730" + self.CONFIRMAR
+            ""
+        )
+
+    def test_cnpj_grotesco_curto_nao_vai_para_documentacao(self):
+
+        self.assertEqual(
+            app.extrair_possivel_cnpj(
+                "CNPJ 3, 486, 1000 contra 76"
+            ),
+            ""
         )
 
     def test_email_gmail_falado(self):
@@ -154,14 +163,58 @@ class EntidadesFaladasTest(unittest.TestCase):
             "suporteequipamentos@gmail.com"
         )
 
-    def test_extrair_analista_nao_preenche_cliente_por_saudacao(self):
+    def test_analista_logado_e_fonte_primaria(self):
 
         entidades = app.extrair_entidades_transcricao(
-            "Meu nome e Thales, falo do suporte. Qual o CNPJ da empresa?"
+            "Meu nome e Thales, falo do suporte. Qual o CNPJ da empresa?",
+            analista_nome="Thales"
         )
 
         self.assertEqual(entidades["analista_nome"], "Thales")
         self.assertEqual(entidades["cliente_nome"], "")
+
+    def test_cliente_joao_pedro_apos_pergunta_com_quem_falo(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            (
+                "Boa tarde, com quem eu falo? Boa tarde, meu nome e Joao Pedro, "
+                "por gentileza do que eu to falando. Tudo bem, Joao Pedro."
+            ),
+            analista_nome="admin"
+        )
+
+        self.assertEqual(entidades["cliente_nome"], "Joao Pedro")
+
+    def test_nome_alucinado_trisk_e_rejeitado(self):
+
+        self.assertEqual(
+            app.validar_nome_cliente_ia(
+                "Entao TRISK",
+                "Perfeito, dai eu mando assim pro cliente entao TRISK, beleza?",
+                "admin"
+            ),
+            ""
+        )
+
+    def test_empresa_cpa_digital_por_pergunta_explicita(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            "Qual que e o nome da empresa? E CPA digital.",
+            analista_nome="admin"
+        )
+
+        self.assertEqual(
+            app.normalizar_para_comparacao(entidades["empresa"]),
+            "cpa digital"
+        )
+
+    def test_limpeza_remove_vazamento_transcreva_somente_palavras(self):
+
+        texto = app.limpar_vazamento_prompt_transcricao(
+            "Transcreva somente as palavras audiveis. Cliente pediu suporte."
+        )
+
+        self.assertEqual(texto, "Cliente pediu suporte")
 
     def test_analisar_com_ia_remove_cliente_igual_analista(self):
 
