@@ -225,6 +225,28 @@ class EntidadesFaladasTest(unittest.TestCase):
             ""
         )
 
+    def test_cnpj_possivel_sem_acento_preserva_baixa_confianca(self):
+
+        self.assertEqual(
+            app.normalizar_cnpj(
+                "Possivel CNPJ informado: 43.405.954/0001-97 - confirmar com cliente",
+                permitir_possivel=True
+            ),
+            self.POSSIVEL + "43.405.954/0001-97" + self.CONFIRMAR
+        )
+
+    def test_empresa_chama_gigante_e_importes(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            "A empresa chama gigante e importes? E isso ai.",
+            analista_nome="admin"
+        )
+
+        self.assertEqual(
+            app.normalizar_para_comparacao(entidades["empresa"]),
+            "gigante e importes"
+        )
+
     def test_empresa_cpa_digital_por_pergunta_explicita(self):
 
         entidades = app.extrair_entidades_transcricao(
@@ -290,6 +312,62 @@ class EntidadesFaladasTest(unittest.TestCase):
 
         self.assertIn("Analista responsável: Thales", analise["resumo_zendesk"])
         self.assertIn("Nome do Cliente: \n", analise["resumo_zendesk"])
+
+    def test_ia_nao_inventa_campos_estruturados_sem_evidencia(self):
+
+        class Mensagem:
+            content = (
+                '{"nome_empresa":"Empresa Inventada","empresa_loja":"Loja X",'
+                '"cnpj":"43.405.954/0001-97","nome_cliente":"Maria",'
+                '"telefone":"11999999999","email":"inventado@example.com",'
+                '"analista_responsavel":"admin",'
+                '"descritivo":"Cliente solicitou orientacao sobre tributacao.",'
+                '"sentimento_cliente":"neutro","urgencia":"media",'
+                '"categoria":"fiscal","problema_principal":"Tributacao",'
+                '"tags":["fiscal"]}'
+            )
+
+        class Choice:
+            message = Mensagem()
+
+        class Resposta:
+            choices = [Choice()]
+
+        class Completions:
+            def create(self, **kwargs):
+                return Resposta()
+
+        class Chat:
+            completions = Completions()
+
+        class Cliente:
+            chat = Chat()
+
+        with patch("app.cliente_resumo", return_value=Cliente()):
+            analise = app.analisar_com_ia(
+                "Cliente solicitou orientacao sobre tributacao.",
+                "admin",
+                entidades_extraidas={
+                    "analista_nome": "admin",
+                    "cliente_nome": "",
+                    "empresa": "",
+                    "cnpj": "",
+                    "email": "",
+                    "telefone": ""
+                }
+            )
+
+        resumo = analise["resumo_zendesk"]
+        self.assertIn("Nome da empresa: \n", resumo)
+        self.assertIn("Empresa/Loja: \n", resumo)
+        self.assertIn("CNPJ: \n", resumo)
+        self.assertIn("Nome do Cliente: \n", resumo)
+        self.assertIn("Telefone de contato: \n", resumo)
+        self.assertIn("E-mail Solicitante: \n", resumo)
+        self.assertIn(
+            "Cliente solicitou orientacao sobre tributacao.",
+            resumo
+        )
 
     def test_limpar_transcricao_para_resumo_remove_ruidos_sem_remover_numeros(self):
 
