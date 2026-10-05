@@ -1737,7 +1737,7 @@ def validar_nome_cliente_ia(valor, transcricao, analista_nome=""):
 def extrair_empresa_transcricao(texto):
 
     padroes = [
-        r"\bqual (?:é|e) o nome da empresa\s*[?!.:,;-]*\s*(?:é|e)?\s*([^,.;\n]{3,100})",
+        r"\bqual(?: que)? (?:é|e) o nome da empresa\s*[?!.:,;-]*\s*(?:é|e)?\s*([^,.;\n]{3,100})",
         r"\braz[aã]o social (?:é|e|da|do)?\s+([^,.;\n]{3,100})",
         r"\bempresa (?:é|e|da|do)?\s+([^,.;\n]{3,100})",
         r"\bloja (?:é|e|da|do)?\s+([^,.;\n]{3,100})"
