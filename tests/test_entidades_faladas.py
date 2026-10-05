@@ -13,7 +13,7 @@ class EntidadesFaladasTest(unittest.TestCase):
 
         self.assertEqual(
             app.extrair_possivel_cnpj(
-                "zero oito seis tres tres oito oito nove mil contra cinquenta e seis"
+                "CNPJ zero oito seis tres tres oito oito nove mil contra cinquenta e seis"
             ),
             self.POSSIVEL + "08.633.889/0001-56" + self.CONFIRMAR
         )
@@ -21,28 +21,28 @@ class EntidadesFaladasTest(unittest.TestCase):
     def test_cnpj_falado_mil_contra_numerico(self):
 
         self.assertEqual(
-            app.extrair_possivel_cnpj("08 633 889 mil contra 56"),
+            app.extrair_possivel_cnpj("CNPJ 08 633 889 mil contra 56"),
             self.POSSIVEL + "08.633.889/0001-56" + self.CONFIRMAR
         )
 
     def test_cnpj_falado_dois_mil_contra(self):
 
         self.assertEqual(
-            app.extrair_possivel_cnpj("08 633 889 dois mil contra 37"),
+            app.extrair_possivel_cnpj("CNPJ 08 633 889 dois mil contra 37"),
             self.POSSIVEL + "08.633.889/0002-37" + self.CONFIRMAR
         )
 
     def test_cnpj_falado_cinco_mil_contra(self):
 
         self.assertEqual(
-            app.extrair_possivel_cnpj("08 633 889 cinco mil contra 80"),
+            app.extrair_possivel_cnpj("CNPJ 08 633 889 cinco mil contra 80"),
             self.POSSIVEL + "08.633.889/0005-80" + self.CONFIRMAR
         )
 
     def test_cnpj_falado_filial_com_dv_invalido_e_rejeitado(self):
 
         self.assertEqual(
-            app.extrair_possivel_cnpj("08 633 889 dois mil contra 56"),
+            app.extrair_possivel_cnpj("CNPJ 08 633 889 dois mil contra 56"),
             ""
         )
 
@@ -217,13 +217,21 @@ class EntidadesFaladasTest(unittest.TestCase):
     def test_nome_alucinado_trisk_e_rejeitado(self):
 
         self.assertEqual(
-            app.validar_nome_cliente_ia(
+            app.nome_participante_confiavel(
                 "Entao TRISK",
-                "Perfeito, dai eu mando assim pro cliente entao TRISK, beleza?",
                 "admin"
             ),
             ""
         )
+
+    def test_rotulo_cliente_nao_vira_nome(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            "Cliente: preciso de ajuda com a nota fiscal.",
+            analista_nome="admin"
+        )
+
+        self.assertEqual(entidades["cliente_nome"], "")
 
     def test_cnpj_possivel_sem_acento_preserva_baixa_confianca(self):
 
@@ -246,6 +254,15 @@ class EntidadesFaladasTest(unittest.TestCase):
             app.normalizar_para_comparacao(entidades["empresa"]),
             "gigante e importes"
         )
+
+    def test_frase_generica_com_empresa_nao_vira_nome(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            "A empresa nao consegue importar os produtos.",
+            analista_nome="admin"
+        )
+
+        self.assertEqual(entidades["empresa"], "")
 
     def test_empresa_cpa_digital_por_pergunta_explicita(self):
 
