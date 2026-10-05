@@ -71,6 +71,55 @@ class FakeCursor:
             ] if user else []
             return
 
+        if (
+            "select count(*) from atendimentos"
+            in sql_lower
+            and "where usuario_id = %s" in sql_lower
+        ):
+
+            usuario_id = int(params[0])
+            quantidade = len([
+                atendimento
+                for atendimento in self.state["atendimentos"].values()
+                if atendimento["usuario_id"] == usuario_id
+            ])
+            self.result = [(quantidade,)]
+            return
+
+        if (
+            "update usuarios set ativo = false"
+            in sql_lower
+            and "where id = %s" in sql_lower
+        ):
+
+            usuario_id = int(params[0])
+            for user in self.state["users_by_name"].values():
+                if user["id"] == usuario_id:
+                    user["ativo"] = False
+            self.result = []
+            return
+
+        if (
+            "delete from usuarios"
+            in sql_lower
+            and "where id = %s" in sql_lower
+        ):
+
+            usuario_id = int(params[0])
+            remover = next(
+                (
+                    nome
+                    for nome, user
+                    in self.state["users_by_name"].items()
+                    if user["id"] == usuario_id
+                ),
+                None
+            )
+            if remover:
+                del self.state["users_by_name"][remover]
+            self.result = []
+            return
+
         if "insert into atendimentos" in sql_lower and "returning id" in sql_lower:
 
             atendimento_id = self.state["next_atendimento_id"]
@@ -827,6 +876,12 @@ class FluxosIntegracaoTest(unittest.TestCase):
             mock_ia.call_args.kwargs["entidades_extraidas"]["email"],
             "suporteequipamentos@gmail.com"
         )
+        tipos_uso = [
+            evento[2]
+            for evento in self.state["uso_eventos"]
+        ]
+        self.assertIn("transcricao", tipos_uso)
+        self.assertIn("resumo", tipos_uso)
 
         with patch("app.analisar_com_ia") as mock_ia_repetida:
             repetida = self.post_json(
@@ -1057,6 +1112,31 @@ class FluxosIntegracaoTest(unittest.TestCase):
             round(esperado, 4),
             places=4
         )
+
+    def test_excluir_usuario_com_historico_apenas_desativa(self):
+
+        self.set_session(
+            usuario_id=3,
+            perfil="admin_tecnico",
+            nome="admin"
+        )
+
+        with patch("app.registrar_auditoria") as mock_auditoria:
+
+            response = self.client.post(
+                "/admin/usuarios/2/excluir",
+                data={
+                    "csrf_token": "csrf-teste"
+                },
+                follow_redirects=False
+            )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(
+            self.state["users_by_name"]["supervisor"]["ativo"]
+        )
+        self.assertIn(99, self.state["atendimentos"])
+        mock_auditoria.assert_called_once()
 
     def test_permissoes_custos_dashboard_detalhe_exportacao(self):
 
