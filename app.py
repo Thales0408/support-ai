@@ -5425,6 +5425,16 @@ def salvar_resumo_atendimento(atendimento_id):
                     "erro": "Atendimento nao encontrado"
                 }), 404
 
+            registrar_auditoria(
+                cursor,
+                "atendimento_resumo_editado",
+                "atendimento",
+                atendimento_id,
+                {
+                    "ticket_informado": bool(ticket_zendesk)
+                }
+            )
+
     return jsonify({
         "status": "resumo_salvo",
         "resumo": resumo,
@@ -5456,7 +5466,8 @@ def reprocessar_resumo_atendimento(atendimento_id):
                     a.transcricao_completa,
                     a.segundos_transcritos,
                     a.usuario_id,
-                    u.usuario
+                    u.usuario,
+                    a.custo_estimado_usd
                 FROM atendimentos a
                 LEFT JOIN usuarios u
                 ON u.id = a.usuario_id
@@ -5499,9 +5510,16 @@ def reprocessar_resumo_atendimento(atendimento_id):
                     "erro": "Transcricao nao disponivel"
                 }), 400
 
-            custo_estimado = estimar_custo_atendimento(
-                row[1] or 0,
+            custo_resumo = estimar_custo_atendimento(
+                0,
                 True
+            )
+            custo_anterior = float(
+                row[4] or 0
+            )
+            custo_estimado = round(
+                custo_anterior + custo_resumo,
+                4
             )
             usuario_custo_id = row[2] or usuario_id
 
@@ -5509,7 +5527,7 @@ def reprocessar_resumo_atendimento(atendimento_id):
                 cursor,
                 usuario_custo_id,
                 atendimento_id,
-                custo_estimado
+                custo_resumo
             )
 
             if limite_resposta:
@@ -5562,7 +5580,17 @@ def reprocessar_resumo_atendimento(atendimento_id):
                 usuario_custo_id,
                 atendimento_id,
                 "resumo",
-                custo_estimado
+                custo_resumo
+            )
+
+            registrar_auditoria(
+                cursor,
+                "atendimento_resumo_reprocessado",
+                "atendimento",
+                atendimento_id,
+                {
+                    "custo_resumo_usd": custo_resumo
+                }
             )
 
     resposta = {
