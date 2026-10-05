@@ -16,8 +16,8 @@ O sistema captura audio da aba do 55PBX e do microfone, envia trechos de audio p
 - Flask
 - Waitress
 - Supabase/PostgreSQL via Connection Pooler
-- Groq `whisper-large-v3-turbo` como transcricao principal de baixo custo
-- OpenAI `whisper-1` como fallback de transcricao
+- Groq `whisper-large-v3` como transcricao principal focada em precisao
+- OpenAI `gpt-4o-transcribe` como fallback de maior precisao
 - OpenAI `gpt-4.1-mini` para resumo final
 - HTML, CSS e JavaScript
 - MediaRecorder, `getDisplayMedia`, `getUserMedia` e `AudioContext`
@@ -26,7 +26,9 @@ O sistema captura audio da aba do 55PBX e do microfone, envia trechos de audio p
 
 - `app.py`: backend Flask e rotas principais.
 - `services/ai.py`: clientes e chamadas de IA/transcricao.
-- `services/database.py`: conexao e inicializacao do banco.
+- `services/database.py`: pool de conexoes, schema e inicializacao do banco.
+- `tools/migrate.py`: migracao idempotente usada antes do deploy.
+- `Dockerfile`: imagem de producao com FFmpeg instalado.
 - `services/usage.py`: limites diarios, custo e eventos de uso.
 - `auth.py`: helpers de autenticacao e perfis.
 - `config.py`: leitura e validacao de variaveis de ambiente.
@@ -110,8 +112,8 @@ Para reduzir custo mensal, use:
 ```text
 TRANSCRIBE_PROVIDER=groq
 TRANSCRIBE_FALLBACK_PROVIDER=openai
-TRANSCRIBE_MODEL=whisper-large-v3-turbo
-OPENAI_TRANSCRIBE_MODEL=whisper-1
+TRANSCRIBE_MODEL=whisper-large-v3
+OPENAI_TRANSCRIBE_MODEL=gpt-4o-transcribe
 GROQ_BASE_URL=https://api.groq.com/openai/v1
 TRANSCRIBE_USD_HORA_GROQ=0.04
 TRANSCRIBE_USD_HORA_GROQ_LARGE_V3=0.111
@@ -136,7 +138,7 @@ python tools/compare_transcription.py caminho/audio.webm --duracao-segundos 45
 
 A ferramenta compara o audio original e, quando disponivel, a versao preprocessada nos modelos Groq `whisper-large-v3-turbo`, Groq `whisper-large-v3` e OpenAI `whisper-1`, exibindo tempo, custo estimado, similaridade e uma heuristica de qualidade.
 
-O backend prioriza `DB_*` quando `DB_PASSWORD` esta configurada. `DATABASE_URL` pode existir no Railway, mas nao deve ser a fonte principal enquanto o pooler do Supabase estiver configurado via `DB_*`.
+O backend prioriza `DB_*` quando `DB_PASSWORD` esta configurada e reutiliza conexoes por meio de pool local. Ajuste `DB_POOL_MIN` e `DB_POOL_MAX` conforme o limite do banco. `DATABASE_URL` continua suportada como alternativa.
 
 ## ClickDesk e Railway
 
@@ -144,7 +146,7 @@ O ClickDesk cria o ticket quando a ligacao toca. Informe o numero do ticket ao i
 
 Os dados existentes continuam nas colunas `ticket_zendesk` do banco e nas chaves `ticket_zendesk`/`resumo_zendesk` da API por compatibilidade. A interface envia `ticket_clickdesk`, aceito pelo backend junto com o nome antigo. Nao renomeie a coluna sem migracao de banco.
 
-Para voltar ao Railway, conecte o repositorio GitHub ao servico web existente, confira as variaveis em `.env.example`, configure o banco Supabase pelo pooler IPv4 e publique o commit desejado. Confirme no servico Railway que `/health` retorna `status: ok`, `database: ok` e, quando o preprocessamento estiver ativo, `ffmpeg: ok`. Uma implantacao so deve ser considerada concluida depois de testar login, inicio, chunk e finalizacao pelo dominio HTTPS ativo.
+No Railway, use o `Dockerfile` do repositorio para garantir FFmpeg, configure `/health` como healthcheck e execute `python tools/migrate.py` seguido da suite de testes no pre-deploy antes de promover uma versao. Confirme no servico Railway que `/health` retorna `status: ok`, `database: ok` e, quando o preprocessamento estiver ativo, `ffmpeg: ok`. Uma implantacao so deve ser considerada concluida depois de testar login, inicio, chunk e finalizacao pelo dominio HTTPS ativo.
 
 ## Rodando localmente
 
@@ -188,3 +190,28 @@ Depois do login como admin:
 - `GUIA_MIGRACAO.md`: passo a passo para migrar/continuar em outro computador.
 - `GUIA_OPERACAO.md`: como usar o sistema no dia a dia.
 - `CONTINUIDADE_CODEX.md`: estado tecnico atual para outra conta Codex continuar.
+
+
+## Hardening de producao
+
+- Sessoes expiram apos periodo configuravel por `SESSION_HOURS`.
+- Senhas novas respeitam `PASSWORD_MIN_LENGTH`.
+- POSTs usam CSRF e logout e uma operacao POST.
+- Headers de seguranca, no-store para paginas privadas e HSTS em HTTPS.
+- Uploads possuem limite global e limite especifico por chunk.
+- Dashboard usa filtros, metricas e paginacao no PostgreSQL; transcricao completa so e carregada no detalhe.
+- Exportacao Excel protege contra formula injection.
+- Chunks possuem retry de rede com backoff e idempotencia por atendimento/ordem.
+- Acoes administrativas sensiveis geram registros em `auditoria_eventos`.
+- Finalizacoes abandonadas podem ser retomadas apos expirar o lease.
+- Audios temporarios sao removidos por padrao.
+
+### Deploy seguro
+
+```text
+python tools/migrate.py
+python -m unittest discover -s tests -p test_*.py
+python app.py
+```
+
+Nao aumente replicas antes de validar concorrencia, pool de banco e processamento assincrono de IA.
