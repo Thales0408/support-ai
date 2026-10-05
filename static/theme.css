@@ -1212,24 +1212,19 @@ body.login-page {
 /* Admin */
 body.admin-page {
     min-height: 100vh;
-    padding: 26px;
+    padding: 22px;
 }
 
-.admin-page .topo,
-.admin-page > h1,
-.admin-page > .mensagem,
-.admin-page > .erro,
-.admin-page > .box {
-    margin-left: auto;
-    margin-right: auto;
-    max-width: 1420px;
+.admin-page .admin-shell {
+    margin: 0 auto;
+    max-width: 1180px;
 }
 
 .admin-page .topo {
     align-items: center;
     display: flex;
     gap: 8px;
-    margin-bottom: 18px;
+    margin-bottom: 20px;
 }
 
 .admin-page .topo .theme-toggle {
@@ -1253,18 +1248,30 @@ body.admin-page {
     text-decoration: none;
 }
 
+.admin-page .theme-toggle:hover,
+.admin-page .botao:hover {
+    background: var(--surface-soft);
+    border-color: var(--line-strong);
+}
+
+.admin-page .theme-toggle svg,
+.admin-page .botao svg {
+    height: 15px;
+    width: 15px;
+}
+
 .admin-page .admin-heading {
     align-items: center;
     display: flex;
     gap: 13px;
-    margin: 0 auto 20px;
-    max-width: 1420px;
+    margin-bottom: 20px;
 }
 
 .admin-page .admin-heading-icon {
     align-items: center;
     background: var(--green);
     border-radius: 10px;
+    box-shadow: 0 8px 20px rgba(8, 120, 71, 0.18);
     color: #fff;
     display: inline-flex;
     flex: 0 0 42px;
@@ -1292,43 +1299,87 @@ body.admin-page {
     margin: 4px 0 0;
 }
 
-.admin-page h1 {
-    font-size: 24px;
-    letter-spacing: -0.03em;
-    margin: 0 auto 18px;
-}
-
-.admin-page h2 {
-    font-size: 16px;
-    margin: 0 0 15px;
+.login-page .login-kicker,
+.admin-page .admin-kicker {
+    color: var(--green);
+    display: block;
+    font-size: 10px;
+    font-weight: 850;
+    letter-spacing: 0.1em;
+    margin-bottom: 5px;
+    text-transform: uppercase;
 }
 
 .admin-page .box {
     background: var(--surface);
     border: 1px solid var(--line);
-    border-radius: var(--radius);
+    border-radius: 12px;
     box-shadow: var(--shadow-sm);
     margin-bottom: 16px;
+    overflow: hidden;
+}
+
+.admin-page .admin-create-card {
     padding: 18px;
+}
+
+.admin-page .team-box {
+    padding: 0;
+}
+
+.admin-page .section-heading-row {
+    align-items: flex-start;
+    display: flex;
+    gap: 16px;
+    justify-content: space-between;
+}
+
+.admin-page .section-heading-row h2 {
+    font-size: 16px;
+    letter-spacing: -0.01em;
+    margin: 0;
+}
+
+.admin-page .section-icon {
+    align-items: center;
+    background: var(--green-soft);
+    border-radius: 8px;
+    color: var(--green);
+    display: inline-flex;
+    flex: 0 0 36px;
+    height: 36px;
+    justify-content: center;
+    width: 36px;
+}
+
+.admin-page .section-icon svg {
+    height: 17px;
+    width: 17px;
+}
+
+.admin-page .create-user-form {
+    margin-top: 16px;
 }
 
 .admin-page .grid {
     display: grid;
-    gap: 12px;
-    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 10px;
+    grid-template-columns: 1fr 1fr 0.75fr;
 }
 
 .admin-page label {
     color: var(--muted);
     display: block;
-    font-size: 11px;
-    font-weight: 700;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
     margin-bottom: 5px;
+    text-transform: uppercase;
 }
 
 .admin-page input,
 .admin-page select {
-    background: var(--surface);
+    background: var(--surface-soft);
     border: 1px solid var(--line-strong);
     border-radius: var(--radius-sm);
     color: var(--ink);
@@ -1337,22 +1388,30 @@ body.admin-page {
     width: 100%;
 }
 
-.admin-page .check {
-    align-items: center;
-    display: flex;
-    gap: 8px;
-    margin-top: 23px;
+.admin-page input:focus,
+.admin-page select:focus {
+    background: var(--surface);
+    border-color: color-mix(in srgb, var(--green) 48%, var(--line));
 }
 
-.admin-page .check input {
-    min-height: 0;
-    width: auto;
+.admin-page .create-user-actions {
+    display: flex;
+    justify-content: flex-start;
+    margin-top: 12px;
 }
 
 .admin-page .principal,
 .admin-page .sucesso,
-.admin-page .perigo {
-    color: #fff;
+.admin-page .perigo,
+.admin-page .perigo-soft {
+    align-items: center;
+    border: 0;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    display: inline-flex;
+    font-weight: 700;
+    gap: 7px;
+    justify-content: center;
     min-height: 36px;
     padding: 8px 11px;
 }
@@ -1360,10 +1419,39 @@ body.admin-page {
 .admin-page .principal,
 .admin-page .sucesso {
     background: var(--green);
+    color: #fff;
+}
+
+.admin-page .principal:hover,
+.admin-page .sucesso:hover {
+    background: var(--green-dark);
 }
 
 .admin-page .perigo {
     background: var(--red);
+    color: #fff;
+}
+
+.admin-page .perigo-soft {
+    background: var(--red-soft);
+    color: var(--red);
+}
+
+.admin-page .perigo:hover {
+    filter: brightness(0.94);
+}
+
+.admin-page .principal svg,
+.admin-page .sucesso svg,
+.admin-page .perigo svg,
+.admin-page .perigo-soft svg {
+    height: 15px;
+    width: 15px;
+}
+
+.admin-page button:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
 }
 
 .admin-page .mensagem,
@@ -1387,46 +1475,241 @@ body.admin-page {
     color: var(--red);
 }
 
-.admin-page .hint {
-    color: var(--muted);
-    font-size: 11px;
-    margin-bottom: 14px;
-}
-
-.admin-page table {
-    border-collapse: collapse;
-    width: 100%;
-}
-
-.admin-page th,
-.admin-page td {
+.admin-page .team-heading {
+    align-items: center;
     border-bottom: 1px solid var(--line);
-    padding: 10px;
-    text-align: left;
-    vertical-align: middle;
+    padding: 17px 18px;
 }
 
-.admin-page th {
+.admin-page .admin-hint-chip {
+    align-items: center;
+    background: var(--surface-soft);
+    border: 1px solid var(--line);
+    border-radius: 999px;
     color: var(--muted);
+    display: inline-flex;
     font-size: 10px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+    font-weight: 650;
+    gap: 5px;
+    padding: 6px 9px;
+    white-space: nowrap;
 }
 
-.admin-page td {
+.admin-page .admin-hint-chip svg {
+    height: 13px;
+    width: 13px;
+}
+
+.admin-page .user-list {
+    display: grid;
+}
+
+.admin-page .user-card {
+    border-bottom: 1px solid var(--line);
+}
+
+.admin-page .user-card:last-child {
+    border-bottom: 0;
+}
+
+.admin-page .user-card > summary {
+    list-style: none;
+}
+
+.admin-page .user-card > summary::-webkit-details-marker {
+    display: none;
+}
+
+.admin-page .user-summary {
+    align-items: center;
+    cursor: pointer;
+    display: grid;
+    gap: 12px;
+    grid-template-columns: 38px minmax(0, 1fr) auto 28px;
+    min-height: 66px;
+    padding: 10px 18px;
+    transition: background 0.12s ease;
+}
+
+.admin-page .user-summary:hover,
+.admin-page .user-card[open] .user-summary {
+    background: var(--surface-soft);
+}
+
+.admin-page .user-avatar {
+    align-items: center;
+    background: var(--green-soft);
+    border-radius: 9px;
+    color: var(--green);
+    display: inline-flex;
+    font-size: 13px;
+    font-weight: 850;
+    height: 36px;
+    justify-content: center;
+    width: 36px;
+}
+
+.admin-page .user-primary {
+    min-width: 0;
+}
+
+.admin-page .user-primary strong {
+    display: block;
+    font-size: 13px;
+    margin-bottom: 4px;
+}
+
+.admin-page .user-meta {
+    color: var(--muted);
+    display: block;
+    font-size: 10.5px;
+    line-height: 1.35;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.admin-page .status-pill {
+    align-items: center;
+    border-radius: 999px;
+    display: inline-flex;
+    font-size: 10px;
+    font-weight: 750;
+    gap: 5px;
+    padding: 6px 8px;
+    white-space: nowrap;
+}
+
+.admin-page .status-active {
+    background: var(--green-soft);
+    color: var(--green-dark);
+}
+
+.admin-page .status-inactive {
+    background: var(--red-soft);
+    color: var(--red);
+}
+
+.admin-page .status-dot-small {
+    background: currentColor;
+    border-radius: 999px;
+    height: 6px;
+    width: 6px;
+}
+
+.admin-page .user-expand {
+    align-items: center;
+    color: var(--muted);
+    display: inline-flex;
+    justify-content: center;
+}
+
+.admin-page .user-expand svg {
+    height: 16px;
+    transition: transform 0.15s ease;
+    width: 16px;
+}
+
+.admin-page .user-card[open] .user-expand svg {
+    transform: rotate(180deg);
+}
+
+.admin-page .user-editor {
+    background: var(--surface-soft);
+    border-top: 1px solid var(--line);
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 14px 18px 16px 68px;
+}
+
+.admin-page .user-setting-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    min-width: 0;
+    padding: 12px;
+}
+
+.admin-page .setting-title {
+    align-items: flex-start;
+    display: flex;
+    gap: 9px;
+    margin-bottom: 10px;
+}
+
+.admin-page .setting-title > span {
+    align-items: center;
+    background: var(--surface-strong);
+    border-radius: 6px;
+    color: var(--muted);
+    display: inline-flex;
+    flex: 0 0 28px;
+    height: 28px;
+    justify-content: center;
+    width: 28px;
+}
+
+.admin-page .setting-title svg {
+    height: 14px;
+    width: 14px;
+}
+
+.admin-page .setting-title strong {
+    display: block;
     font-size: 12px;
+    margin-bottom: 2px;
 }
 
-.admin-page .acoes,
-.admin-page .inline-form {
+.admin-page .setting-title small {
+    color: var(--muted);
+    display: block;
+    font-size: 10px;
+    line-height: 1.35;
+}
+
+.admin-page .setting-form {
+    align-items: center;
+    display: grid;
+    gap: 7px;
+    grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.admin-page .setting-form input,
+.admin-page .setting-form select {
+    min-width: 0;
+}
+
+.admin-page .account-actions {
     align-items: center;
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 7px;
 }
 
-.admin-page .inline-form input {
-    min-width: 160px;
+.admin-page .account-actions form {
+    margin: 0;
+}
+
+.admin-page .user-danger-card {
+    border-color: color-mix(in srgb, var(--red) 20%, var(--line));
+}
+
+.admin-page .admin-empty {
+    align-items: center;
+    color: var(--muted);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    justify-content: center;
+    min-height: 160px;
+    padding: 24px;
+    text-align: center;
+}
+
+.admin-page .admin-empty svg {
+    height: 24px;
+    width: 24px;
 }
 
 .admin-page a {
@@ -1575,36 +1858,57 @@ body.admin-page {
     }
 
     body.admin-page {
-        padding: 14px;
+        padding: 12px;
     }
 
-    .admin-page table,
-    .admin-page thead,
-    .admin-page tbody,
-    .admin-page th,
-    .admin-page td,
-    .admin-page tr {
-        display: block;
+    .admin-page .topo {
+        flex-wrap: wrap;
     }
 
-    .admin-page thead {
-        display: none;
+    .admin-page .admin-heading {
+        align-items: flex-start;
     }
 
-    .admin-page tr {
-        background: var(--surface);
-        border: 1px solid var(--line);
-        border-radius: var(--radius-sm);
-        margin-bottom: 10px;
-        padding: 8px;
+    .admin-page .grid {
+        grid-template-columns: 1fr;
     }
 
-    .admin-page td {
-        border-bottom: 0;
-    }
-
-    .admin-page .inline-form {
-        align-items: stretch;
+    .admin-page .team-heading {
+        align-items: flex-start;
         flex-direction: column;
+    }
+
+    .admin-page .admin-hint-chip {
+        white-space: normal;
+    }
+
+    .admin-page .user-summary {
+        gap: 9px;
+        grid-template-columns: 36px minmax(0, 1fr) 24px;
+        padding: 10px 12px;
+    }
+
+    .admin-page .status-pill {
+        grid-column: 2;
+        justify-self: start;
+        margin-top: -4px;
+    }
+
+    .admin-page .user-expand {
+        grid-column: 3;
+        grid-row: 1 / span 2;
+    }
+
+    .admin-page .user-editor {
+        grid-template-columns: 1fr;
+        padding: 12px;
+    }
+
+    .admin-page .setting-form {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-page .setting-form button {
+        width: 100%;
     }
 }
