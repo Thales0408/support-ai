@@ -27,6 +27,7 @@ import logging
 import unicodedata
 import secrets
 import hmac
+import shutil
 
 from auth import (
     perfil_usuario,
@@ -38,8 +39,10 @@ from auth import (
     usuario_supervisor
 )
 from config import (
+    AUDIO_PREPROCESS_ENABLED,
     CHUNK_SECONDS,
     CORS_ORIGINS,
+    FFMPEG_PATH,
     LOGIN_BLOCK_MINUTES,
     LOGIN_MAX_ATTEMPTS,
     MAX_AUDIO_MINUTES_PER_DAY,
@@ -87,6 +90,14 @@ logger = logging.getLogger("support_ai")
 app = Flask(__name__)
 
 app.secret_key = SECRET_KEY
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=bool(
+        os.getenv("RAILWAY_ENVIRONMENT")
+        or os.getenv("RAILWAY_PUBLIC_DOMAIN")
+    )
+)
 
 if CORS_ORIGINS:
 
@@ -201,12 +212,20 @@ def limpar_vazamento_prompt_transcricao(texto):
         "Transcreva em portugues do Brasil",
         "Texto e atendimento de suporte",
         "Atendimento de suporte ERP",
+        "Atendimento de suporte tecnico ERP em portugues do Brasil",
+        "Atendimento de suporte técnico ERP em português do Brasil",
+        "Vocabulario frequente",
+        "Vocabulário frequente",
         "Contexto: atendimento de suporte tecnico",
         "Contexto: atendimento de suporte técnico",
         "Não invente palavras quando houver silêncio",
         "Nao invente palavras quando houver silencio",
         "Não invente palavras quando houver silencio",
-        "Nao invente palavras quando houver silêncio"
+        "Nao invente palavras quando houver silêncio",
+        "Se um trecho estiver confuso, transcreva somente as palavras audiveis",
+        "Se um trecho estiver confuso, transcreva somente as palavras audíveis",
+        "Transcreva somente as palavras audiveis",
+        "Transcreva somente as palavras audíveis"
     ]
 
     for frase in frases_prompt:
@@ -797,10 +816,9 @@ def formatar_cnpj(digitos):
 def normalizar_cnpj(valor, permitir_possivel=False):
 
     texto = str(valor or "")
-
-    if texto.lower().startswith("possível cnpj informado:"):
-
-        return texto[:120]
+    era_possivel = normalizar_para_comparacao(texto).startswith(
+        "possivel cnpj informado:"
+    )
 
     digitos = re.sub(
         r"\D",
@@ -808,19 +826,18 @@ def normalizar_cnpj(valor, permitir_possivel=False):
         texto
     )
 
-    if len(digitos) == 14 and validar_cnpj_digitos(digitos):
+    if (
+        len(digitos) != 14
+        or not validar_cnpj_digitos(digitos)
+    ):
 
-        return formatar_cnpj(digitos)
+        return ""
 
-    if permitir_possivel and len(digitos) == 14:
+    if era_possivel and permitir_possivel:
 
-        return (
-            "Possível CNPJ informado: "
-            + formatar_cnpj(digitos)
-            + " — confirmar com cliente"
-        )
+        return possivel_cnpj_formatado(digitos)
 
-    return ""
+    return formatar_cnpj(digitos)
 
 
 def possivel_cnpj_formatado(digitos):
@@ -1121,18 +1138,7 @@ def fragmentos_com_evidencia_cnpj(texto):
     evidencias = [
         "cnpj",
         "c n p j",
-        "cadastro nacional",
-        "barra",
-        "traco",
-        "traço",
-        "contrario",
-        "contrário",
-        "contra",
-        "de re",
-        "de rÃ©",
-        "dere",
-        "dre",
-        "mil"
+        "cadastro nacional"
     ]
 
     for match in re.finditer(
@@ -1158,9 +1164,6 @@ def fragmentos_com_evidencia_cnpj(texto):
 
 
 def extrair_possivel_cnpj(texto):
-
-    melhor_possivel = ""
-    melhor_bruto = ""
 
     for fragmento in fragmentos_com_evidencia_cnpj(texto):
 
@@ -1209,46 +1212,6 @@ def extrair_possivel_cnpj(texto):
                     return possivel_cnpj_formatado(candidato)
 
                 return formatar_cnpj(candidato)
-
-            if not melhor_possivel:
-
-                melhor_possivel = candidato
-
-        if not melhor_bruto:
-
-            bruto = re.search(
-                r"\d[\d\s.,/\-]{7,}\d",
-                fragmento
-            )
-
-            if bruto:
-
-                valor_bruto = re.sub(
-                    r"\s+",
-                    " ",
-                    bruto.group(0)
-                ).strip(" ,.;:")
-                digitos_bruto = re.sub(
-                    r"\D",
-                    "",
-                    valor_bruto
-                )
-
-                if 8 <= len(digitos_bruto) < 14:
-
-                    melhor_bruto = valor_bruto
-
-    if melhor_possivel:
-
-        return possivel_cnpj_formatado(melhor_possivel)
-
-    if melhor_bruto:
-
-        return (
-            "Possível CNPJ informado: "
-            + melhor_bruto
-            + " — confirmar com cliente"
-        )
 
     return ""
 
@@ -1636,13 +1599,49 @@ def nomes_iguais(nome_a, nome_b):
     )
 
 
+RUIDOS_NOME_PARTICIPANTE = {
+    "trisk",
+    "trishul",
+    "tristra",
+    "trista",
+    "trisha",
+    "trisonso",
+    "tristares",
+    "trishui",
+    "drishuizsorvagencia"
+}
+
+
+def nome_participante_confiavel(valor, analista_nome=""):
+
+    nome = limpar_nome_participante(valor)
+
+    if not nome or nomes_iguais(nome, analista_nome):
+
+        return ""
+
+    comparacao = normalizar_para_comparacao(nome)
+    tokens = set(comparacao.split())
+
+    if tokens & RUIDOS_NOME_PARTICIPANTE:
+
+        return ""
+
+    if comparacao.startswith(("entao ", "entendido ", "obrigado ", "beleza ")):
+
+        return ""
+
+    return nome
+
+
 def extrair_analista_nome(texto):
 
+    # O usuario autenticado e a fonte primaria do analista.
+    # Esta heuristica existe apenas como fallback para textos antigos.
     padroes = [
-        r"\bmeu nome (?:é|e)\s+([^,.;\n]{2,60})",
-        r"\bsou (?:o|a)?\s*([^,.;\n]{2,60})",
-        r"\bfala com\s+([^,.;\n]{2,60})",
-        r"\baqui (?:é|e)\s+([^,.;\n]{2,60})"
+        r"\baqui (?:é|e)\s+([^,.;\n]{2,45})\s+(?:do|da)\s+(?:suporte|atendimento)",
+        r"\bfala com\s+([^,.;\n]{2,45})\s+(?:do|da)\s+(?:suporte|atendimento)",
+        r"\bsou (?:o|a)?\s*([^,.;\n]{2,45})\s+(?:do|da)\s+(?:suporte|atendimento)"
     ]
 
     for padrao in padroes:
@@ -1655,7 +1654,7 @@ def extrair_analista_nome(texto):
 
         if match:
 
-            nome = limpar_nome_participante(
+            nome = nome_participante_confiavel(
                 match.group(1)
             )
 
@@ -1668,27 +1667,34 @@ def extrair_analista_nome(texto):
 
 def extrair_cliente_nome(texto, analista_nome=""):
 
+    texto_base = str(texto or "")
     padroes = [
         r"\bnome do cliente (?:é|e)\s+([^,.;\n]{2,60})",
         r"\bcliente se chama\s+([^,.;\n]{2,60})",
-        r"\bcliente[:\s]+([^,.;\n]{2,60})"
+        (
+            r"\bcom quem eu falo\s*[?!.:,;-]*\s*"
+            r"(?:boa\s+(?:tarde|noite)|bom\s+dia)?\s*[,.;:-]*\s*"
+            r"(?:meu nome (?:é|e)|me chamo|aqui (?:é|e)|sou (?:o|a)?)\s+"
+            r"([^,.;\n]{2,60})"
+        )
     ]
 
     for padrao in padroes:
 
         match = re.search(
             padrao,
-            str(texto or ""),
+            texto_base,
             flags=re.IGNORECASE
         )
 
         if match:
 
-            nome = limpar_nome_participante(
-                match.group(1)
+            nome = nome_participante_confiavel(
+                match.group(1),
+                analista_nome
             )
 
-            if nome and not nomes_iguais(nome, analista_nome):
+            if nome:
 
                 return nome
 
@@ -1698,9 +1704,13 @@ def extrair_cliente_nome(texto, analista_nome=""):
 def extrair_empresa_transcricao(texto):
 
     padroes = [
-        r"\braz[aã]o social (?:é|e|da|do)?\s+([^,.;\n]{3,100})",
-        r"\bempresa (?:é|e|da|do)?\s+([^,.;\n]{3,100})",
-        r"\bloja (?:é|e|da|do)?\s+([^,.;\n]{3,100})"
+        r"\bqual(?: que)? (?:é|e) o nome da empresa\s*[?!.:,;-]*\s*(?:é|e)?\s*([^,.;\n]{3,100})",
+        r"\ba empresa chama\s+([^,.;\n?]{3,100})",
+        r"\bempresa se chama\s+([^,.;\n?]{3,100})",
+        r"\braz[aã]o social (?:é|e)\s+([^,.;\n]{3,100})",
+        r"\bnome da empresa (?:é|e)\s+([^,.;\n]{3,100})",
+        r"\bempresa (?:é|e)\s+([^,.;\n]{3,100})",
+        r"\bloja (?:é|e)\s+([^,.;\n]{3,100})"
     ]
 
     for padrao in padroes:
@@ -1826,10 +1836,13 @@ def limpar_transcricao_para_resumo(texto):
     ).strip()
 
 
-def extrair_entidades_transcricao(texto):
+def extrair_entidades_transcricao(texto, analista_nome=""):
 
     texto_base = str(texto or "").strip()
-    analista_nome = extrair_analista_nome(texto_base)
+    analista_nome = (
+        limpar_nome_participante(analista_nome)
+        or extrair_analista_nome(texto_base)
+    )
 
     return {
         "analista_nome": analista_nome,
@@ -2197,10 +2210,12 @@ Regras:
 - Nunca coloque rotulos de campos dentro do descritivo.
 - Nunca deixe um rotulo virar valor de outro campo.
 - Se o valor de um campo seria apenas "Telefone de contato:" ou "E-mail Solicitante:", retorne string vazia.
-- Nunca use nome presente em saudacao ou apresentacao do analista como nome do cliente.
-- Frases como "meu nome e", "sou o", "fala com" e "aqui e" normalmente indicam o analista, nao o cliente.
+- O analista responsavel informado pelo backend e a fonte primaria para identificar o analista.
+- Nao presuma que a frase "meu nome e X" pertence ao analista.
+- Quando houver pergunta como "com quem eu falo?" ou "qual e seu nome?" seguida de "meu nome e X", X e o cliente.
+- Nunca use ruido de transcricao, palavras sem nexo ou nomes sem evidencia explicita como nome do cliente.
 - Se houver duvida entre analista e cliente, deixe nome_cliente vazio.
-- Se o CNPJ nao tiver exatamente 14 digitos claros, retorne vazio no JSON, exceto quando houver sequencia parecida com CNPJ.
+- Se o CNPJ nao tiver exatamente 14 digitos validos ou uma entidade de CNPJ validada pelo backend, retorne vazio no JSON.
 - Nao considerar e-mail valido sem @.
 - Nao preencher e-mail com dominio incompleto.
 - Para CNPJ, quando houver ambiguidade, sinalizar confirmacao em vez de afirmar.
@@ -2212,8 +2227,8 @@ Regras:
 
 - Corrija termos fiscais comuns quando o contexto confirmar: ISDS-QN, ISQN ou ISS QN = ISSQN; Sintes Nacional ou Sintese Nacional = Simples Nacional; nota de servico = NFS-e; retencao de IS = retencao de ISS.
 - Use correcoes de termos apenas para vocabulario tecnico. Nao use isso para inventar CNPJ, telefone, e-mail, empresa, loja ou nome de cliente.
-- Nunca ignore um CNPJ parcialmente identificado.
-- Se houver uma sequencia parecida com CNPJ, mas incerta, informe como "Possível CNPJ informado" e peça confirmacao.
+- Nunca transforme sequencia numerica parcial em CNPJ.
+- Somente use "Possível CNPJ informado" quando o backend fornecer uma entidade de 14 digitos validada e marcada como baixa confianca.
 
 Analista logado:
 {normalizar_campo_zendesk(analista_responsavel, limite=120)}
@@ -2296,7 +2311,7 @@ Entidades estruturadas extraidas pelo backend:
     )
     cliente_final = (
         entidades_extraidas.get("cliente_nome")
-        or dados.get("nome_cliente")
+        or ""
     )
 
     if nomes_iguais(
@@ -2310,30 +2325,13 @@ Entidades estruturadas extraidas pelo backend:
         cliente_final = ""
 
     resumo = resumo_zendesk_exato(
-        nome_empresa=(
-            entidades_extraidas.get("empresa")
-            or dados.get("nome_empresa")
-        ),
-        empresa_loja=dados.get("empresa_loja"),
-        cnpj=(
-            entidades_extraidas.get("cnpj")
-            or dados.get("cnpj")
-        ),
-        cnpj_contexto=(
-            entidades_extraidas.get("cnpj")
-            or transcricao
-        ),
+        nome_empresa=entidades_extraidas.get("empresa"),
+        empresa_loja="",
+        cnpj=entidades_extraidas.get("cnpj"),
+        cnpj_contexto=transcricao,
         cliente=cliente_final,
-        telefone=(
-            entidades_extraidas.get("telefone")
-            or dados.get("telefone")
-            or dados.get("telefone_contato")
-        ),
-        email=(
-            entidades_extraidas.get("email")
-            or dados.get("email")
-            or dados.get("email_solicitante")
-        ),
+        telefone=entidades_extraidas.get("telefone"),
+        email=entidades_extraidas.get("email"),
         analista=(
             analista_final
         ),
@@ -2864,8 +2862,50 @@ def admin_excluir_usuario(usuario_id):
 @app.route("/health")
 def health():
 
+    banco = "ok"
+
+    try:
+
+        with conectar_banco() as conn:
+
+            with conn.cursor() as cursor:
+
+                cursor.execute("SELECT 1")
+                cursor.fetchone()
+
+    except Exception:
+
+        banco = "erro"
+
+    ffmpeg = (
+        "desativado"
+        if not AUDIO_PREPROCESS_ENABLED
+        else (
+            "ok"
+            if shutil.which(FFMPEG_PATH)
+            else "indisponivel"
+        )
+    )
+
     return jsonify({
-        "status": "ok"
+        "status": (
+            "ok"
+            if (
+                banco == "ok"
+                and (
+                    not AUDIO_PREPROCESS_ENABLED
+                    or ffmpeg == "ok"
+                )
+            )
+            else "degradado"
+        ),
+        "database": banco,
+        "audio_preprocess": (
+            "ativo"
+            if AUDIO_PREPROCESS_ENABLED
+            else "desativado"
+        ),
+        "ffmpeg": ffmpeg
     })
 
 
@@ -3074,6 +3114,92 @@ def receber_chunk():
                     "erro": "Atendimento nao encontrado"
                 }), 404
 
+            cursor.execute(
+                """
+                SELECT COALESCE(SUM(duracao_segundos), 0)
+                FROM transcricoes_chunks
+                WHERE atendimento_id = %s
+                AND usuario_id = %s
+                AND status = 'transcrito'
+                AND ordem <> %s
+                """,
+                (
+                    atendimento_id,
+                    usuario_id,
+                    ordem_int
+                )
+            )
+
+            segundos_atendimento = int(cursor.fetchone()[0] or 0)
+
+            if (
+                segundos_atendimento + duracao_chunk_segundos
+                > MAX_CALL_DURATION_MINUTES * 60
+            ):
+
+                log_evento(
+                    "limite_duracao_atendimento_chunk",
+                    usuario_id=usuario_id,
+                    atendimento_id=atendimento_id,
+                    segundos_atendimento=segundos_atendimento,
+                    duracao_chunk_segundos=duracao_chunk_segundos,
+                    limite_segundos=MAX_CALL_DURATION_MINUTES * 60
+                )
+
+                return erro_limite(
+                    "Limite de duracao por atendimento atingido.",
+                    tipo="limite_duracao_atendimento",
+                    deve_parar_gravacao=True,
+                    duracao_minutos=round(segundos_atendimento / 60, 2),
+                    limite_minutos=MAX_CALL_DURATION_MINUTES
+                )
+
+            cursor.execute(
+                """
+                SELECT COALESCE(SUM(tc.duracao_segundos), 0)
+                FROM transcricoes_chunks tc
+                INNER JOIN atendimentos a
+                    ON a.id = tc.atendimento_id
+                WHERE tc.usuario_id = %s
+                AND tc.status = 'transcrito'
+                AND COALESCE(a.inicio_em, tc.criado_em) >= CURRENT_DATE
+                AND COALESCE(a.inicio_em, tc.criado_em) < CURRENT_DATE + INTERVAL '1 day'
+                AND NOT (
+                    tc.atendimento_id = %s
+                    AND tc.ordem = %s
+                )
+                """,
+                (
+                    usuario_id,
+                    atendimento_id,
+                    ordem_int
+                )
+            )
+
+            segundos_dia_chunks = int(cursor.fetchone()[0] or 0)
+
+            if (
+                segundos_dia_chunks + duracao_chunk_segundos
+                > MAX_AUDIO_MINUTES_PER_DAY * 60
+            ):
+
+                log_evento(
+                    "limite_minutos_chunk",
+                    usuario_id=usuario_id,
+                    atendimento_id=atendimento_id,
+                    segundos_dia=segundos_dia_chunks,
+                    duracao_chunk_segundos=duracao_chunk_segundos,
+                    limite_segundos=MAX_AUDIO_MINUTES_PER_DAY * 60
+                )
+
+                return erro_limite(
+                    "Limite diario de minutos de audio atingido.",
+                    tipo="limite_minutos_dia",
+                    deve_parar_gravacao=True,
+                    minutos_hoje=round(segundos_dia_chunks / 60, 2),
+                    limite_minutos=MAX_AUDIO_MINUTES_PER_DAY
+                )
+
     arquivo = request.files["audio"]
 
     try:
@@ -3149,6 +3275,7 @@ def receber_chunk():
         provider_tentado = transcricao_chunk["provider_tentado"]
         provider_usado = transcricao_chunk["provider_usado"]
         fallback_usado = transcricao_chunk["fallback_usado"]
+        motivo_fallback = transcricao_chunk.get("motivo_fallback", "")
         modelo_usado = transcricao_chunk.get("modelo_usado")
 
         with conectar_banco() as conn:
@@ -3184,6 +3311,7 @@ def receber_chunk():
                         provider_tentado,
                         provider_usado,
                         fallback_usado,
+                        motivo_fallback,
                         duracao_segundos,
                         transcricao_bruta,
                         transcricao_normalizada,
@@ -3198,7 +3326,7 @@ def receber_chunk():
                         erro_preprocessamento
                     )
                     VALUES (
-                        %s, %s, %s, %s, 'transcrito', NULL, %s, %s, %s, %s,
+                        %s, %s, %s, %s, 'transcrito', NULL, %s, %s, %s, %s, %s,
                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                     )
                     ON CONFLICT (atendimento_id, ordem)
@@ -3209,6 +3337,7 @@ def receber_chunk():
                         provider_tentado = EXCLUDED.provider_tentado,
                         provider_usado = EXCLUDED.provider_usado,
                         fallback_usado = EXCLUDED.fallback_usado,
+                        motivo_fallback = EXCLUDED.motivo_fallback,
                         duracao_segundos = EXCLUDED.duracao_segundos,
                         transcricao_bruta = EXCLUDED.transcricao_bruta,
                         transcricao_normalizada = EXCLUDED.transcricao_normalizada,
@@ -3230,6 +3359,7 @@ def receber_chunk():
                         provider_tentado,
                         provider_usado,
                         fallback_usado,
+                        motivo_fallback,
                         duracao_chunk_segundos,
                         texto_original,
                         texto_normalizado,
@@ -3298,8 +3428,10 @@ def receber_chunk():
             provider_usado=provider_usado,
             modelo_usado=modelo_usado,
             fallback_usado=fallback_usado,
+            motivo_fallback=transcricao_chunk.get("motivo_fallback", ""),
             tempo_transcricao_segundos=transcricao_chunk.get("tempo_transcricao_segundos", 0),
-            erro_preprocessamento=transcricao_chunk.get("erro_preprocessamento", "")
+            erro_preprocessamento=transcricao_chunk.get("erro_preprocessamento", ""),
+            erro_fallback_qualidade=transcricao_chunk.get("erro_fallback_qualidade", "")
         )
 
         return jsonify({
@@ -3308,6 +3440,7 @@ def receber_chunk():
             "provider_usado": provider_usado,
             "modelo_usado": modelo_usado,
             "fallback_usado": fallback_usado,
+            "motivo_fallback": transcricao_chunk.get("motivo_fallback", ""),
             "audio_processado": bool(transcricao_chunk.get("audio_processado"))
         })
 
@@ -3692,7 +3825,10 @@ def finalizar_atendimento():
             cursor.execute(
                 """
                 SELECT
+                    COALESCE(provider_tentado, %s),
                     COALESCE(provider_usado, %s),
+                    COALESCE(fallback_usado, FALSE),
+                    COALESCE(motivo_fallback, ''),
                     COALESCE(duracao_segundos, %s)
                 FROM transcricoes_chunks
                 WHERE atendimento_id = %s
@@ -3702,19 +3838,29 @@ def finalizar_atendimento():
                 """,
                 (
                     TRANSCRIBE_PROVIDER,
+                    TRANSCRIBE_PROVIDER,
                     CHUNK_SECONDS,
                     atendimento_id,
                     usuario_id
                 )
             )
 
+            chunks_transcritos_detalhes = cursor.fetchall()
             chunks_transcritos_provider = [
                 (
-                    row[0],
-                    row[1]
+                    row[1],
+                    row[4]
                 )
-                for row in cursor.fetchall()
+                for row in chunks_transcritos_detalhes
             ]
+            segundos_groq_fallback_qualidade = sum(
+                max(0, int(row[4] or 0))
+                for row in chunks_transcritos_detalhes
+                if row[0] == "groq"
+                and row[1] == "openai"
+                and bool(row[2])
+                and row[3] == "baixa_qualidade"
+            )
 
             uso = uso_diario_usuario(
                 cursor,
@@ -3734,7 +3880,10 @@ def finalizar_atendimento():
             )
         )
     )
-    entidades_extraidas = extrair_entidades_transcricao(transcricao_original)
+    entidades_extraidas = extrair_entidades_transcricao(
+        transcricao_original,
+        session.get("usuario_nome")
+    )
 
     chunks_total = max(
         int(chunks_total_cliente or 0),
@@ -3812,6 +3961,10 @@ def finalizar_atendimento():
 
     custo_estimado = estimar_custo_transcricao_por_provedor(
         segundos_por_provider
+    )
+    custo_estimado += estimar_custo_transcricao(
+        segundos_groq_fallback_qualidade,
+        "groq"
     )
     custo_transcricao_openai = estimar_custo_transcricao(
         segundos_por_provider.get("openai", 0),
@@ -4122,12 +4275,28 @@ def transcrever_arquivo_unico():
         transcricao_chunk["texto"]
     )
     texto = normalizar_entidades_faladas(texto_original)
-    entidades_extraidas = extrair_entidades_transcricao(texto_original)
-    custo_estimado = round(
-        estimar_custo_transcricao(
+    entidades_extraidas = extrair_entidades_transcricao(
+        texto_original,
+        session.get("usuario_nome")
+    )
+    custo_estimado = estimar_custo_transcricao(
+        30,
+        transcricao_chunk["provider_usado"]
+    )
+
+    if (
+        transcricao_chunk.get("motivo_fallback") == "baixa_qualidade"
+        and transcricao_chunk.get("provider_tentado") == "groq"
+        and transcricao_chunk.get("provider_usado") == "openai"
+    ):
+
+        custo_estimado += estimar_custo_transcricao(
             30,
-            transcricao_chunk["provider_usado"]
+            "groq"
         )
+
+    custo_estimado = round(
+        custo_estimado
         + estimar_custo_atendimento(0, True),
         4
     )
@@ -4620,7 +4789,10 @@ def reprocessar_resumo_atendimento(atendimento_id):
             )
             transcricao_original = transcricao
             transcricao = normalizar_entidades_faladas(transcricao_original)
-            entidades_extraidas = extrair_entidades_transcricao(transcricao_original)
+            entidades_extraidas = extrair_entidades_transcricao(
+                transcricao_original,
+                row[3] or session.get("usuario_nome")
+            )
 
             if not transcricao:
 

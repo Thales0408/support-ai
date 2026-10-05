@@ -49,7 +49,7 @@ O sistema captura audio da aba do 55PBX e do microfone, envia trechos de audio p
 - Analistas veem apenas seus proprios atendimentos.
 - Supervisor e admin tecnico podem ver "Meus atendimentos" ou "Todos os analistas".
 - Gravacao de audio da aba + microfone.
-- Envio de chunks configuraveis, com padrao de 60 segundos.
+- Envio de chunks configuraveis, com padrao de 45 segundos.
 - Transcricao por chunk.
 - Finalizacao com texto pronto para colar no ticket ClickDesk.
 - Registro de falhas de chunks sem derrubar o atendimento inteiro.
@@ -81,10 +81,13 @@ TRANSCRIBE_MODEL=
 OPENAI_TRANSCRIBE_MODEL=
 SUMMARY_MODEL=
 TRANSCRIBE_USD_HORA_GROQ=
+TRANSCRIBE_USD_HORA_GROQ_LARGE_V3=
+TRANSCRIBE_USD_MINUTO_OPENAI_MINI=
 TRANSCRIBE_USD_MINUTO_OPENAI=
 TRANSCRIBE_USD_HORA=
 SUMMARY_USD_POR_ATENDIMENTO=
 AUDIO_PREPROCESS_ENABLED=
+AUDIO_DIAGNOSTICS_KEEP=
 AUDIO_DIAGNOSTICS_DIR=
 FFMPEG_PATH=
 SECRET_KEY=
@@ -111,22 +114,27 @@ TRANSCRIBE_MODEL=whisper-large-v3-turbo
 OPENAI_TRANSCRIBE_MODEL=whisper-1
 GROQ_BASE_URL=https://api.groq.com/openai/v1
 TRANSCRIBE_USD_HORA_GROQ=0.04
+TRANSCRIBE_USD_HORA_GROQ_LARGE_V3=0.111
+TRANSCRIBE_USD_MINUTO_OPENAI_MINI=0.003
 TRANSCRIBE_USD_MINUTO_OPENAI=0.006
 AUDIO_PREPROCESS_ENABLED=true
+AUDIO_DIAGNOSTICS_KEEP=false
 CHUNK_SECONDS=45
 ```
 
-O `OPENAI_API_KEY` tem dois usos: gerar o resumo final e servir como fallback de transcricao quando `TRANSCRIBE_FALLBACK_PROVIDER=openai`. A transcricao principal e a Groq quando `TRANSCRIBE_PROVIDER=groq`; se a Groq retornar limite, indisponibilidade, timeout ou erro 5xx, o backend tenta OpenAI Whisper como fallback, respeitando os limites diarios de custo antes de enviar o audio.
+O `OPENAI_API_KEY` tem dois usos: gerar o resumo final e servir como fallback de transcricao quando `TRANSCRIBE_FALLBACK_PROVIDER=openai`. A transcricao principal e a Groq quando `TRANSCRIBE_PROVIDER=groq`; se a Groq retornar limite, indisponibilidade, timeout ou erro 5xx, o backend tenta OpenAI Whisper como fallback. O fallback tambem pode ser acionado quando a transcricao Groq apresenta sinais fortes de baixa qualidade; nesse caso, o OpenAI recebe o audio original para criar uma segunda tentativa independente. Os limites diarios de custo continuam sendo verificados antes do fallback.
 
 Para evitar requisicoes pagas sem fala, o navegador mede atividade nos canais da aba e do microfone e nao envia trechos silenciosos. Se a medicao falhar ou o AudioContext estiver suspenso, o trecho e enviado normalmente para nao perder uma fala. Ajuste o limiar apenas apos comparar com gravacoes reais, especialmente vozes baixas. O dashboard atualiza os dados a cada 30 segundos enquanto a aba esta visivel e imediatamente quando ela volta ao primeiro plano.
+
+Os arquivos de diagnostico de audio sao removidos por padrao apos o preprocessamento. Use `AUDIO_DIAGNOSTICS_KEEP=true` apenas durante investigacoes controladas, pois esses arquivos podem conter gravacoes de clientes.
 
 Para comparar modelos em um audio real:
 
 ```text
-python tools/compare_transcription.py caminho/audio.webm
+python tools/compare_transcription.py caminho/audio.webm --duracao-segundos 45
 ```
 
-A ferramenta testa Groq `whisper-large-v3-turbo`, Groq `whisper-large-v3` e OpenAI `whisper-1`, exibindo tempo, custo estimado e diferencas principais.
+A ferramenta compara o audio original e, quando disponivel, a versao preprocessada nos modelos Groq `whisper-large-v3-turbo`, Groq `whisper-large-v3` e OpenAI `whisper-1`, exibindo tempo, custo estimado, similaridade e uma heuristica de qualidade.
 
 O backend prioriza `DB_*` quando `DB_PASSWORD` esta configurada. `DATABASE_URL` pode existir no Railway, mas nao deve ser a fonte principal enquanto o pooler do Supabase estiver configurado via `DB_*`.
 
@@ -136,7 +144,7 @@ O ClickDesk cria o ticket quando a ligacao toca. Informe o numero do ticket ao i
 
 Os dados existentes continuam nas colunas `ticket_zendesk` do banco e nas chaves `ticket_zendesk`/`resumo_zendesk` da API por compatibilidade. A interface envia `ticket_clickdesk`, aceito pelo backend junto com o nome antigo. Nao renomeie a coluna sem migracao de banco.
 
-Para voltar ao Railway, conecte o repositorio GitHub ao servico web existente, confira as variaveis em `.env.example`, configure o banco Supabase pelo pooler IPv4 e publique o commit desejado. Confirme no servico Railway que `/health` retorna `{"status":"ok"}`. Uma implantacao so deve ser considerada concluida depois de testar login, inicio, chunk e finalizacao pelo dominio HTTPS ativo.
+Para voltar ao Railway, conecte o repositorio GitHub ao servico web existente, confira as variaveis em `.env.example`, configure o banco Supabase pelo pooler IPv4 e publique o commit desejado. Confirme no servico Railway que `/health` retorna `status: ok`, `database: ok` e, quando o preprocessamento estiver ativo, `ffmpeg: ok`. Uma implantacao so deve ser considerada concluida depois de testar login, inicio, chunk e finalizacao pelo dominio HTTPS ativo.
 
 ## Rodando localmente
 

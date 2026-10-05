@@ -23,7 +23,9 @@ from config import (
     TRANSCRIBE_PROVIDER,
     TRANSCRIBE_USD_HORA,
     TRANSCRIBE_USD_HORA_GROQ,
-    TRANSCRIBE_USD_MINUTO_OPENAI
+    TRANSCRIBE_USD_HORA_GROQ_LARGE_V3,
+    TRANSCRIBE_USD_MINUTO_OPENAI,
+    TRANSCRIBE_USD_MINUTO_OPENAI_MINI
 )
 from services.audio import preprocessar_audio_transcricao
 
@@ -53,17 +55,71 @@ def cliente_resumo():
 
 
 PROMPT_TRANSCRICAO = (
-    "Transcreva em portugues do Brasil. "
-    "Contexto: atendimento de suporte tecnico para ERP, emissao de "
-    "nota fiscal, NFS-e, NF-e, NFC-e, ISSQN, Simples Nacional, "
-    "retencao de ISS, CNPJ, loja, cliente, certificado digital, XML, "
-    "Zendesk, AnyDesk, TeamViewer, caixa, venda, cadastro, produto, "
-    "financeiro, estoque, PDV, SAT e boleto. "
-    "Preserve numeros, CNPJ, nomes de empresa e termos fiscais. "
-    "Nao invente palavras quando houver silencio, ruido, musica, "
-    "eco ou fala inaudivel. Se um trecho estiver confuso, transcreva "
-    "somente as palavras audiveis."
+    "Atendimento de suporte tecnico ERP em portugues do Brasil. "
+    "Vocabulario frequente: GestaoClick, ClickDesk, CNPJ, CPF, NCM, "
+    "NF-e, NFC-e, NFS-e, nota fiscal, ISSQN, ICMS, PIS, COFINS, IBS, CBS, "
+    "Simples Nacional, certificado digital, XML, Banco Inter, integracao, "
+    "financeiro, estoque, venda, orcamento, produto, PDV, SAT, boleto, "
+    "AnyDesk, TeamViewer, Chrome, Edge."
 )
+
+
+def pontuacao_ruido_transcricao(texto):
+
+    texto = str(texto or "")
+    comparacao = texto.lower()
+    pontos = 0
+
+    marcadores_fortes = [
+        "transcreva somente as palavras",
+        "transcreva em portugues",
+        "contexto: atendimento",
+        "atendimento de suporte tecnico erp",
+        "vocabulario frequente",
+        "trisk",
+        "trishul",
+        "tristra",
+        "trisonso",
+        "drishuizsorvagencia"
+    ]
+
+    for marcador in marcadores_fortes:
+
+        if marcador in comparacao:
+
+            pontos += 4
+
+    if re.search(
+        r"\b([\wÀ-ÿ]{2,})(?:[\s,.;:-]+\1){2,}\b",
+        comparacao,
+        flags=re.IGNORECASE
+    ):
+
+        pontos += 3
+
+    palavras = re.findall(
+        r"[A-Za-zÀ-ÿ0-9]+",
+        comparacao
+    )
+
+    if len(palavras) >= 12:
+
+        curtas = sum(
+            1
+            for palavra in palavras
+            if len(palavra) <= 2
+        )
+
+        if curtas / len(palavras) > 0.45:
+
+            pontos += 2
+
+    return pontos
+
+
+def transcricao_parece_baixa_qualidade(texto):
+
+    return pontuacao_ruido_transcricao(texto) >= 4
 
 
 def cliente_transcricao(provider):
@@ -189,6 +245,60 @@ def transcrever_chunk(arquivo, validar_fallback=None):
             mime_transcricao
         )
 
+        if (
+            provider_tentado == "groq"
+            and fallback_provider == "openai"
+            and transcricao_parece_baixa_qualidade(
+                transcricao["texto"]
+            )
+        ):
+
+            if validar_fallback:
+
+                validar_fallback()
+
+            try:
+
+                fallback = transcrever_bytes_diagnostico(
+                    fallback_provider,
+                    audio_original,
+                    nome,
+                    mime
+                )
+
+            except LimiteCustoFallbackTranscricao:
+
+                raise
+
+            except Exception as exc:
+
+                return {
+                    "texto": transcricao["texto"],
+                    "provider_tentado": provider_tentado,
+                    "provider_usado": provider_tentado,
+                    "fallback_usado": False,
+                    "motivo_fallback": "baixa_qualidade_fallback_falhou",
+                    "erro_fallback_qualidade": str(exc)[:500],
+                    "modelo_usado": transcricao["modelo_usado"],
+                    "tempo_transcricao_segundos": transcricao["tempo_transcricao_segundos"],
+                    **audio_preprocessado
+                }
+
+            return {
+                "texto": fallback["texto"],
+                "provider_tentado": provider_tentado,
+                "provider_usado": fallback_provider,
+                "fallback_usado": True,
+                "motivo_fallback": "baixa_qualidade",
+                "fallback_audio_original": True,
+                "modelo_usado": fallback["modelo_usado"],
+                "tempo_transcricao_segundos": (
+                    transcricao["tempo_transcricao_segundos"]
+                    + fallback["tempo_transcricao_segundos"]
+                ),
+                **audio_preprocessado
+            }
+
         return {
             "texto": transcricao["texto"],
             "provider_tentado": provider_tentado,
@@ -225,6 +335,7 @@ def transcrever_chunk(arquivo, validar_fallback=None):
             "provider_tentado": provider_tentado,
             "provider_usado": fallback_provider,
             "fallback_usado": True,
+            "motivo_fallback": "erro_provider_principal",
             "modelo_usado": transcricao["modelo_usado"],
             "tempo_transcricao_segundos": transcricao["tempo_transcricao_segundos"],
             "erro_provider_principal": str(e)[:500],
@@ -232,21 +343,40 @@ def transcrever_chunk(arquivo, validar_fallback=None):
         }
 
 
-def estimar_custo_transcricao(segundos_transcritos, provider="groq"):
+def estimar_custo_transcricao(
+    segundos_transcritos,
+    provider="groq",
+    modelo=None
+):
 
     segundos = max(0, int(segundos_transcritos or 0))
+    provider = str(provider or "").lower()
 
     if provider == "openai":
 
+        modelo_efetivo = modelo or OPENAI_TRANSCRIBE_MODEL
+        taxa_minuto = (
+            TRANSCRIBE_USD_MINUTO_OPENAI_MINI
+            if modelo_efetivo == "gpt-4o-mini-transcribe"
+            else TRANSCRIBE_USD_MINUTO_OPENAI
+        )
+
         return round(
-            (segundos / 60) * TRANSCRIBE_USD_MINUTO_OPENAI,
+            (segundos / 60) * taxa_minuto,
             4
         )
 
     if provider == "groq":
 
+        modelo_efetivo = modelo or TRANSCRIBE_MODEL
+        taxa_hora = (
+            TRANSCRIBE_USD_HORA_GROQ_LARGE_V3
+            if modelo_efetivo == "whisper-large-v3"
+            else TRANSCRIBE_USD_HORA_GROQ
+        )
+
         return round(
-            (segundos / 3600) * TRANSCRIBE_USD_HORA_GROQ,
+            (segundos / 3600) * taxa_hora,
             4
         )
 

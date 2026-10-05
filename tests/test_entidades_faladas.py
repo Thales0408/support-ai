@@ -13,7 +13,7 @@ class EntidadesFaladasTest(unittest.TestCase):
 
         self.assertEqual(
             app.extrair_possivel_cnpj(
-                "zero oito seis tres tres oito oito nove mil contra cinquenta e seis"
+                "CNPJ zero oito seis tres tres oito oito nove mil contra cinquenta e seis"
             ),
             self.POSSIVEL + "08.633.889/0001-56" + self.CONFIRMAR
         )
@@ -21,22 +21,29 @@ class EntidadesFaladasTest(unittest.TestCase):
     def test_cnpj_falado_mil_contra_numerico(self):
 
         self.assertEqual(
-            app.extrair_possivel_cnpj("08 633 889 mil contra 56"),
+            app.extrair_possivel_cnpj("CNPJ 08 633 889 mil contra 56"),
             self.POSSIVEL + "08.633.889/0001-56" + self.CONFIRMAR
         )
 
     def test_cnpj_falado_dois_mil_contra(self):
 
         self.assertEqual(
-            app.extrair_possivel_cnpj("08 633 889 dois mil contra 56"),
-            self.POSSIVEL + "08.633.889/0002-56" + self.CONFIRMAR
+            app.extrair_possivel_cnpj("CNPJ 08 633 889 dois mil contra 37"),
+            self.POSSIVEL + "08.633.889/0002-37" + self.CONFIRMAR
         )
 
     def test_cnpj_falado_cinco_mil_contra(self):
 
         self.assertEqual(
-            app.extrair_possivel_cnpj("08 633 889 cinco mil contra 56"),
-            self.POSSIVEL + "08.633.889/0005-56" + self.CONFIRMAR
+            app.extrair_possivel_cnpj("CNPJ 08 633 889 cinco mil contra 80"),
+            self.POSSIVEL + "08.633.889/0005-80" + self.CONFIRMAR
+        )
+
+    def test_cnpj_falado_filial_com_dv_invalido_e_rejeitado(self):
+
+        self.assertEqual(
+            app.extrair_possivel_cnpj("CNPJ 08 633 889 dois mil contra 56"),
+            ""
         )
 
     def test_cnpj_falado_mil_de_re(self):
@@ -71,24 +78,55 @@ class EntidadesFaladasTest(unittest.TestCase):
 
     def test_cnpj_numericamente_blocos_1000_a_9000(self):
 
-        for numero in range(1, 10):
+        dvs = {
+            1: "00",
+            2: "83",
+            3: "64",
+            4: "45",
+            5: "26",
+            6: "07",
+            7: "98",
+            8: "79",
+            9: "50"
+        }
+
+        for numero, dv in dvs.items():
 
             with self.subTest(numero=numero):
 
                 self.assertEqual(
                     app.extrair_possivel_cnpj(
-                        f"CNPJ 09-114-915-{numero}000-00"
+                        f"CNPJ 09-114-915-{numero}000-{dv}"
                     ),
-                    self.POSSIVEL + f"09.114.915/000{numero}-00" + self.CONFIRMAR
+                    self.POSSIVEL + f"09.114.915/000{numero}-{dv}" + self.CONFIRMAR
                 )
 
-    def test_cnpj_deformado_curto_fica_como_possivel_bruto(self):
+    def test_cnpj_possivel_invalido_tambem_e_rejeitado(self):
+
+        self.assertEqual(
+            app.normalizar_cnpj(
+                "Possível CNPJ informado: 3, 486, 1000 — confirmar com cliente",
+                permitir_possivel=True
+            ),
+            ""
+        )
+
+    def test_cnpj_deformado_curto_nao_vai_para_documentacao(self):
 
         self.assertEqual(
             app.extrair_possivel_cnpj(
                 "Cliente informou o CNPJ da empresa 1,005-911730 para cadastro"
             ),
-            self.POSSIVEL + "1,005-911730" + self.CONFIRMAR
+            ""
+        )
+
+    def test_cnpj_grotesco_curto_nao_vai_para_documentacao(self):
+
+        self.assertEqual(
+            app.extrair_possivel_cnpj(
+                "CNPJ 3, 486, 1000 contra 76"
+            ),
+            ""
         )
 
     def test_email_gmail_falado(self):
@@ -154,14 +192,106 @@ class EntidadesFaladasTest(unittest.TestCase):
             "suporteequipamentos@gmail.com"
         )
 
-    def test_extrair_analista_nao_preenche_cliente_por_saudacao(self):
+    def test_analista_logado_e_fonte_primaria(self):
 
         entidades = app.extrair_entidades_transcricao(
-            "Meu nome e Thales, falo do suporte. Qual o CNPJ da empresa?"
+            "Meu nome e Thales, falo do suporte. Qual o CNPJ da empresa?",
+            analista_nome="Thales"
         )
 
         self.assertEqual(entidades["analista_nome"], "Thales")
         self.assertEqual(entidades["cliente_nome"], "")
+
+    def test_cliente_joao_pedro_apos_pergunta_com_quem_falo(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            (
+                "Boa tarde, com quem eu falo? Boa tarde, meu nome e Joao Pedro, "
+                "por gentileza do que eu to falando. Tudo bem, Joao Pedro."
+            ),
+            analista_nome="admin"
+        )
+
+        self.assertEqual(entidades["cliente_nome"], "Joao Pedro")
+
+    def test_pergunta_generica_de_nome_nao_define_cliente(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            "Qual e seu nome? Meu nome e Thales. Como posso te ajudar?",
+            analista_nome="admin"
+        )
+
+        self.assertEqual(entidades["cliente_nome"], "")
+
+    def test_nome_alucinado_trisk_e_rejeitado(self):
+
+        self.assertEqual(
+            app.nome_participante_confiavel(
+                "Entao TRISK",
+                "admin"
+            ),
+            ""
+        )
+
+    def test_rotulo_cliente_nao_vira_nome(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            "Cliente: preciso de ajuda com a nota fiscal.",
+            analista_nome="admin"
+        )
+
+        self.assertEqual(entidades["cliente_nome"], "")
+
+    def test_cnpj_possivel_sem_acento_preserva_baixa_confianca(self):
+
+        self.assertEqual(
+            app.normalizar_cnpj(
+                "Possivel CNPJ informado: 43.405.954/0001-97 - confirmar com cliente",
+                permitir_possivel=True
+            ),
+            self.POSSIVEL + "43.405.954/0001-97" + self.CONFIRMAR
+        )
+
+    def test_empresa_chama_gigante_e_importes(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            "A empresa chama gigante e importes? E isso ai.",
+            analista_nome="admin"
+        )
+
+        self.assertEqual(
+            app.normalizar_para_comparacao(entidades["empresa"]),
+            "gigante e importes"
+        )
+
+    def test_frase_generica_com_empresa_nao_vira_nome(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            "A empresa nao consegue importar os produtos.",
+            analista_nome="admin"
+        )
+
+        self.assertEqual(entidades["empresa"], "")
+
+    def test_empresa_cpa_digital_por_pergunta_explicita(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            "Qual que e o nome da empresa? E CPA digital.",
+            analista_nome="admin"
+        )
+
+        self.assertEqual(
+            app.normalizar_para_comparacao(entidades["empresa"]),
+            "cpa digital"
+        )
+
+    def test_limpeza_remove_vazamento_transcreva_somente_palavras(self):
+
+        texto = app.limpar_vazamento_prompt_transcricao(
+            "Transcreva somente as palavras audiveis. Cliente pediu suporte."
+        )
+
+        self.assertEqual(texto, "Cliente pediu suporte")
 
     def test_analisar_com_ia_remove_cliente_igual_analista(self):
 
@@ -208,6 +338,62 @@ class EntidadesFaladasTest(unittest.TestCase):
 
         self.assertIn("Analista responsável: Thales", analise["resumo_zendesk"])
         self.assertIn("Nome do Cliente: \n", analise["resumo_zendesk"])
+
+    def test_ia_nao_inventa_campos_estruturados_sem_evidencia(self):
+
+        class Mensagem:
+            content = (
+                '{"nome_empresa":"Empresa Inventada","empresa_loja":"Loja X",'
+                '"cnpj":"43.405.954/0001-97","nome_cliente":"Maria",'
+                '"telefone":"11999999999","email":"inventado@example.com",'
+                '"analista_responsavel":"admin",'
+                '"descritivo":"Cliente solicitou orientacao sobre tributacao.",'
+                '"sentimento_cliente":"neutro","urgencia":"media",'
+                '"categoria":"fiscal","problema_principal":"Tributacao",'
+                '"tags":["fiscal"]}'
+            )
+
+        class Choice:
+            message = Mensagem()
+
+        class Resposta:
+            choices = [Choice()]
+
+        class Completions:
+            def create(self, **kwargs):
+                return Resposta()
+
+        class Chat:
+            completions = Completions()
+
+        class Cliente:
+            chat = Chat()
+
+        with patch("app.cliente_resumo", return_value=Cliente()):
+            analise = app.analisar_com_ia(
+                "Cliente solicitou orientacao sobre tributacao.",
+                "admin",
+                entidades_extraidas={
+                    "analista_nome": "admin",
+                    "cliente_nome": "",
+                    "empresa": "",
+                    "cnpj": "",
+                    "email": "",
+                    "telefone": ""
+                }
+            )
+
+        resumo = analise["resumo_zendesk"]
+        self.assertIn("Nome da empresa: \n", resumo)
+        self.assertIn("Empresa/Loja: \n", resumo)
+        self.assertIn("CNPJ: \n", resumo)
+        self.assertIn("Nome do Cliente: \n", resumo)
+        self.assertIn("Telefone de contato: \n", resumo)
+        self.assertIn("E-mail Solicitante: \n", resumo)
+        self.assertIn(
+            "Cliente solicitou orientacao sobre tributacao.",
+            resumo
+        )
 
     def test_limpar_transcricao_para_resumo_remove_ruidos_sem_remover_numeros(self):
 

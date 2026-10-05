@@ -82,6 +82,48 @@ class FakeCursor:
             self.result = [(1,)] if atendimento and atendimento["usuario_id"] == usuario_id else []
             return
 
+        if (
+            "select coalesce(sum(duracao_segundos), 0) from transcricoes_chunks"
+            in sql_lower
+            and "ordem <> %s" in sql_lower
+        ):
+
+            atendimento_id = int(params[0])
+            usuario_id = int(params[1])
+            ordem = int(params[2])
+            segundos = sum(
+                int(chunk.get("duracao_segundos") or 0)
+                for chunk in self.state["chunks"].values()
+                if chunk["atendimento_id"] == atendimento_id
+                and chunk["usuario_id"] == usuario_id
+                and chunk["status"] == "transcrito"
+                and chunk["ordem"] != ordem
+            )
+            self.result = [(segundos,)]
+            return
+
+        if (
+            "select coalesce(sum(tc.duracao_segundos), 0)"
+            in sql_lower
+            and "from transcricoes_chunks tc" in sql_lower
+        ):
+
+            usuario_id = int(params[0])
+            atendimento_id = int(params[1])
+            ordem = int(params[2])
+            segundos = sum(
+                int(chunk.get("duracao_segundos") or 0)
+                for chunk in self.state["chunks"].values()
+                if chunk["usuario_id"] == usuario_id
+                and chunk["status"] == "transcrito"
+                and not (
+                    chunk["atendimento_id"] == atendimento_id
+                    and chunk["ordem"] == ordem
+                )
+            )
+            self.result = [(segundos,)]
+            return
+
         if "select status, provider_usado, fallback_usado from transcricoes_chunks" in sql_lower:
 
             key = (int(params[0]), int(params[2]))
@@ -127,14 +169,15 @@ class FakeCursor:
                 "provider_tentado": params[4],
                 "provider_usado": params[5],
                 "fallback_usado": bool(params[6]),
-                "duracao_segundos": int(params[7]),
-                "transcricao_bruta": params[8],
-                "transcricao_normalizada": params[9],
-                "transcricao_limpa_para_resumo": params[10],
-                "modelo_usado": params[11],
-                "tamanho_audio_original": params[12],
-                "tamanho_audio_processado": params[13],
-                "audio_processado": bool(params[14])
+                "motivo_fallback": params[7],
+                "duracao_segundos": int(params[8]),
+                "transcricao_bruta": params[9],
+                "transcricao_normalizada": params[10],
+                "transcricao_limpa_para_resumo": params[11],
+                "modelo_usado": params[12],
+                "tamanho_audio_original": params[13],
+                "tamanho_audio_processado": params[14],
+                "audio_processado": bool(params[15])
             }
             self.result = []
             return
@@ -209,10 +252,13 @@ class FakeCursor:
             )]
             return
 
-        if "select coalesce(provider_usado" in sql_lower:
+        if (
+            "select coalesce(provider_tentado" in sql_lower
+            and "coalesce(motivo_fallback" in sql_lower
+        ):
 
-            atendimento_id = int(params[2])
-            usuario_id = int(params[3])
+            atendimento_id = int(params[3])
+            usuario_id = int(params[4])
             chunks = [
                 chunk
                 for chunk in self.state["chunks"].values()
@@ -222,7 +268,10 @@ class FakeCursor:
             ]
             self.result = [
                 (
-                    chunk["provider_usado"],
+                    chunk.get("provider_tentado") or "groq",
+                    chunk.get("provider_usado") or "groq",
+                    bool(chunk.get("fallback_usado")),
+                    chunk.get("motivo_fallback") or "",
                     chunk["duracao_segundos"]
                 )
                 for chunk in sorted(chunks, key=lambda item: item["ordem"])
@@ -528,6 +577,28 @@ class FluxosIntegracaoTest(unittest.TestCase):
             headers={token_header: "csrf-teste"}
         )
 
+    def test_health_mostra_banco_e_ffmpeg(self):
+
+        with patch(
+            "app.shutil.which",
+            return_value="/usr/bin/ffmpeg"
+        ):
+
+            response = self.client.get("/health")
+
+        self.assertEqual(response.status_code, 200)
+        dados = response.get_json()
+        self.assertEqual(dados["status"], "ok")
+        self.assertEqual(dados["database"], "ok")
+
+        if app.AUDIO_PREPROCESS_ENABLED:
+
+            self.assertEqual(dados["ffmpeg"], "ok")
+
+        else:
+
+            self.assertEqual(dados["ffmpeg"], "desativado")
+
     def test_login_logout_dashboard(self):
 
         with self.client.session_transaction() as sess:
@@ -667,6 +738,101 @@ class FluxosIntegracaoTest(unittest.TestCase):
         self.assertEqual(repetida.status_code, 200)
         self.assertTrue(repetida.get_json()["reutilizado"])
         self.assertEqual(mock_ia_repetida.call_count, 0)
+
+    def test_chunk_bloqueia_novo_audio_apos_limite_da_chamada(self):
+
+        self.set_session()
+        inicio = self.post_json("/atendimentos/iniciar")
+        atendimento_id = inicio.get_json()["atendimento_id"]
+        self.state["chunks"][(atendimento_id, 0)] = {
+            "atendimento_id": atendimento_id,
+            "usuario_id": 1,
+            "ordem": 0,
+            "texto": "trecho anterior",
+            "status": "transcrito",
+            "provider_usado": "groq",
+            "fallback_usado": False,
+            "duracao_segundos": app.MAX_CALL_DURATION_MINUTES * 60
+        }
+
+        response = self.client.post(
+            "/atendimentos/chunk",
+            data={
+                "atendimento_id": str(atendimento_id),
+                "ordem": "1",
+                "duracao_segundos": "1",
+                "audio": (
+                    io.BytesIO(b"a" * 2048),
+                    "chunk.webm"
+                )
+            },
+            headers={"X-CSRFToken": "csrf-teste"},
+            content_type="multipart/form-data"
+        )
+
+        self.assertEqual(response.status_code, 403)
+        dados = response.get_json()
+        self.assertTrue(dados["limite"])
+        self.assertTrue(dados["deve_parar_gravacao"])
+        self.assertEqual(
+            dados["tipo"],
+            "limite_duracao_atendimento"
+        )
+
+    def test_finalizacao_contabiliza_fallback_de_qualidade(self):
+
+        self.set_session()
+        inicio = self.post_json("/atendimentos/iniciar")
+        atendimento_id = inicio.get_json()["atendimento_id"]
+        self.state["chunks"][(atendimento_id, 0)] = {
+            "atendimento_id": atendimento_id,
+            "usuario_id": 1,
+            "ordem": 0,
+            "texto": "Cliente informou problema fiscal.",
+            "status": "transcrito",
+            "provider_tentado": "groq",
+            "provider_usado": "openai",
+            "fallback_usado": True,
+            "motivo_fallback": "baixa_qualidade",
+            "duracao_segundos": 45,
+            "transcricao_bruta": "Cliente informou problema fiscal.",
+            "transcricao_normalizada": "Cliente informou problema fiscal.",
+            "transcricao_limpa_para_resumo": "Cliente informou problema fiscal."
+        }
+
+        with patch("app.analisar_com_ia", return_value={
+            "resumo_zendesk": app.resumo_zendesk_exato(
+                analista="analista",
+                descritivo="Cliente informou problema fiscal."
+            ),
+            "sentimento_cliente": "neutro",
+            "urgencia": "media",
+            "categoria": "fiscal",
+            "problema_principal": "Problema fiscal",
+            "tags": "fiscal"
+        }):
+
+            response = self.post_json(
+                "/atendimentos/finalizar",
+                {
+                    "atendimento_id": atendimento_id,
+                    "duracao_segundos": 45,
+                    "chunks_total": 1,
+                    "segundos_transcritos": 45
+                }
+            )
+
+        self.assertEqual(response.status_code, 200)
+        esperado = (
+            app.estimar_custo_transcricao(45, "openai")
+            + app.estimar_custo_transcricao(45, "groq")
+            + app.estimar_custo_atendimento(0, True)
+        )
+        self.assertAlmostEqual(
+            float(self.state["atendimentos"][atendimento_id]["custo_estimado_usd"]),
+            round(esperado, 4),
+            places=4
+        )
 
     def test_permissoes_custos_dashboard_detalhe_exportacao(self):
 
@@ -810,6 +976,56 @@ class FluxosIntegracaoTest(unittest.TestCase):
 
 
 class FallbackTranscricaoTest(unittest.TestCase):
+
+    def test_fallback_por_baixa_qualidade(self):
+
+        chamadas = []
+
+        def fake_transcrever_bytes(provider, audio_bytes, nome, mime, modelo=None):
+
+            chamadas.append((provider, audio_bytes, nome))
+
+            if provider == "groq":
+
+                return (
+                    "TRISHUL DRISHUIZSORVAGENCIA "
+                    "Transcreva somente as palavras audiveis"
+                )
+
+            return "Cliente informou que a nota fiscal esta cancelada."
+
+        arquivo = io.BytesIO(b"audio")
+        arquivo.filename = "chunk.webm"
+        arquivo.mimetype = "audio/webm"
+
+        with patch("services.ai.TRANSCRIBE_PROVIDER", "groq"), \
+                patch("services.ai.TRANSCRIBE_FALLBACK_PROVIDER", "openai"), \
+                patch("services.ai.transcrever_bytes", fake_transcrever_bytes), \
+                patch("services.ai.preprocessar_audio_transcricao", return_value={
+                    "audio_bytes": b"processado",
+                    "nome": "chunk.webm",
+                    "mime": "audio/webm",
+                    "audio_processado": False,
+                    "audio_original_path": "",
+                    "audio_processado_path": "",
+                    "tamanho_audio_original": 5,
+                    "tamanho_audio_processado": 5,
+                    "tempo_preprocessamento_segundos": 0,
+                    "erro_preprocessamento": ""
+                }):
+
+            resultado = ai.transcrever_chunk(arquivo)
+
+        self.assertEqual(chamadas[0][0], "groq")
+        self.assertEqual(chamadas[1][0], "openai")
+        self.assertEqual(chamadas[0][1], b"processado")
+        self.assertEqual(chamadas[1][1], b"audio")
+        self.assertEqual(chamadas[1][2], "chunk.webm")
+        self.assertEqual(resultado["provider_usado"], "openai")
+        self.assertTrue(resultado["fallback_usado"])
+        self.assertEqual(resultado["motivo_fallback"], "baixa_qualidade")
+        self.assertIn("nota fiscal", resultado["texto"].lower())
+
 
     def test_fallback_groq_para_openai(self):
 

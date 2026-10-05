@@ -59,7 +59,8 @@ def exigir_admin_senha():
         "admin",
         "senha",
         "password",
-        "troque_por_uma_senha_forte"
+        "troque_por_uma_senha_forte",
+        "troque_por_uma_senha_forte_com_12_caracteres"
     }
 
     if valor in valores_inseguros or len(valor) < 8:
@@ -122,7 +123,17 @@ SUMMARY_MODEL = ler_env("SUMMARY_MODEL", "gpt-4.1-mini")
 
 TRANSCRIBE_USD_HORA_GROQ = ler_float(
     "TRANSCRIBE_USD_HORA_GROQ",
-    "0.04" if TRANSCRIBE_PROVIDER == "groq" else "0.36"
+    "0.04"
+)
+
+TRANSCRIBE_USD_HORA_GROQ_LARGE_V3 = ler_float(
+    "TRANSCRIBE_USD_HORA_GROQ_LARGE_V3",
+    "0.111"
+)
+
+TRANSCRIBE_USD_MINUTO_OPENAI_MINI = ler_float(
+    "TRANSCRIBE_USD_MINUTO_OPENAI_MINI",
+    "0.003"
 )
 
 TRANSCRIBE_USD_HORA = ler_float(
@@ -155,6 +166,10 @@ LOGIN_BLOCK_MINUTES = ler_int("LOGIN_BLOCK_MINUTES", "15")
 
 AUDIO_PREPROCESS_ENABLED = (
     ler_env("AUDIO_PREPROCESS_ENABLED", "true").lower()
+    in ["1", "true", "sim", "yes", "on"]
+)
+AUDIO_DIAGNOSTICS_KEEP = (
+    ler_env("AUDIO_DIAGNOSTICS_KEEP", "false").lower()
     in ["1", "true", "sim", "yes", "on"]
 )
 AUDIO_DIAGNOSTICS_DIR = ler_env(
