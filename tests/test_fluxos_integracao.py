@@ -983,7 +983,7 @@ class FallbackTranscricaoTest(unittest.TestCase):
 
         def fake_transcrever_bytes(provider, audio_bytes, nome, mime, modelo=None):
 
-            chamadas.append(provider)
+            chamadas.append((provider, audio_bytes, nome))
 
             if provider == "groq":
 
@@ -1016,7 +1016,11 @@ class FallbackTranscricaoTest(unittest.TestCase):
 
             resultado = ai.transcrever_chunk(arquivo)
 
-        self.assertEqual(chamadas, ["groq", "openai"])
+        self.assertEqual(chamadas[0][0], "groq")
+        self.assertEqual(chamadas[1][0], "openai")
+        self.assertEqual(chamadas[0][1], b"audio")
+        self.assertEqual(chamadas[1][1], b"audio")
+        self.assertEqual(chamadas[1][2], "chunk.webm")
         self.assertEqual(resultado["provider_usado"], "openai")
         self.assertTrue(resultado["fallback_usado"])
         self.assertEqual(resultado["motivo_fallback"], "baixa_qualidade")
