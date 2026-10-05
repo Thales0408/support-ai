@@ -65,7 +65,10 @@
                             ><i data-lucide="users" aria-hidden="true"></i> Usuários <i data-lucide="external-link" class="menu-action-tail" aria-hidden="true"></i></a>
                         {% endif %}
                         <button class="menu-action" id="abrir-senha"><i data-lucide="lock-keyhole" aria-hidden="true"></i> Alterar senha</button>
-                        <a class="menu-action menu-danger" href="/logout"><i data-lucide="log-out" aria-hidden="true"></i> Sair</a>
+                        <form method="POST" action="/logout" class="menu-form">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button class="menu-action menu-danger" type="submit"><i data-lucide="log-out" aria-hidden="true"></i> Sair</button>
+                        </form>
                     </div>
                 </details>
             </div>
@@ -241,6 +244,11 @@
                         id="empty-state"
                     >Nenhum atendimento encontrado.</div>
                 </div>
+                <div class="table-pagination" id="paginacao-atendimentos">
+                    <button class="btn-secondary" id="pagina-anterior" type="button"><i data-lucide="chevron-left"></i> Anterior</button>
+                    <span id="paginacao-info">Página 1 de 1</span>
+                    <button class="btn-secondary" id="pagina-proxima" type="button">Próxima <i data-lucide="chevron-right"></i></button>
+                </div>
             </div>
 
             <aside class="insights">
@@ -360,6 +368,14 @@
         let atendimentos = []
         let atendimentosFiltrados = []
         let usuariosAtivos = []
+        let metricasDashboard = {}
+        let volumePorDia = []
+        let analistasMetricas = []
+        let paginaAtual = 1
+        let totalPaginas = 1
+        let totalResultados = 0
+        let carregandoResultados = false
+        let debounceBusca = null
         let chart = null
         let detalheAtual = null
         const PERFIL_USUARIO = "{{ perfil }}"
@@ -395,6 +411,15 @@
 
         const filtroAnalista =
             document.getElementById("filtro-analista")
+
+        const paginaAnterior =
+            document.getElementById("pagina-anterior")
+
+        const paginaProxima =
+            document.getElementById("pagina-proxima")
+
+        const paginacaoInfo =
+            document.getElementById("paginacao-info")
 
         const modal =
             document.getElementById("modal-detalhe")
@@ -480,162 +505,44 @@
         }
 
         function filtrarAtendimentos() {
-            const busca =
-                filtroBusca.value.toLowerCase().trim()
-
-            const periodo =
-                filtroPeriodo.value
-
-            const status =
-                filtroStatus.value
-
-            const agora =
-                new Date()
-
             atendimentosFiltrados =
-                atendimentos.filter(item => {
-                    const textoBusca = [
-                        item.data,
-                        item.usuario,
-                        item.status,
-                        item.categoria,
-                        item.problema_principal,
-                        item.tags,
-                        item.ticket_zendesk,
-                        item.conteudo,
-                        item.transcricao_completa
-                    ].join(" ").toLowerCase()
-
-                    if (
-                        busca &&
-                        !textoBusca.includes(busca)
-                    ) {
-                        return false
-                    }
-
-                    if (periodo !== "todos") {
-                        const data =
-                            dataItem(item)
-
-                        if (!data) {
-                            return false
-                        }
-
-                        const inicio =
-                            new Date(
-                                agora.getFullYear(),
-                                agora.getMonth(),
-                                agora.getDate()
-                            )
-
-                        if (periodo === "hoje") {
-                            if (data < inicio) {
-                                return false
-                            }
-                        } else {
-                            const dias =
-                                Number(periodo)
-
-                            const limite =
-                                new Date(inicio)
-
-                            limite.setDate(
-                                limite.getDate() - dias + 1
-                            )
-
-                            if (data < limite) {
-                                return false
-                            }
-                        }
-                    }
-
-                    if (status === "finalizado") {
-                        return item.status === "finalizado"
-                    }
-
-                    if (status === "andamento") {
-                        return item.status !== "finalizado"
-                    }
-
-                    if (status === "falha") {
-                        return item.chunks_falhos > 0
-                    }
-
-                    return true
-                })
+                atendimentos
 
             renderizarDashboard()
         }
 
         function renderizarMetricas() {
-            const total =
-                atendimentosFiltrados.length
+            const metricas =
+                metricasDashboard || {}
 
-            const finalizados =
-                atendimentosFiltrados.filter(
-                    item => item.status === "finalizado"
-                ).length
+            document.getElementById("metric-total").innerText =
+                Number(metricas.total || 0)
 
-            const andamento =
-                atendimentosFiltrados.filter(
-                    item => item.status !== "finalizado"
-                ).length
+            document.getElementById("metric-finalizados").innerText =
+                Number(metricas.finalizados || 0)
 
-            const falhas =
-                atendimentosFiltrados.filter(
-                    item => item.chunks_falhos > 0
-                ).length
+            document.getElementById("metric-andamento").innerText =
+                Number(metricas.andamento || 0)
 
-            const duracoes =
-                atendimentosFiltrados
-                    .map(item => Number(item.duracao_segundos || 0))
-                    .filter(valor => valor > 0)
+            document.getElementById("metric-falhas").innerText =
+                Number(metricas.falhas || 0)
 
-            const media =
-                duracoes.length
-                    ? Math.round(
-                        duracoes.reduce(
-                            (soma, valor) => soma + valor,
-                            0
-                        ) / duracoes.length
-                    )
-                    : 0
-
-            const custo =
-                atendimentosFiltrados.reduce(
-                    (soma, item) =>
-                        soma + Number(item.custo_estimado_usd || 0),
-                    0
-                )
-
-            const semTicket =
-                atendimentosFiltrados.filter(
-                    item => !String(item.ticket_zendesk || "").trim()
-                ).length
-
-            document.getElementById("metric-total").innerText = total
-            document.getElementById("metric-finalizados").innerText = finalizados
-            document.getElementById("metric-andamento").innerText = andamento
-            document.getElementById("metric-falhas").innerText = falhas
             document.getElementById("metric-tma").innerText =
-                formatarDuracao(media)
+                formatarDuracao(metricas.tma || 0)
+
             if (MOSTRAR_CUSTO) {
                 document.getElementById("metric-custo-label").innerText =
                     "Custo estimado"
                 document.getElementById("metric-custo").innerText =
                     formatarCustoCompleto(
-                        custo,
-                        atendimentosFiltrados.reduce(
-                            (soma, item) =>
-                                soma + Number(item.custo_estimado_brl || 0),
-                            0
-                        )
+                        metricas.custo_estimado_usd || 0,
+                        metricas.custo_estimado_brl || 0
                     )
             } else {
                 document.getElementById("metric-custo-label").innerText =
                     "Sem ticket"
                 document.getElementById("metric-custo").innerText =
-                    semTicket
+                    Number(metricas.sem_ticket || 0)
             }
         }
 
@@ -811,25 +718,15 @@
         }
 
         function renderizarGrafico() {
-            const dias = {}
-
-            atendimentosFiltrados.forEach(item => {
-                const data =
-                    String(item.data || "").split(" ")[0]
-
-                if (!data) {
-                    return
-                }
-
-                dias[data] =
-                    (dias[data] || 0) + 1
-            })
-
             const labels =
-                Object.keys(dias).reverse()
+                (volumePorDia || []).map(
+                    item => item.data
+                )
 
             const valores =
-                labels.map(label => dias[label])
+                (volumePorDia || []).map(
+                    item => Number(item.total || 0)
+                )
 
             const ctx =
                 document.getElementById("grafico")
@@ -988,59 +885,17 @@
 
             tbodyAnalistas.innerHTML = ""
 
-            const grupos = {}
-
-            atendimentosFiltrados.forEach(item => {
-                const nome =
-                    item.usuario || ""
-
-                if (!grupos[nome]) {
-                    grupos[nome] = {
-                        analista: nome,
-                        total: 0,
-                        finalizados: 0,
-                        andamento: 0,
-                        falhas: 0,
-                        segundos: []
-                    }
-                }
-
-                grupos[nome].total += 1
-
-                if (item.status === "finalizado") {
-                    grupos[nome].finalizados += 1
-                } else {
-                    grupos[nome].andamento += 1
-                }
-
-                if (Number(item.chunks_falhos || 0) > 0) {
-                    grupos[nome].falhas += 1
-                }
-
-                if (Number(item.duracao_segundos || 0) > 0) {
-                    grupos[nome].segundos.push(
-                        Number(item.duracao_segundos || 0)
-                    )
-                }
-            })
-
             const analistas =
-                Object.values(grupos)
-                    .sort((a, b) => b.total - a.total)
+                analistasMetricas || []
 
             if (!analistas.length) {
                 const tr =
                     document.createElement("tr")
-
                 const td =
                     document.createElement("td")
 
-                td.colSpan =
-                    6
-
-                td.className =
-                    "table-empty"
-
+                td.colSpan = 6
+                td.className = "table-empty"
                 td.innerText =
                     "Nenhum atendimento no filtro atual."
 
@@ -1053,30 +908,18 @@
                 const tr =
                     document.createElement("tr")
 
-                const media =
-                    item.segundos.length
-                        ? Math.round(
-                            item.segundos.reduce(
-                                (soma, valor) => soma + valor,
-                                0
-                            ) / item.segundos.length
-                        )
-                        : 0
-
                 ;[
                     item.analista || "Sem analista",
-                    item.total,
-                    item.finalizados,
-                    item.andamento,
-                    item.falhas,
-                    formatarDuracao(media)
+                    Number(item.total || 0),
+                    Number(item.finalizados || 0),
+                    Number(item.andamento || 0),
+                    Number(item.falhas || 0),
+                    formatarDuracao(item.tma || 0)
                 ].forEach(valor => {
                     const td =
                         document.createElement("td")
 
-                    td.innerText =
-                        valor
-
+                    td.innerText = valor
                     tr.appendChild(td)
                 })
 
@@ -1136,7 +979,7 @@
                     : "meus"
         }
 
-        function queryResultados() {
+        function queryResultados(incluirPagina = true) {
             const params =
                 new URLSearchParams()
 
@@ -1146,31 +989,107 @@
                     ? filtroAnalista.value
                     : "meus"
             )
+            params.set(
+                "q",
+                filtroBusca.value.trim()
+            )
+            params.set(
+                "periodo",
+                filtroPeriodo.value
+            )
+            params.set(
+                "status",
+                filtroStatus.value
+            )
+
+            if (incluirPagina) {
+                params.set(
+                    "pagina",
+                    String(paginaAtual)
+                )
+            }
 
             return params.toString()
         }
 
+        function atualizarPaginacao() {
+            if (!paginacaoInfo) {
+                return
+            }
+
+            paginacaoInfo.innerText =
+                totalResultados
+                    ? `Página ${paginaAtual} de ${totalPaginas} · ${totalResultados} atendimento(s)`
+                    : "Nenhum atendimento"
+
+            paginaAnterior.disabled =
+                paginaAtual <= 1
+
+            paginaProxima.disabled =
+                paginaAtual >= totalPaginas
+        }
+
         async function carregarResultados() {
-            const response =
-                await fetch(
-                    `/resultados?${queryResultados()}`
-                )
+            if (carregandoResultados) {
+                return
+            }
 
-            const data =
-                await response.json()
+            carregandoResultados = true
 
-            atendimentos =
-                data.resultados || []
+            try {
+                const response =
+                    await fetch(
+                        `/resultados?${queryResultados()}`
+                    )
 
-            usuariosAtivos =
-                data.usuarios || []
+                const data =
+                    await response.json()
 
-            preencherFiltroAnalistas()
+                if (!response.ok) {
+                    throw new Error(
+                        data.erro ||
+                        "Erro carregando atendimentos"
+                    )
+                }
 
-            document.getElementById("last-update").innerText =
-                "Atualizado agora"
+                atendimentos =
+                    data.resultados || []
+                atendimentosFiltrados =
+                    atendimentos
+                usuariosAtivos =
+                    data.usuarios || []
+                metricasDashboard =
+                    data.metricas || {}
+                volumePorDia =
+                    data.volume_por_dia || []
+                analistasMetricas =
+                    data.analistas_metricas || []
 
-            filtrarAtendimentos()
+                const paginacao =
+                    data.paginacao || {}
+
+                paginaAtual =
+                    Number(paginacao.pagina || 1)
+                totalPaginas =
+                    Number(paginacao.total_paginas || 1)
+                totalResultados =
+                    Number(paginacao.total || 0)
+
+                preencherFiltroAnalistas()
+                atualizarPaginacao()
+                renderizarDashboard()
+
+                document.getElementById("last-update").innerText =
+                    "Atualizado agora"
+
+            } catch (error) {
+                console.error(error)
+                document.getElementById("last-update").innerText =
+                    "Falha ao atualizar"
+
+            } finally {
+                carregandoResultados = false
+            }
         }
 
         async function abrirDetalhe(id) {
@@ -1241,28 +1160,8 @@
         )
 
         function exportarExcel() {
-            const params =
-                new URLSearchParams(queryResultados())
-
-            const ids =
-                atendimentosFiltrados
-                    .map(item => item.id)
-                    .filter(Boolean)
-
-            if (ids.length) {
-                params.set(
-                    "ids",
-                    ids.join(",")
-                )
-            } else {
-                params.set(
-                    "ids",
-                    "0"
-                )
-            }
-
             window.location.href =
-                `/exportar?${params.toString()}`
+                `/exportar?${queryResultados(false)}`
         }
 
         document.getElementById("fechar-modal").onclick =
@@ -1390,18 +1289,50 @@
             }
 
         filtroBusca.oninput =
-            filtrarAtendimentos
+            () => {
+                clearTimeout(debounceBusca)
+                debounceBusca =
+                    setTimeout(() => {
+                        paginaAtual = 1
+                        carregarResultados()
+                    }, 350)
+            }
 
         filtroPeriodo.onchange =
-            filtrarAtendimentos
+            () => {
+                paginaAtual = 1
+                carregarResultados()
+            }
 
         filtroStatus.onchange =
-            filtrarAtendimentos
+            () => {
+                paginaAtual = 1
+                carregarResultados()
+            }
 
         if (filtroAnalista) {
             filtroAnalista.onchange =
-                carregarResultados
+                () => {
+                    paginaAtual = 1
+                    carregarResultados()
+                }
         }
+
+        paginaAnterior.onclick =
+            () => {
+                if (paginaAtual > 1) {
+                    paginaAtual--
+                    carregarResultados()
+                }
+            }
+
+        paginaProxima.onclick =
+            () => {
+                if (paginaAtual < totalPaginas) {
+                    paginaAtual++
+                    carregarResultados()
+                }
+            }
 
         carregarResultados()
 
