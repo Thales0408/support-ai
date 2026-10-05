@@ -253,12 +253,32 @@ def transcrever_chunk(arquivo, validar_fallback=None):
 
                 validar_fallback()
 
-            fallback = transcrever_bytes_diagnostico(
-                fallback_provider,
-                audio_bytes,
-                nome_transcricao,
-                mime_transcricao
-            )
+            try:
+
+                fallback = transcrever_bytes_diagnostico(
+                    fallback_provider,
+                    audio_bytes,
+                    nome_transcricao,
+                    mime_transcricao
+                )
+
+            except LimiteCustoFallbackTranscricao:
+
+                raise
+
+            except Exception as exc:
+
+                return {
+                    "texto": transcricao["texto"],
+                    "provider_tentado": provider_tentado,
+                    "provider_usado": provider_tentado,
+                    "fallback_usado": False,
+                    "motivo_fallback": "baixa_qualidade_fallback_falhou",
+                    "erro_fallback_qualidade": str(exc)[:500],
+                    "modelo_usado": transcricao["modelo_usado"],
+                    "tempo_transcricao_segundos": transcricao["tempo_transcricao_segundos"],
+                    **audio_preprocessado
+                }
 
             return {
                 "texto": fallback["texto"],
