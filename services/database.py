@@ -322,6 +322,13 @@ def inicializar_banco():
                 ADD COLUMN IF NOT EXISTS fallback_usado BOOLEAN DEFAULT FALSE
                 """
             )
+            cursor.execute(
+                """
+                ALTER TABLE transcricoes_chunks
+                ADD COLUMN IF NOT EXISTS motivo_fallback TEXT
+                """
+            )
+
 
             cursor.execute(
                 """
