@@ -81,6 +81,8 @@ TRANSCRIBE_MODEL=
 OPENAI_TRANSCRIBE_MODEL=
 SUMMARY_MODEL=
 TRANSCRIBE_USD_HORA_GROQ=
+TRANSCRIBE_USD_HORA_GROQ_LARGE_V3=
+TRANSCRIBE_USD_MINUTO_OPENAI_MINI=
 TRANSCRIBE_USD_MINUTO_OPENAI=
 TRANSCRIBE_USD_HORA=
 SUMMARY_USD_POR_ATENDIMENTO=
@@ -112,13 +114,15 @@ TRANSCRIBE_MODEL=whisper-large-v3-turbo
 OPENAI_TRANSCRIBE_MODEL=whisper-1
 GROQ_BASE_URL=https://api.groq.com/openai/v1
 TRANSCRIBE_USD_HORA_GROQ=0.04
+TRANSCRIBE_USD_HORA_GROQ_LARGE_V3=0.111
+TRANSCRIBE_USD_MINUTO_OPENAI_MINI=0.003
 TRANSCRIBE_USD_MINUTO_OPENAI=0.006
 AUDIO_PREPROCESS_ENABLED=true
 AUDIO_DIAGNOSTICS_KEEP=false
 CHUNK_SECONDS=45
 ```
 
-O `OPENAI_API_KEY` tem dois usos: gerar o resumo final e servir como fallback de transcricao quando `TRANSCRIBE_FALLBACK_PROVIDER=openai`. A transcricao principal e a Groq quando `TRANSCRIBE_PROVIDER=groq`; se a Groq retornar limite, indisponibilidade, timeout ou erro 5xx, o backend tenta OpenAI Whisper como fallback, respeitando os limites diarios de custo antes de enviar o audio.
+O `OPENAI_API_KEY` tem dois usos: gerar o resumo final e servir como fallback de transcricao quando `TRANSCRIBE_FALLBACK_PROVIDER=openai`. A transcricao principal e a Groq quando `TRANSCRIBE_PROVIDER=groq`; se a Groq retornar limite, indisponibilidade, timeout ou erro 5xx, o backend tenta OpenAI Whisper como fallback. O fallback tambem pode ser acionado quando a transcricao Groq apresenta sinais fortes de baixa qualidade; nesse caso, o OpenAI recebe o audio original para criar uma segunda tentativa independente. Os limites diarios de custo continuam sendo verificados antes do fallback.
 
 Para evitar requisicoes pagas sem fala, o navegador mede atividade nos canais da aba e do microfone e nao envia trechos silenciosos. Se a medicao falhar ou o AudioContext estiver suspenso, o trecho e enviado normalmente para nao perder uma fala. Ajuste o limiar apenas apos comparar com gravacoes reais, especialmente vozes baixas. O dashboard atualiza os dados a cada 30 segundos enquanto a aba esta visivel e imediatamente quando ela volta ao primeiro plano.
 
