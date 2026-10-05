@@ -3754,6 +3754,13 @@ def finalizar_atendimento():
         int(segundos_transcritos_cliente or 0)
     )
 
+    if not duracao_segundos:
+
+        duracao_segundos = sum(
+            max(0, int(segundos or 0))
+            for _, segundos in chunks_transcritos_provider
+        )
+
     if not segundos_transcritos:
 
         segundos_transcritos = (
@@ -3766,47 +3773,21 @@ def finalizar_atendimento():
     if int(duracao_segundos or 0) > MAX_CALL_DURATION_MINUTES * 60:
 
         log_evento(
-            "limite_duracao_atendimento",
+            "duracao_excedida_finalizacao_permitida",
             usuario_id=usuario_id,
             atendimento_id=atendimento_id,
             duracao_segundos=duracao_segundos,
             limite_segundos=MAX_CALL_DURATION_MINUTES * 60
         )
 
-        liberar_finalizacao_atendimento(
-            usuario_id,
-            atendimento_id
-        )
-
-        return erro_limite(
-            "Limite de duracao por atendimento atingido.",
-            tipo="limite_duracao_atendimento",
-            deve_parar_gravacao=True,
-            duracao_minutos=round(int(duracao_segundos or 0) / 60, 2),
-            limite_minutos=MAX_CALL_DURATION_MINUTES
-        )
-
     if chunks_total > MAX_CHUNKS_PER_CALL:
 
         log_evento(
-            "limite_chunks_finalizar",
+            "chunks_excedidos_finalizacao_permitida",
             usuario_id=usuario_id,
             atendimento_id=atendimento_id,
             chunks_total=chunks_total,
             limite=MAX_CHUNKS_PER_CALL
-        )
-
-        liberar_finalizacao_atendimento(
-            usuario_id,
-            atendimento_id
-        )
-
-        return erro_limite(
-            "Limite de trechos por atendimento atingido.",
-            tipo="limite_chunks_atendimento",
-            deve_parar_gravacao=True,
-            chunks_total=chunks_total,
-            limite_chunks=MAX_CHUNKS_PER_CALL
         )
 
     segundos_dia_total = (
@@ -4354,7 +4335,8 @@ def resultados():
             "problema_principal": row[17] or "",
             "tags": row[18] or "",
             "usuario": row[19] or "",
-            "usuario_id": row[20]
+            "usuario_id": row[20],
+            "pode_finalizar": row[20] == usuario_id and row[4] != "finalizado"
         }
 
         if mostrar_custo:

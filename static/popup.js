@@ -14,6 +14,7 @@ let finalStream = null
 let audioContext = null
 let chunkTimer = null
 let inicioLigacao = null
+let duracaoFinalizacaoMs = null
 let pausaIniciadaEm = null
 let tempoPausadoMs = 0
 let atendimentoId = null
@@ -355,8 +356,12 @@ async function finalizarAtendimento(duracao) {
     if (!response.ok) {
 
         throw new Error(
-            data.erro || 'Erro finalizando atendimento'
+            data.mensagem || data.erro || 'Erro finalizando atendimento'
         )
+    }
+
+    if (data.status === 'finalizando') {
+        throw new Error(data.mensagem || 'Resumo ainda esta sendo gerado. Tente novamente.')
     }
 
     return data
@@ -616,6 +621,10 @@ async function pararSegmentoSeNecessario() {
 
 async function finalizarGravacao() {
 
+    if (finalizando || !atendimentoId) {
+        return
+    }
+
     startBtn.disabled =
         true
 
@@ -650,14 +659,14 @@ async function finalizarGravacao() {
 
         pararStreams()
 
-        const fimLigacao =
-            Date.now()
-
-        const duracao =
-            Math.max(
+        if (duracaoFinalizacaoMs === null) {
+            duracaoFinalizacaoMs = Math.max(
                 0,
-                fimLigacao - inicioLigacao - tempoPausadoMs
+                Date.now() - inicioLigacao - tempoPausadoMs
             )
+        }
+
+        const duracao = duracaoFinalizacaoMs
 
         const resultadosUploads =
             await Promise.all(
@@ -677,6 +686,9 @@ async function finalizarGravacao() {
         await finalizarAtendimento(
             duracao
         )
+
+        atendimentoId = null
+        duracaoFinalizacaoMs = null
 
         statusDiv.innerText =
             chunksFalhos > 0
@@ -699,13 +711,13 @@ async function finalizarGravacao() {
         startBtn.disabled =
             false
 
-        startBtn.innerText =
-            'Iniciar Gravacao'
+        startBtn.innerText = atendimentoId
+            ? 'Tentar finalizar'
+            : 'Iniciar Gravacao'
 
         atualizarBotaoPausa(false)
 
         recorder = null
-        atendimentoId = null
         finalizando = false
     }
 }
@@ -790,6 +802,11 @@ startBtn.onclick = async () => {
         return
     }
 
+    if (atendimentoId) {
+        await finalizarGravacao()
+        return
+    }
+
     try {
 
         statusDiv.innerText =
@@ -797,6 +814,8 @@ startBtn.onclick = async () => {
 
         inicioLigacao =
             Date.now()
+
+        duracaoFinalizacaoMs = null
 
         pausaIniciadaEm = null
         tempoPausadoMs = 0

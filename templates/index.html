@@ -1140,7 +1140,35 @@
                     () => copiarTexto(item.conteudo || "")
 
                 acoes.appendChild(btnDetalhe)
-                acoes.appendChild(btnCopiar)
+
+                if (item.pode_finalizar) {
+                    const btnFinalizar = document.createElement("button")
+                    btnFinalizar.className = "btn-blue"
+                    btnFinalizar.innerText = "Finalizar"
+                    btnFinalizar.onclick = async () => {
+                        btnFinalizar.disabled = true
+                        try {
+                            const response = await fetch("/atendimentos/finalizar", {
+                                method: "POST",
+                                headers: csrfHeaders({
+                                    "Content-Type": "application/json"
+                                }),
+                                body: JSON.stringify({ atendimento_id: item.id })
+                            })
+                            const data = await response.json()
+                            if (!response.ok) {
+                                throw new Error(data.mensagem || data.erro || "Erro ao finalizar")
+                            }
+                            await carregarResultados()
+                        } catch (error) {
+                            alert(error.message)
+                            btnFinalizar.disabled = false
+                        }
+                    }
+                    acoes.appendChild(btnFinalizar)
+                } else if (item.status === "finalizado") {
+                    acoes.appendChild(btnCopiar)
+                }
                 tdAcoes.appendChild(acoes)
 
                 tr.appendChild(tdData)

@@ -725,7 +725,7 @@ class FluxosIntegracaoTest(unittest.TestCase):
         self.assertIn("Custo estimado BRL", cabecalho_admin)
         workbook_admin.close()
 
-    def test_finalizacao_libera_status_em_limite_de_duracao(self):
+    def test_finalizacao_aceita_duracao_acima_do_limite(self):
 
         self.set_session()
         self.state["atendimentos"][10] = {
@@ -759,8 +759,54 @@ class FluxosIntegracaoTest(unittest.TestCase):
             }
         )
 
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(self.state["atendimentos"][10]["status"], "transcrevendo")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.state["atendimentos"][10]["status"], "finalizado")
+        self.assertEqual(
+            self.state["atendimentos"][10]["duracao_segundos"],
+            app.MAX_CALL_DURATION_MINUTES * 60 + 1
+        )
+
+    def test_recuperar_finalizacao_sem_duracao_reutiliza_chunks(self):
+
+        self.set_session()
+        inicio = self.post_json("/atendimentos/iniciar")
+        atendimento_id = inicio.get_json()["atendimento_id"]
+        self.state["atendimentos"][atendimento_id]["status"] = "transcrevendo"
+        self.state["chunks"][(atendimento_id, 0)] = {
+            "atendimento_id": atendimento_id,
+            "usuario_id": 1,
+            "ordem": 0,
+            "texto": "Cliente pediu ajuda com o sistema.",
+            "status": "transcrito",
+            "provider_usado": "groq",
+            "duracao_segundos": 45
+        }
+
+        self.set_session(usuario_id=2, perfil="supervisor", nome="supervisor")
+        negado = self.post_json(
+            "/atendimentos/finalizar", {"atendimento_id": atendimento_id}
+        )
+        self.assertEqual(negado.status_code, 404)
+
+        self.set_session()
+        with patch("app.analisar_com_ia", return_value={
+            "resumo_zendesk": app.resumo_zendesk_exato(
+                analista="analista", descritivo="Cliente pediu ajuda com o sistema."
+            ),
+            "sentimento_cliente": "neutro",
+            "urgencia": "baixa",
+            "categoria": "outro",
+            "problema_principal": "Ajuda com o sistema",
+            "tags": ""
+        }) as mock_ia:
+            resposta = self.post_json(
+                "/atendimentos/finalizar", {"atendimento_id": atendimento_id}
+            )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(self.state["atendimentos"][atendimento_id]["status"], "finalizado")
+        self.assertEqual(self.state["atendimentos"][atendimento_id]["duracao_segundos"], 45)
+        self.assertEqual(mock_ia.call_count, 1)
 
 
 class FallbackTranscricaoTest(unittest.TestCase):
