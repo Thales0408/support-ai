@@ -1002,7 +1002,7 @@ class FallbackTranscricaoTest(unittest.TestCase):
                 patch("services.ai.TRANSCRIBE_FALLBACK_PROVIDER", "openai"), \
                 patch("services.ai.transcrever_bytes", fake_transcrever_bytes), \
                 patch("services.ai.preprocessar_audio_transcricao", return_value={
-                    "audio_bytes": b"audio",
+                    "audio_bytes": b"processado",
                     "nome": "chunk.webm",
                     "mime": "audio/webm",
                     "audio_processado": False,
@@ -1018,7 +1018,7 @@ class FallbackTranscricaoTest(unittest.TestCase):
 
         self.assertEqual(chamadas[0][0], "groq")
         self.assertEqual(chamadas[1][0], "openai")
-        self.assertEqual(chamadas[0][1], b"audio")
+        self.assertEqual(chamadas[0][1], b"processado")
         self.assertEqual(chamadas[1][1], b"audio")
         self.assertEqual(chamadas[1][2], "chunk.webm")
         self.assertEqual(resultado["provider_usado"], "openai")
