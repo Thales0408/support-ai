@@ -24,6 +24,10 @@ class LayoutTests(unittest.TestCase):
         self.assertIn('id="ticket-clickdesk"', html)
         self.assertIn('id="start"', html)
         self.assertIn('id="status"', html)
+        self.assertIn('id="capture-shell"', html)
+        self.assertIn('id="recording-timer"', html)
+        self.assertIn('id="capture-state-label"', html)
+        self.assertIn('class="account-menu"', html)
         self.assertIn('name="csrf-token"', html)
         self.assertIn('/static/theme.css', html)
         self.assertIn('/static/theme.js', html)
@@ -33,11 +37,11 @@ class LayoutTests(unittest.TestCase):
         for perfil in ("analista", "supervisor"):
             html = self.render_dashboard(perfil)
             self.assertNotIn(">Custo estimado</span>", html)
-            self.assertNotIn("Usuarios</a>", html)
+            self.assertNotIn("Usuários</a>", html)
 
         html = self.render_dashboard("admin_tecnico")
         self.assertIn("Custo estimado", html)
-        self.assertIn("Usuarios</a>", html)
+        self.assertIn("Usuários</a>", html)
 
     def test_login_e_admin_usam_tema(self):
         with app.app.test_request_context("/"):
@@ -54,6 +58,10 @@ class LayoutTests(unittest.TestCase):
         self.assertIn('data-theme-toggle', admin)
         self.assertIn('/static/theme.js', login)
         self.assertIn('/static/theme.js', admin)
+        self.assertIn("Support AI", login)
+        self.assertIn("Administração de usuários", admin)
+        self.assertNotIn("<style>", login)
+        self.assertNotIn("<style>", admin)
 
 
 if __name__ == "__main__":
