@@ -213,6 +213,71 @@ def contexto_csrf():
 
 
 @app.before_request
+def sincronizar_sessao_usuario():
+
+    usuario_id = session.get("usuario_id")
+
+    if (
+        not usuario_id
+        or request.path == "/login"
+        or request.path == "/health"
+        or request.path.startswith("/static/")
+    ):
+
+        return None
+
+    with conectar_banco() as conn:
+
+        with conn.cursor() as cursor:
+
+            cursor.execute(
+                """
+                SELECT usuario, ativo, perfil, is_admin
+                FROM usuarios
+                WHERE id = %s
+                """,
+                (
+                    usuario_id,
+                )
+            )
+
+            row = cursor.fetchone()
+
+    if not row or not row[1]:
+
+        session.clear()
+
+        if (
+            request.path.startswith("/atendimentos")
+            or request.path.startswith("/conta")
+            or request.path == "/resultados"
+        ):
+
+            return jsonify({
+                "erro": "Sessao invalida ou usuario desativado"
+            }), 401
+
+        return redirect("/login")
+
+    perfil = (
+        row[2]
+        or (
+            "admin_tecnico"
+            if row[3]
+            else "analista"
+        )
+    )
+
+    session["usuario_nome"] = row[0]
+    session["perfil"] = perfil
+    session["is_admin"] = (
+        perfil == "admin_tecnico"
+    )
+
+    return None
+
+
+@app.before_request
 def proteger_csrf():
 
     if request.method != "POST":
