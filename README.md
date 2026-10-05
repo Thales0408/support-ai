@@ -85,6 +85,7 @@ TRANSCRIBE_USD_MINUTO_OPENAI=
 TRANSCRIBE_USD_HORA=
 SUMMARY_USD_POR_ATENDIMENTO=
 AUDIO_PREPROCESS_ENABLED=
+AUDIO_DIAGNOSTICS_KEEP=
 AUDIO_DIAGNOSTICS_DIR=
 FFMPEG_PATH=
 SECRET_KEY=
@@ -113,12 +114,15 @@ GROQ_BASE_URL=https://api.groq.com/openai/v1
 TRANSCRIBE_USD_HORA_GROQ=0.04
 TRANSCRIBE_USD_MINUTO_OPENAI=0.006
 AUDIO_PREPROCESS_ENABLED=true
+AUDIO_DIAGNOSTICS_KEEP=false
 CHUNK_SECONDS=45
 ```
 
 O `OPENAI_API_KEY` tem dois usos: gerar o resumo final e servir como fallback de transcricao quando `TRANSCRIBE_FALLBACK_PROVIDER=openai`. A transcricao principal e a Groq quando `TRANSCRIBE_PROVIDER=groq`; se a Groq retornar limite, indisponibilidade, timeout ou erro 5xx, o backend tenta OpenAI Whisper como fallback, respeitando os limites diarios de custo antes de enviar o audio.
 
 Para evitar requisicoes pagas sem fala, o navegador mede atividade nos canais da aba e do microfone e nao envia trechos silenciosos. Se a medicao falhar ou o AudioContext estiver suspenso, o trecho e enviado normalmente para nao perder uma fala. Ajuste o limiar apenas apos comparar com gravacoes reais, especialmente vozes baixas. O dashboard atualiza os dados a cada 30 segundos enquanto a aba esta visivel e imediatamente quando ela volta ao primeiro plano.
+
+Os arquivos de diagnostico de audio sao removidos por padrao apos o preprocessamento. Use `AUDIO_DIAGNOSTICS_KEEP=true` apenas durante investigacoes controladas, pois esses arquivos podem conter gravacoes de clientes.
 
 Para comparar modelos em um audio real:
 
@@ -136,7 +140,7 @@ O ClickDesk cria o ticket quando a ligacao toca. Informe o numero do ticket ao i
 
 Os dados existentes continuam nas colunas `ticket_zendesk` do banco e nas chaves `ticket_zendesk`/`resumo_zendesk` da API por compatibilidade. A interface envia `ticket_clickdesk`, aceito pelo backend junto com o nome antigo. Nao renomeie a coluna sem migracao de banco.
 
-Para voltar ao Railway, conecte o repositorio GitHub ao servico web existente, confira as variaveis em `.env.example`, configure o banco Supabase pelo pooler IPv4 e publique o commit desejado. Confirme no servico Railway que `/health` retorna `{"status":"ok"}`. Uma implantacao so deve ser considerada concluida depois de testar login, inicio, chunk e finalizacao pelo dominio HTTPS ativo.
+Para voltar ao Railway, conecte o repositorio GitHub ao servico web existente, confira as variaveis em `.env.example`, configure o banco Supabase pelo pooler IPv4 e publique o commit desejado. Confirme no servico Railway que `/health` retorna `status: ok`, `database: ok` e, quando o preprocessamento estiver ativo, `ffmpeg: ok`. Uma implantacao so deve ser considerada concluida depois de testar login, inicio, chunk e finalizacao pelo dominio HTTPS ativo.
 
 ## Rodando localmente
 
