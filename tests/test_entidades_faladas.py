@@ -214,6 +214,15 @@ class EntidadesFaladasTest(unittest.TestCase):
 
         self.assertEqual(entidades["cliente_nome"], "Joao Pedro")
 
+    def test_pergunta_generica_de_nome_nao_define_cliente(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            "Qual e seu nome? Meu nome e Thales. Como posso te ajudar?",
+            analista_nome="admin"
+        )
+
+        self.assertEqual(entidades["cliente_nome"], "")
+
     def test_nome_alucinado_trisk_e_rejeitado(self):
 
         self.assertEqual(
