@@ -6,6 +6,7 @@ import uuid
 
 from config import (
     AUDIO_DIAGNOSTICS_DIR,
+    AUDIO_DIAGNOSTICS_KEEP,
     AUDIO_PREPROCESS_ENABLED,
     FFMPEG_PATH
 )
@@ -39,7 +40,11 @@ def preprocessar_audio_transcricao(audio_bytes, nome="chunk.webm"):
         "nome": "chunk.webm",
         "mime": "audio/webm",
         "audio_processado": False,
-        "audio_original_path": str(caminho_original),
+        "audio_original_path": (
+            str(caminho_original)
+            if AUDIO_DIAGNOSTICS_KEEP
+            else ""
+        ),
         "audio_processado_path": "",
         "tamanho_audio_original": len(audio_bytes),
         "tamanho_audio_processado": len(audio_bytes),
@@ -48,6 +53,12 @@ def preprocessar_audio_transcricao(audio_bytes, nome="chunk.webm"):
     }
 
     if not AUDIO_PREPROCESS_ENABLED:
+
+        if not AUDIO_DIAGNOSTICS_KEEP:
+
+            caminho_original.unlink(
+                missing_ok=True
+            )
 
         return resultado
 
@@ -90,7 +101,11 @@ def preprocessar_audio_transcricao(audio_bytes, nome="chunk.webm"):
             "nome": "chunk-processado.wav",
             "mime": "audio/wav",
             "audio_processado": True,
-            "audio_processado_path": str(caminho_processado),
+            "audio_processado_path": (
+                str(caminho_processado)
+                if AUDIO_DIAGNOSTICS_KEEP
+                else ""
+            ),
             "tamanho_audio_processado": len(processado)
         })
 
@@ -104,5 +119,14 @@ def preprocessar_audio_transcricao(audio_bytes, nome="chunk.webm"):
             time.perf_counter() - inicio,
             4
         )
+
+        if not AUDIO_DIAGNOSTICS_KEEP:
+
+            caminho_original.unlink(
+                missing_ok=True
+            )
+            caminho_processado.unlink(
+                missing_ok=True
+            )
 
     return resultado
