@@ -516,7 +516,10 @@ class FluxosIntegracaoTest(unittest.TestCase):
 
     def setUp(self):
 
-        app.app.config.update(TESTING=True)
+        app.app.config.update(
+            TESTING=True,
+            SESSION_COOKIE_SECURE=False
+        )
         self.state = {
             "next_atendimento_id": 10,
             "users_by_name": {
