@@ -45,7 +45,7 @@ O sistema captura audio da aba do 55PBX e do microfone, envia trechos de audio p
 - Senhas com hash seguro via `werkzeug.security`.
 - Migracao automatica de senha antiga em texto puro no primeiro login.
 - Perfis de acesso: analista, supervisor e admin tecnico.
-- Tela admin tecnico para criar, editar login/perfil, redefinir senha, ativar/desativar e excluir usuarios.
+- Tela admin tecnico para criar, editar login/perfil, redefinir senha e ativar/desativar usuarios. Contas com historico sao preservadas e apenas desativadas.
 - Analistas veem apenas seus proprios atendimentos.
 - Supervisor e admin tecnico podem ver "Meus atendimentos" ou "Todos os analistas".
 - Gravacao de audio da aba + microfone.
@@ -96,11 +96,17 @@ ADMIN_SENHA=
 MAX_CALLS_PER_DAY=
 MAX_AUDIO_MINUTES_PER_DAY=
 MAX_SUMMARIES_PER_DAY=
-MAX_COST_PER_USER_PER_DAY=
-MAX_SYSTEM_COST_PER_DAY=
+MAX_COST_BRL_PER_USER_PER_DAY=
+MAX_SYSTEM_COST_BRL_PER_DAY=
 MAX_CALL_DURATION_MINUTES=
 MAX_CHUNKS_PER_CALL=
 CHUNK_SECONDS=
+MAX_CHUNK_UPLOAD_MB=
+MAX_SINGLE_UPLOAD_MB=
+MAX_REQUEST_MB=
+PASSWORD_MIN_LENGTH=
+SESSION_LIFETIME_HOURS=
+APP_TIMEZONE=
 LOGIN_MAX_ATTEMPTS=
 LOGIN_BLOCK_MINUTES=
 ```
@@ -122,7 +128,7 @@ AUDIO_DIAGNOSTICS_KEEP=false
 CHUNK_SECONDS=45
 ```
 
-O `OPENAI_API_KEY` tem dois usos: gerar o resumo final e servir como fallback de transcricao quando `TRANSCRIBE_FALLBACK_PROVIDER=openai`. A transcricao principal e a Groq quando `TRANSCRIBE_PROVIDER=groq`; se a Groq retornar limite, indisponibilidade, timeout ou erro 5xx, o backend tenta OpenAI Whisper como fallback. O fallback tambem pode ser acionado quando a transcricao Groq apresenta sinais fortes de baixa qualidade; nesse caso, o OpenAI recebe o audio original para criar uma segunda tentativa independente. Os limites diarios de custo continuam sendo verificados antes do fallback.
+O `OPENAI_API_KEY` tem dois usos: gerar o resumo final e servir como fallback de transcricao quando `TRANSCRIBE_FALLBACK_PROVIDER=openai`. A transcricao principal e a Groq quando `TRANSCRIBE_PROVIDER=groq`; se a Groq retornar limite, indisponibilidade, timeout ou erro 5xx, o backend tenta OpenAI Whisper como fallback. O fallback tambem pode ser acionado quando a transcricao Groq apresenta sinais fortes de baixa qualidade; nesse caso, o OpenAI recebe o audio original para criar uma segunda tentativa independente. Custos de transcricao e resumo sao registrados separadamente por evento e os limites diarios sao expressos em BRL.
 
 Para evitar requisicoes pagas sem fala, o navegador mede atividade nos canais da aba e do microfone e nao envia trechos silenciosos. Se a medicao falhar ou o AudioContext estiver suspenso, o trecho e enviado normalmente para nao perder uma fala. Ajuste o limiar apenas apos comparar com gravacoes reais, especialmente vozes baixas. O dashboard atualiza os dados a cada 30 segundos enquanto a aba esta visivel e imediatamente quando ela volta ao primeiro plano.
 
@@ -144,7 +150,7 @@ O ClickDesk cria o ticket quando a ligacao toca. Informe o numero do ticket ao i
 
 Os dados existentes continuam nas colunas `ticket_zendesk` do banco e nas chaves `ticket_zendesk`/`resumo_zendesk` da API por compatibilidade. A interface envia `ticket_clickdesk`, aceito pelo backend junto com o nome antigo. Nao renomeie a coluna sem migracao de banco.
 
-Para voltar ao Railway, conecte o repositorio GitHub ao servico web existente, confira as variaveis em `.env.example`, configure o banco Supabase pelo pooler IPv4 e publique o commit desejado. Confirme no servico Railway que `/health` retorna `status: ok`, `database: ok` e, quando o preprocessamento estiver ativo, `ffmpeg: ok`. Uma implantacao so deve ser considerada concluida depois de testar login, inicio, chunk e finalizacao pelo dominio HTTPS ativo.
+Para voltar ao Railway, conecte o repositorio GitHub ao servico web existente, confira as variaveis em `.env.example`, configure o banco Supabase pelo pooler IPv4 e publique o commit desejado. O servico deve usar `/health` como healthcheck e o deploy deve executar a suite de testes antes de promover a nova versao. Confirme que `/health` retorna HTTP 200 com `status: ok`, `database: ok`, `ffmpeg: ok` quando o preprocessamento estiver ativo e `timezone: America/Sao_Paulo`.
 
 ## Rodando localmente
 
@@ -174,7 +180,7 @@ ADMIN_SENHA=troque_por_uma_senha_forte_com_12_caracteres
 SECRET_KEY=uma_chave_aleatoria_com_mais_de_32_caracteres
 ```
 
-Sem essas variaveis, ou usando senha fraca, o app recusa iniciar.
+Sem essas variaveis, ou usando senha de bootstrap insegura, o app recusa iniciar. Usuarios criados pelo painel e trocas de senha seguem `PASSWORD_MIN_LENGTH` (padrao 12).
 
 Depois do login como admin:
 
@@ -182,6 +188,20 @@ Depois do login como admin:
 2. Crie os analistas.
 3. Entregue usuario e senha inicial para cada analista.
 4. Deixe "Administrador" desmarcado para analistas comuns.
+
+## Seguranca e operacao SaaS
+
+- Sessao autenticada expira por politica configuravel e e revalidada contra o usuario ativo/perfil no banco.
+- CSRF protege operacoes POST.
+- Respostas incluem headers de seguranca e conteudo autenticado nao deve ser tratado como cache publico.
+- Uploads possuem limite global e limites especificos por chunk/arquivo.
+- Retries sequenciais do mesmo chunk sao idempotentes e nao retranscrevem um trecho ja persistido.
+- Acoes administrativas sensiveis sao registradas em `auditoria_eventos` sem armazenar senhas.
+- Migracoes de compatibilidade sao serializadas por advisory lock. Para escala multi-replica/comercial, a evolucao recomendada e migrar schema para Alembic.
+- O modelo atual e single-tenant. Para vender uma unica instancia a varias empresas, implemente isolamento por organizacao antes da liberacao comercial.
+- Defina politica formal de retencao/LGPD e valide backup + restauracao do PostgreSQL antes de onboarding externo.
+
+Veja `SAAS_READINESS.md` para o checklist de lancamento.
 
 ## Documentacao complementar
 
