@@ -263,6 +263,26 @@ setInterval(
 
 atualizarPainelGravacao()
 
+function atendimentoEmAberto() {
+
+    return Boolean(
+        gravacaoAtiva ||
+        finalizando ||
+        atendimentoId
+    )
+}
+
+window.addEventListener('beforeunload', event => {
+
+    if (!atendimentoEmAberto()) {
+
+        return
+    }
+
+    event.preventDefault()
+    event.returnValue = ''
+})
+
 function atualizarBotaoPausa(visivel, estaPausado = false) {
 
     pauseBtn.style.display =
