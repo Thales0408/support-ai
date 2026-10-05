@@ -672,7 +672,16 @@ class FluxosIntegracaoTest(unittest.TestCase):
         self.assertEqual(dashboard.status_code, 200)
         self.assertIn(b"55PBX AI", dashboard.data)
 
-        logout = self.client.get("/logout", follow_redirects=False)
+        with self.client.session_transaction() as sess:
+            token_logout = sess["csrf_token"]
+
+        logout = self.client.post(
+            "/logout",
+            data={
+                "csrf_token": token_logout
+            },
+            follow_redirects=False
+        )
         self.assertEqual(logout.status_code, 302)
         self.assertIn("/login", logout.headers["Location"])
 
