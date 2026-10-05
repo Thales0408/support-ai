@@ -47,6 +47,15 @@ class AudioAiTest(unittest.TestCase):
                 places=4
             )
 
+    def test_prompt_transcricao_e_glossario_sem_ordens(self):
+
+        prompt = ai.PROMPT_TRANSCRICAO.lower()
+
+        self.assertNotIn("transcreva", prompt)
+        self.assertNotIn("nao invente", prompt)
+        self.assertIn("cnpj", prompt)
+        self.assertIn("gestaoclick", prompt)
+
     def test_ruido_detecta_transcreva_com_acento(self):
 
         self.assertTrue(
