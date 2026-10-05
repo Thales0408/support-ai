@@ -27,6 +27,7 @@ import logging
 import unicodedata
 import secrets
 import hmac
+import shutil
 
 from auth import (
     perfil_usuario,
@@ -38,8 +39,10 @@ from auth import (
     usuario_supervisor
 )
 from config import (
+    AUDIO_PREPROCESS_ENABLED,
     CHUNK_SECONDS,
     CORS_ORIGINS,
+    FFMPEG_PATH,
     LOGIN_BLOCK_MINUTES,
     LOGIN_MAX_ATTEMPTS,
     MAX_AUDIO_MINUTES_PER_DAY,
@@ -2937,8 +2940,44 @@ def admin_excluir_usuario(usuario_id):
 @app.route("/health")
 def health():
 
+    banco = "ok"
+
+    try:
+
+        with conectar_banco() as conn:
+
+            with conn.cursor() as cursor:
+
+                cursor.execute("SELECT 1")
+                cursor.fetchone()
+
+    except Exception:
+
+        banco = "erro"
+
+    ffmpeg = (
+        "desativado"
+        if not AUDIO_PREPROCESS_ENABLED
+        else (
+            "ok"
+            if shutil.which(FFMPEG_PATH)
+            else "indisponivel"
+        )
+    )
+
     return jsonify({
-        "status": "ok"
+        "status": (
+            "ok"
+            if banco == "ok"
+            else "degradado"
+        ),
+        "database": banco,
+        "audio_preprocess": (
+            "ativo"
+            if AUDIO_PREPROCESS_ENABLED
+            else "desativado"
+        ),
+        "ffmpeg": ffmpeg
     })
 
 
