@@ -30,6 +30,32 @@ class FakeCursor:
         sql_lower = " ".join(str(sql).lower().split())
         self.state["queries"].append((sql_lower, params))
 
+        if (
+            "select usuario, ativo, perfil, is_admin"
+            in sql_lower
+            and "from usuarios" in sql_lower
+            and "where id = %s" in sql_lower
+        ):
+
+            usuario_id = int(params[0])
+            user = next(
+                (
+                    item
+                    for item in self.state["users_by_name"].values()
+                    if item["id"] == usuario_id
+                ),
+                None
+            )
+            self.result = [
+                (
+                    user["usuario"],
+                    user["ativo"],
+                    user["perfil"],
+                    user["is_admin"]
+                )
+            ] if user else []
+            return
+
         if "from usuarios" in sql_lower and "where usuario = %s" in sql_lower:
 
             usuario = params[0]
@@ -43,6 +69,55 @@ class FakeCursor:
                     user["perfil"]
                 )
             ] if user else []
+            return
+
+        if (
+            "select count(*) from atendimentos"
+            in sql_lower
+            and "where usuario_id = %s" in sql_lower
+        ):
+
+            usuario_id = int(params[0])
+            quantidade = len([
+                atendimento
+                for atendimento in self.state["atendimentos"].values()
+                if atendimento["usuario_id"] == usuario_id
+            ])
+            self.result = [(quantidade,)]
+            return
+
+        if (
+            "update usuarios set ativo = false"
+            in sql_lower
+            and "where id = %s" in sql_lower
+        ):
+
+            usuario_id = int(params[0])
+            for user in self.state["users_by_name"].values():
+                if user["id"] == usuario_id:
+                    user["ativo"] = False
+            self.result = []
+            return
+
+        if (
+            "delete from usuarios"
+            in sql_lower
+            and "where id = %s" in sql_lower
+        ):
+
+            usuario_id = int(params[0])
+            remover = next(
+                (
+                    nome
+                    for nome, user
+                    in self.state["users_by_name"].items()
+                    if user["id"] == usuario_id
+                ),
+                None
+            )
+            if remover:
+                del self.state["users_by_name"][remover]
+            self.result = []
             return
 
         if "insert into atendimentos" in sql_lower and "returning id" in sql_lower:
@@ -80,6 +155,28 @@ class FakeCursor:
             usuario_id = int(params[1])
             atendimento = self.state["atendimentos"].get(atendimento_id)
             self.result = [(1,)] if atendimento and atendimento["usuario_id"] == usuario_id else []
+            return
+
+        if (
+            "select status, texto, provider_usado, modelo_usado, fallback_usado,"
+            in sql_lower
+            and "motivo_fallback, audio_processado" in sql_lower
+            and "from transcricoes_chunks" in sql_lower
+        ):
+
+            key = (int(params[0]), int(params[2]))
+            chunk = self.state["chunks"].get(key)
+            self.result = [
+                (
+                    chunk["status"],
+                    chunk.get("texto", ""),
+                    chunk.get("provider_usado", ""),
+                    chunk.get("modelo_usado", ""),
+                    bool(chunk.get("fallback_usado")),
+                    chunk.get("motivo_fallback", ""),
+                    bool(chunk.get("audio_processado"))
+                )
+            ] if chunk else []
             return
 
         if (
@@ -468,7 +565,10 @@ class FluxosIntegracaoTest(unittest.TestCase):
 
     def setUp(self):
 
-        app.app.config.update(TESTING=True)
+        app.app.config.update(
+            TESTING=True,
+            SESSION_COOKIE_SECURE=False
+        )
         self.state = {
             "next_atendimento_id": 10,
             "users_by_name": {
@@ -621,9 +721,57 @@ class FluxosIntegracaoTest(unittest.TestCase):
         self.assertEqual(dashboard.status_code, 200)
         self.assertIn(b"55PBX AI", dashboard.data)
 
-        logout = self.client.get("/logout", follow_redirects=False)
+        with self.client.session_transaction() as sess:
+            token_logout = sess["csrf_token"]
+
+        logout = self.client.post(
+            "/logout",
+            data={
+                "csrf_token": token_logout
+            },
+            follow_redirects=False
+        )
         self.assertEqual(logout.status_code, 302)
         self.assertIn("/login", logout.headers["Location"])
+
+    def test_usuario_desativado_perde_sessao_imediatamente(self):
+
+        self.set_session()
+        self.state["users_by_name"]["analista"]["ativo"] = False
+
+        response = self.client.get(
+            "/resultados"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            401
+        )
+        self.assertIn(
+            "desativado",
+            response.get_json()["erro"].lower()
+        )
+
+    def test_perfil_alterado_atualiza_sessao(self):
+
+        self.set_session(
+            usuario_id=1,
+            perfil="analista",
+            nome="analista"
+        )
+        self.state["users_by_name"]["analista"]["perfil"] = "supervisor"
+
+        response = self.client.get(
+            "/resultados"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            200
+        )
+        self.assertTrue(
+            response.get_json()["is_supervisor"]
+        )
 
     def test_csrf_exigido_e_aceita_header_sem_hifen(self):
 
@@ -728,6 +876,12 @@ class FluxosIntegracaoTest(unittest.TestCase):
             mock_ia.call_args.kwargs["entidades_extraidas"]["email"],
             "suporteequipamentos@gmail.com"
         )
+        tipos_uso = [
+            evento[2]
+            for evento in self.state["uso_eventos"]
+        ]
+        self.assertIn("transcricao", tipos_uso)
+        self.assertIn("resumo", tipos_uso)
 
         with patch("app.analisar_com_ia") as mock_ia_repetida:
             repetida = self.post_json(
@@ -738,6 +892,138 @@ class FluxosIntegracaoTest(unittest.TestCase):
         self.assertEqual(repetida.status_code, 200)
         self.assertTrue(repetida.get_json()["reutilizado"])
         self.assertEqual(mock_ia_repetida.call_count, 0)
+
+    def test_chunk_repetido_reutiliza_sem_retranscrever(self):
+
+        self.set_session()
+        inicio = self.post_json("/atendimentos/iniciar")
+        atendimento_id = inicio.get_json()["atendimento_id"]
+
+        resultado_transcricao = {
+            "texto": "Cliente pediu ajuda.",
+            "provider_tentado": "groq",
+            "provider_usado": "groq",
+            "fallback_usado": False,
+            "motivo_fallback": "",
+            "modelo_usado": "whisper-large-v3-turbo",
+            "audio_processado": False,
+            "tamanho_audio_original": 2048,
+            "tamanho_audio_processado": 2048,
+            "tempo_transcricao_segundos": 0.1,
+            "erro_preprocessamento": "",
+            "audio_original_path": "",
+            "audio_processado_path": ""
+        }
+
+        with patch(
+            "app.transcrever_chunk",
+            return_value=resultado_transcricao
+        ) as mock_transcrever:
+
+            primeiro = self.client.post(
+                "/atendimentos/chunk",
+                data={
+                    "atendimento_id": str(atendimento_id),
+                    "ordem": "0",
+                    "duracao_segundos": "30",
+                    "audio": (
+                        io.BytesIO(b"a" * 2048),
+                        "chunk.webm"
+                    )
+                },
+                headers={"X-CSRFToken": "csrf-teste"},
+                content_type="multipart/form-data"
+            )
+
+            segundo = self.client.post(
+                "/atendimentos/chunk",
+                data={
+                    "atendimento_id": str(atendimento_id),
+                    "ordem": "0",
+                    "duracao_segundos": "30",
+                    "audio": (
+                        io.BytesIO(b"b" * 2048),
+                        "chunk.webm"
+                    )
+                },
+                headers={"X-CSRFToken": "csrf-teste"},
+                content_type="multipart/form-data"
+            )
+
+        self.assertEqual(primeiro.status_code, 200)
+        self.assertEqual(segundo.status_code, 200)
+        self.assertTrue(segundo.get_json()["reutilizado"])
+        self.assertEqual(mock_transcrever.call_count, 1)
+
+    def test_chunk_grande_e_rejeitado(self):
+
+        self.set_session()
+        inicio = self.post_json("/atendimentos/iniciar")
+        atendimento_id = inicio.get_json()["atendimento_id"]
+
+        with patch(
+            "app.tamanho_arquivo_upload",
+            return_value=(app.MAX_CHUNK_UPLOAD_MB * 1024 * 1024) + 1
+        ):
+
+            response = self.client.post(
+                "/atendimentos/chunk",
+                data={
+                    "atendimento_id": str(atendimento_id),
+                    "ordem": "0",
+                    "duracao_segundos": "30",
+                    "audio": (
+                        io.BytesIO(b"a" * 2048),
+                        "chunk.webm"
+                    )
+                },
+                headers={"X-CSRFToken": "csrf-teste"},
+                content_type="multipart/form-data"
+            )
+
+        self.assertEqual(response.status_code, 413)
+        self.assertIn("excede", response.get_json()["erro"].lower())
+
+    def test_health_degradado_retorna_503(self):
+
+        with patch(
+            "app.shutil.which",
+            return_value=None
+        ):
+
+            response = self.client.get("/health")
+
+        if app.AUDIO_PREPROCESS_ENABLED:
+
+            self.assertEqual(response.status_code, 503)
+            self.assertEqual(
+                response.get_json()["status"],
+                "degradado"
+            )
+
+    def test_headers_de_seguranca_presentes(self):
+
+        response = self.client.get("/health")
+
+        self.assertEqual(
+            response.headers.get("X-Content-Type-Options"),
+            "nosniff"
+        )
+        self.assertEqual(
+            response.headers.get("X-Frame-Options"),
+            "DENY"
+        )
+        self.assertIn(
+            "frame-ancestors 'none'",
+            response.headers.get("Content-Security-Policy", "")
+        )
+        self.assertTrue(
+            response.headers.get("X-Request-ID")
+        )
+        self.assertIn(
+            "no-store",
+            response.headers.get("Cache-Control", "")
+        )
 
     def test_chunk_bloqueia_novo_audio_apos_limite_da_chamada(self):
 
@@ -833,6 +1119,31 @@ class FluxosIntegracaoTest(unittest.TestCase):
             round(esperado, 4),
             places=4
         )
+
+    def test_excluir_usuario_com_historico_apenas_desativa(self):
+
+        self.set_session(
+            usuario_id=3,
+            perfil="admin_tecnico",
+            nome="admin"
+        )
+
+        with patch("app.registrar_auditoria") as mock_auditoria:
+
+            response = self.client.post(
+                "/admin/usuarios/2/excluir",
+                data={
+                    "csrf_token": "csrf-teste"
+                },
+                follow_redirects=False
+            )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(
+            self.state["users_by_name"]["supervisor"]["ativo"]
+        )
+        self.assertIn(99, self.state["atendimentos"])
+        mock_auditoria.assert_called_once()
 
     def test_permissoes_custos_dashboard_detalhe_exportacao(self):
 

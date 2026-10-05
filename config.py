@@ -63,10 +63,10 @@ def exigir_admin_senha():
         "troque_por_uma_senha_forte_com_12_caracteres"
     }
 
-    if valor in valores_inseguros or len(valor) < 8:
+    if valor in valores_inseguros or len(valor) < 12:
 
         raise RuntimeError(
-            "ADMIN_SENHA precisa ser definida no ambiente e nao pode ser uma senha padrao"
+            "ADMIN_SENHA precisa ter pelo menos 12 caracteres e nao pode ser uma senha padrao"
         )
 
     return valor
@@ -156,11 +156,28 @@ USD_BRL_RATE = ler_float("USD_BRL_RATE", "5.00")
 MAX_CALLS_PER_DAY = ler_int("MAX_CALLS_PER_DAY", "30")
 MAX_AUDIO_MINUTES_PER_DAY = ler_int("MAX_AUDIO_MINUTES_PER_DAY", "300")
 MAX_SUMMARIES_PER_DAY = ler_int("MAX_SUMMARIES_PER_DAY", "30")
-MAX_COST_PER_USER_PER_DAY = ler_float("MAX_COST_PER_USER_PER_DAY", "2.00")
-MAX_SYSTEM_COST_PER_DAY = ler_float("MAX_SYSTEM_COST_PER_DAY", "10.00")
+MAX_COST_BRL_PER_USER_PER_DAY = ler_float(
+    "MAX_COST_BRL_PER_USER_PER_DAY",
+    ler_env("MAX_COST_PER_USER_PER_DAY", "2.00")
+)
+MAX_SYSTEM_COST_BRL_PER_DAY = ler_float(
+    "MAX_SYSTEM_COST_BRL_PER_DAY",
+    ler_env("MAX_SYSTEM_COST_PER_DAY", "10.00")
+)
+MAX_COST_PER_USER_PER_DAY = MAX_COST_BRL_PER_USER_PER_DAY
+MAX_SYSTEM_COST_PER_DAY = MAX_SYSTEM_COST_BRL_PER_DAY
 MAX_CALL_DURATION_MINUTES = ler_int("MAX_CALL_DURATION_MINUTES", "20")
-MAX_CHUNKS_PER_CALL = ler_int("MAX_CHUNKS_PER_CALL", "999")
+MAX_CHUNKS_PER_CALL = ler_int("MAX_CHUNKS_PER_CALL", "40")
 CHUNK_SECONDS = ler_int("CHUNK_SECONDS", "45")
+MAX_CHUNK_UPLOAD_MB = ler_int("MAX_CHUNK_UPLOAD_MB", "8")
+MAX_SINGLE_UPLOAD_MB = ler_int("MAX_SINGLE_UPLOAD_MB", "25")
+MAX_REQUEST_MB = ler_int("MAX_REQUEST_MB", "30")
+PASSWORD_MIN_LENGTH = ler_int("PASSWORD_MIN_LENGTH", "12")
+SESSION_LIFETIME_HOURS = ler_int("SESSION_LIFETIME_HOURS", "8")
+AI_TIMEOUT_SECONDS = ler_int("AI_TIMEOUT_SECONDS", "60")
+AI_MAX_RETRIES = ler_int("AI_MAX_RETRIES", "2")
+DB_CONNECT_TIMEOUT_SECONDS = ler_int("DB_CONNECT_TIMEOUT_SECONDS", "10")
+APP_TIMEZONE = ler_env("APP_TIMEZONE", "America/Sao_Paulo")
 LOGIN_MAX_ATTEMPTS = ler_int("LOGIN_MAX_ATTEMPTS", "5")
 LOGIN_BLOCK_MINUTES = ler_int("LOGIN_BLOCK_MINUTES", "15")
 

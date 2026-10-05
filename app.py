@@ -6,13 +6,17 @@ from flask import (
     redirect,
     session,
     send_file,
-    abort
+    abort,
+    g,
+    has_request_context
 )
 
 from flask_cors import CORS
 from openai import RateLimitError
 from waitress import serve
-from datetime import datetime
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+from werkzeug.middleware.proxy_fix import ProxyFix
 from openpyxl import Workbook
 from werkzeug.security import generate_password_hash
 
@@ -39,6 +43,7 @@ from auth import (
     usuario_supervisor
 )
 from config import (
+    APP_TIMEZONE,
     AUDIO_PREPROCESS_ENABLED,
     CHUNK_SECONDS,
     CORS_ORIGINS,
@@ -48,8 +53,13 @@ from config import (
     MAX_AUDIO_MINUTES_PER_DAY,
     MAX_CALL_DURATION_MINUTES,
     MAX_CALLS_PER_DAY,
+    MAX_CHUNK_UPLOAD_MB,
     MAX_CHUNKS_PER_CALL,
+    MAX_REQUEST_MB,
+    MAX_SINGLE_UPLOAD_MB,
+    PASSWORD_MIN_LENGTH,
     SECRET_KEY,
+    SESSION_LIFETIME_HOURS,
     SUMMARY_MODEL,
     TRANSCRIBE_FALLBACK_PROVIDER,
     TRANSCRIBE_PROVIDER,
@@ -91,13 +101,28 @@ app = Flask(__name__)
 
 app.secret_key = SECRET_KEY
 app.config.update(
+    MAX_CONTENT_LENGTH=MAX_REQUEST_MB * 1024 * 1024,
+    PERMANENT_SESSION_LIFETIME=timedelta(
+        hours=SESSION_LIFETIME_HOURS
+    ),
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=bool(
         os.getenv("RAILWAY_ENVIRONMENT")
         or os.getenv("RAILWAY_PUBLIC_DOMAIN")
-    )
+    ),
+    SESSION_COOKIE_NAME="support_ai_session",
+    SESSION_REFRESH_EACH_REQUEST=True
 )
+
+if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PUBLIC_DOMAIN"):
+
+    app.wsgi_app = ProxyFix(
+        app.wsgi_app,
+        x_for=1,
+        x_proto=1,
+        x_host=1
+    )
 
 if CORS_ORIGINS:
 
@@ -106,6 +131,97 @@ if CORS_ORIGINS:
         origins=CORS_ORIGINS,
         supports_credentials=True
     )
+
+
+@app.before_request
+def preparar_request_id():
+
+    recebido = limpar_texto(
+        request.headers.get("X-Request-ID", "")
+    )[:80]
+
+    g.request_id = (
+        recebido
+        if re.fullmatch(r"[A-Za-z0-9._:-]{1,80}", recebido)
+        else secrets.token_hex(12)
+    )
+
+
+@app.after_request
+def aplicar_cabecalhos_seguranca(resposta):
+
+    resposta.headers.setdefault(
+        "X-Content-Type-Options",
+        "nosniff"
+    )
+    resposta.headers.setdefault(
+        "X-Frame-Options",
+        "DENY"
+    )
+    resposta.headers.setdefault(
+        "Referrer-Policy",
+        "strict-origin-when-cross-origin"
+    )
+    resposta.headers.setdefault(
+        "Permissions-Policy",
+        (
+            "camera=(), microphone=(self), "
+            "display-capture=(self), geolocation=()"
+        )
+    )
+    resposta.headers.setdefault(
+        "Content-Security-Policy",
+        (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self'"
+        )
+    )
+
+    if app.config.get("SESSION_COOKIE_SECURE"):
+
+        resposta.headers.setdefault(
+            "Strict-Transport-Security",
+            "max-age=31536000; includeSubDomains"
+        )
+
+    if not request.path.startswith("/static/"):
+
+        resposta.headers.setdefault(
+            "Cache-Control",
+            "no-store, max-age=0"
+        )
+        resposta.headers.setdefault(
+            "Pragma",
+            "no-cache"
+        )
+
+    resposta.headers.setdefault(
+        "X-Request-ID",
+        getattr(g, "request_id", "")
+    )
+
+    return resposta
+
+
+@app.errorhandler(413)
+def upload_grande_demais(_erro):
+
+    if request.path.startswith((
+        "/atendimentos",
+        "/transcrever"
+    )):
+
+        return jsonify({
+            "erro": "Arquivo de audio excede o limite permitido."
+        }), 413
+
+    return "Arquivo excede o limite permitido.", 413
 
 
 def obter_csrf_token():
@@ -126,6 +242,71 @@ def contexto_csrf():
     return {
         "csrf_token": obter_csrf_token
     }
+
+
+@app.before_request
+def sincronizar_sessao_usuario():
+
+    usuario_id = session.get("usuario_id")
+
+    if (
+        not usuario_id
+        or request.path == "/login"
+        or request.path == "/health"
+        or request.path.startswith("/static/")
+    ):
+
+        return None
+
+    with conectar_banco() as conn:
+
+        with conn.cursor() as cursor:
+
+            cursor.execute(
+                """
+                SELECT usuario, ativo, perfil, is_admin
+                FROM usuarios
+                WHERE id = %s
+                """,
+                (
+                    usuario_id,
+                )
+            )
+
+            row = cursor.fetchone()
+
+    if not row or not row[1]:
+
+        session.clear()
+
+        if (
+            request.path.startswith("/atendimentos")
+            or request.path.startswith("/conta")
+            or request.path == "/resultados"
+        ):
+
+            return jsonify({
+                "erro": "Sessao invalida ou usuario desativado"
+            }), 401
+
+        return redirect("/login")
+
+    perfil = (
+        row[2]
+        or (
+            "admin_tecnico"
+            if row[3]
+            else "analista"
+        )
+    )
+
+    session["usuario_nome"] = row[0]
+    session["perfil"] = perfil
+    session["is_admin"] = (
+        perfil == "admin_tecnico"
+    )
+
+    return None
 
 
 @app.before_request
@@ -166,13 +347,23 @@ def proteger_csrf():
 # STARTUP
 # =========================================
 
-try:
+if os.getenv("SKIP_DB_INIT", "").lower() not in {
+    "1",
+    "true",
+    "yes",
+    "on"
+}:
 
-    inicializar_banco()
+    try:
 
-except Exception as e:
+        inicializar_banco()
 
-    print("ERRO AO INICIALIZAR BANCO:", e)
+    except Exception:
+
+        logger.exception(
+            "ERRO CRITICO AO INICIALIZAR BANCO"
+        )
+        raise
 
 
 # =========================================
@@ -181,16 +372,71 @@ except Exception as e:
 
 def log_evento(evento, **dados):
 
+    request_id = (
+        getattr(g, "request_id", None)
+        if has_request_context()
+        else None
+    )
+
     logger.info(
         json.dumps(
             {
                 "evento": evento,
+                "request_id": request_id,
                 **dados
             },
             ensure_ascii=False,
             default=str
         )
     )
+
+
+def registrar_auditoria(
+    acao,
+    alvo_usuario_id=None,
+    atendimento_id=None,
+    detalhes=None
+):
+
+    ator_usuario_id = usuario_logado()
+
+    try:
+
+        with conectar_banco() as conn:
+
+            with conn.cursor() as cursor:
+
+                cursor.execute(
+                    """
+                    INSERT INTO auditoria_eventos (
+                        ator_usuario_id,
+                        alvo_usuario_id,
+                        atendimento_id,
+                        acao,
+                        detalhes,
+                        ip
+                    )
+                    VALUES (%s, %s, %s, %s, %s::jsonb, %s)
+                    """,
+                    (
+                        ator_usuario_id,
+                        alvo_usuario_id,
+                        atendimento_id,
+                        str(acao or "")[:120],
+                        json.dumps(
+                            detalhes or {},
+                            ensure_ascii=False,
+                            default=str
+                        ),
+                        ip_requisicao()
+                    )
+                )
+
+    except Exception:
+
+        logger.exception(
+            "FALHA AO REGISTRAR AUDITORIA"
+        )
 
 
 def limpar_texto(texto):
@@ -283,13 +529,31 @@ def tamanho_arquivo_upload(arquivo):
     return tamanho
 
 
+def tamanho_maximo_bytes(megabytes):
+
+    return max(1, int(megabytes or 1)) * 1024 * 1024
+
+
+def validar_tamanho_upload(arquivo, limite_mb):
+
+    tamanho = tamanho_arquivo_upload(arquivo)
+
+    if tamanho > tamanho_maximo_bytes(limite_mb):
+
+        return tamanho, (
+            jsonify({
+                "erro": (
+                    "Arquivo de audio excede o limite de "
+                    f"{limite_mb} MB."
+                )
+            }),
+            413
+        )
+
+    return tamanho, None
+
+
 def ip_requisicao():
-
-    encaminhado = request.headers.get("X-Forwarded-For", "")
-
-    if encaminhado:
-
-        return encaminhado.split(",")[0].strip()
 
     return request.remote_addr or "desconhecido"
 
@@ -2532,6 +2796,8 @@ def login():
                             )
                         )
 
+                    session.clear()
+                    session.permanent = True
                     session["usuario_id"] = user[0]
                     perfil = (
                         user[4]
@@ -2569,7 +2835,10 @@ def login():
     )
 
 
-@app.route("/logout")
+@app.route(
+    "/logout",
+    methods=["POST"]
+)
 def logout():
 
     session.clear()
@@ -2616,6 +2885,22 @@ def admin_usuarios():
     mensagem = None
     erro = None
 
+    mensagem_codigo = request.args.get("mensagem", "")
+    erro_codigo = request.args.get("erro", "")
+
+    if mensagem_codigo == "usuario_desativado_historico_preservado":
+
+        mensagem = (
+            "Usuario desativado. O historico de atendimentos foi preservado."
+        )
+
+    if erro_codigo.startswith("senha_minima_"):
+
+        erro = (
+            "A nova senha deve ter pelo menos "
+            f"{PASSWORD_MIN_LENGTH} caracteres."
+        )
+
     if request.method == "POST":
 
         usuario = limpar_texto(
@@ -2638,6 +2923,13 @@ def admin_usuarios():
         if not usuario or not senha:
 
             erro = "Informe usuario e senha."
+
+        elif len(senha) < PASSWORD_MIN_LENGTH:
+
+            erro = (
+                "A senha inicial deve ter pelo menos "
+                f"{PASSWORD_MIN_LENGTH} caracteres."
+            )
 
         else:
 
@@ -2670,13 +2962,24 @@ def admin_usuarios():
 
                 mensagem = "Usuario criado com sucesso."
 
+                registrar_auditoria(
+                    "usuario_criado",
+                    detalhes={
+                        "usuario": usuario,
+                        "perfil": perfil
+                    }
+                )
+
             except psycopg2.errors.UniqueViolation:
 
                 erro = "Esse usuario ja existe."
 
-            except Exception as e:
+            except Exception:
 
-                erro = f"Erro ao criar usuario: {e}"
+                logger.exception(
+                    "ERRO AO CRIAR USUARIO"
+                )
+                erro = "Nao foi possivel criar o usuario."
 
     with conectar_banco() as conn:
 
@@ -2743,6 +3046,14 @@ def admin_alterar_status(usuario_id):
                 )
             )
 
+    registrar_auditoria(
+        "usuario_status_alterado",
+        alvo_usuario_id=usuario_id,
+        detalhes={
+            "ativo": ativo
+        }
+    )
+
     return redirect("/admin")
 
 
@@ -2761,6 +3072,12 @@ def admin_alterar_senha(usuario_id):
         return redirect("/")
 
     senha = request.form.get("senha") or ""
+
+    if senha and len(senha) < PASSWORD_MIN_LENGTH:
+
+        return redirect(
+            f"/admin?erro=senha_minima_{PASSWORD_MIN_LENGTH}"
+        )
 
     if senha:
 
@@ -2781,6 +3098,11 @@ def admin_alterar_senha(usuario_id):
                         usuario_id
                     )
                 )
+
+        registrar_auditoria(
+            "usuario_senha_redefinida",
+            alvo_usuario_id=usuario_id
+        )
 
     return redirect("/admin")
 
@@ -2828,6 +3150,14 @@ def admin_alterar_nome(usuario_id):
         if usuario_id == usuario_logado():
 
             session["usuario_nome"] = novo_usuario
+
+        registrar_auditoria(
+            "usuario_nome_alterado",
+            alvo_usuario_id=usuario_id,
+            detalhes={
+                "novo_usuario": novo_usuario
+            }
+        )
 
     except psycopg2.errors.UniqueViolation:
 
@@ -2887,6 +3217,14 @@ def admin_alterar_perfil(usuario_id):
         session["perfil"] = perfil
         session["is_admin"] = is_admin
 
+    registrar_auditoria(
+        "usuario_perfil_alterado",
+        alvo_usuario_id=usuario_id,
+        detalhes={
+            "perfil": perfil
+        }
+    )
+
     return redirect("/admin")
 
 
@@ -2908,19 +3246,85 @@ def admin_excluir_usuario(usuario_id):
 
         return redirect("/admin")
 
+    atendimentos_vinculados = 0
+
     with conectar_banco() as conn:
 
         with conn.cursor() as cursor:
 
             cursor.execute(
                 """
-                DELETE FROM usuarios
-                WHERE id = %s
+                SELECT COUNT(*)
+                FROM atendimentos
+                WHERE usuario_id = %s
                 """,
                 (
                     usuario_id,
                 )
             )
+
+            atendimentos_vinculados = int(
+                cursor.fetchone()[0] or 0
+            )
+
+            if atendimentos_vinculados:
+
+                cursor.execute(
+                    """
+                    UPDATE usuarios
+                    SET ativo = FALSE
+                    WHERE id = %s
+                    """,
+                    (
+                        usuario_id,
+                    )
+                )
+
+            else:
+
+                cursor.execute(
+                    """
+                    DELETE FROM usuarios
+                    WHERE id = %s
+                    """,
+                    (
+                        usuario_id,
+                    )
+                )
+
+    if atendimentos_vinculados:
+
+        log_evento(
+            "usuario_desativado_preservando_historico",
+            usuario_id_alvo=usuario_id,
+            usuario_id_admin=usuario_logado(),
+            atendimentos_vinculados=atendimentos_vinculados
+        )
+
+        registrar_auditoria(
+            "usuario_desativado_preservando_historico",
+            alvo_usuario_id=usuario_id,
+            detalhes={
+                "atendimentos_vinculados": atendimentos_vinculados
+            }
+        )
+
+        return redirect(
+            "/admin?mensagem=usuario_desativado_historico_preservado"
+        )
+
+    log_evento(
+        "usuario_excluido_sem_historico",
+        usuario_id_alvo=usuario_id,
+        usuario_id_admin=usuario_logado()
+    )
+
+    registrar_auditoria(
+        "usuario_excluido_sem_historico",
+        detalhes={
+            "usuario_id_excluido": usuario_id
+        }
+    )
 
     return redirect("/admin")
 
@@ -2957,16 +3361,18 @@ def health():
         )
     )
 
+    saudavel = (
+        banco == "ok"
+        and (
+            not AUDIO_PREPROCESS_ENABLED
+            or ffmpeg == "ok"
+        )
+    )
+
     return jsonify({
         "status": (
             "ok"
-            if (
-                banco == "ok"
-                and (
-                    not AUDIO_PREPROCESS_ENABLED
-                    or ffmpeg == "ok"
-                )
-            )
+            if saudavel
             else "degradado"
         ),
         "database": banco,
@@ -2975,8 +3381,9 @@ def health():
             if AUDIO_PREPROCESS_ENABLED
             else "desativado"
         ),
-        "ffmpeg": ffmpeg
-    })
+        "ffmpeg": ffmpeg,
+        "timezone": APP_TIMEZONE
+    }), (200 if saudavel else 503)
 
 
 # =========================================
@@ -3002,7 +3409,9 @@ def iniciar_atendimento():
         dados.get("ticket_clickdesk", dados.get("ticket_zendesk", ""))
     )[:80]
 
-    data = datetime.now().strftime(
+    data = datetime.now(
+        ZoneInfo(APP_TIMEZONE)
+    ).strftime(
         "%d/%m/%Y %H:%M"
     )
 
@@ -3186,6 +3595,50 @@ def receber_chunk():
 
             cursor.execute(
                 """
+                SELECT
+                    status,
+                    texto,
+                    provider_usado,
+                    modelo_usado,
+                    fallback_usado,
+                    motivo_fallback,
+                    audio_processado
+                FROM transcricoes_chunks
+                WHERE atendimento_id = %s
+                AND usuario_id = %s
+                AND ordem = %s
+                """,
+                (
+                    atendimento_id,
+                    usuario_id,
+                    ordem_int
+                )
+            )
+
+            chunk_existente = cursor.fetchone()
+
+            if chunk_existente and chunk_existente[0] == "transcrito":
+
+                log_evento(
+                    "chunk_reutilizado_idempotencia",
+                    usuario_id=usuario_id,
+                    atendimento_id=atendimento_id,
+                    ordem=ordem_int
+                )
+
+                return jsonify({
+                    "status": "chunk_transcrito",
+                    "texto": chunk_existente[1] or "",
+                    "provider_usado": chunk_existente[2] or "",
+                    "modelo_usado": chunk_existente[3] or "",
+                    "fallback_usado": bool(chunk_existente[4]),
+                    "motivo_fallback": chunk_existente[5] or "",
+                    "audio_processado": bool(chunk_existente[6]),
+                    "reutilizado": True
+                })
+
+            cursor.execute(
+                """
                 SELECT COALESCE(SUM(duracao_segundos), 0)
                 FROM transcricoes_chunks
                 WHERE atendimento_id = %s
@@ -3274,9 +3727,23 @@ def receber_chunk():
 
     try:
 
-        tamanho_audio = (
-            tamanho_arquivo_upload(arquivo)
+        tamanho_audio, erro_tamanho = validar_tamanho_upload(
+            arquivo,
+            MAX_CHUNK_UPLOAD_MB
         )
+
+        if erro_tamanho:
+
+            log_evento(
+                "chunk_rejeitado_tamanho",
+                usuario_id=usuario_id,
+                atendimento_id=atendimento_id,
+                ordem=ordem_int,
+                tamanho_audio=tamanho_audio,
+                limite_mb=MAX_CHUNK_UPLOAD_MB
+            )
+
+            return erro_tamanho
 
         if (
             tamanho_audio < 1024
@@ -3296,6 +3763,28 @@ def receber_chunk():
                 "motivo": "audio_muito_curto"
             })
 
+        custo_primario_chunk = estimar_custo_transcricao(
+            duracao_chunk_segundos,
+            TRANSCRIBE_PROVIDER
+        )
+
+        with conectar_banco() as conn:
+
+            with conn.cursor() as cursor:
+
+                limite_resposta = (
+                    validar_limite_custo_fallback_transcricao(
+                        cursor,
+                        usuario_id,
+                        atendimento_id,
+                        custo_primario_chunk
+                    )
+                )
+
+                if limite_resposta:
+
+                    return limite_resposta
+
         def validar_fallback_openai():
 
             custo_fallback = estimar_custo_transcricao(
@@ -3312,7 +3801,7 @@ def receber_chunk():
                             cursor,
                             usuario_id,
                             atendimento_id,
-                            custo_fallback
+                            custo_primario_chunk + custo_fallback
                         )
                     )
 
@@ -3458,27 +3947,44 @@ def receber_chunk():
                     )
                 )
 
-                fallback_openai_ja_registrado = (
+                chunk_ja_contabilizado = (
                     chunk_anterior
                     and chunk_anterior[0] == "transcrito"
-                    and chunk_anterior[1] == "openai"
-                    and chunk_anterior[2]
                 )
 
-                if (
-                    fallback_usado
-                    and provider_usado == "openai"
-                    and not fallback_openai_ja_registrado
-                ):
+                if not chunk_ja_contabilizado:
+
+                    if (
+                        fallback_usado
+                        and provider_tentado == "groq"
+                        and provider_usado == "openai"
+                        and motivo_fallback == "baixa_qualidade"
+                    ):
+
+                        registrar_uso_evento(
+                            cursor,
+                            usuario_id,
+                            atendimento_id,
+                            "transcricao_groq_qualidade",
+                            estimar_custo_transcricao(
+                                duracao_chunk_segundos,
+                                "groq"
+                            )
+                        )
 
                     registrar_uso_evento(
                         cursor,
                         usuario_id,
                         atendimento_id,
-                        "transcricao_fallback",
+                        (
+                            "transcricao_fallback"
+                            if fallback_usado
+                            else "transcricao"
+                        ),
                         estimar_custo_transcricao(
                             duracao_chunk_segundos,
-                            "openai"
+                            provider_usado,
+                            modelo=modelo_usado
                         )
                     )
 
@@ -4036,18 +4542,19 @@ def finalizar_atendimento():
         segundos_groq_fallback_qualidade,
         "groq"
     )
-    custo_transcricao_openai = estimar_custo_transcricao(
-        segundos_por_provider.get("openai", 0),
-        "openai"
+    custo_resumo = (
+        estimar_custo_atendimento(0, True)
+        if bool(transcricao)
+        else 0
     )
 
     if bool(transcricao):
 
-        custo_estimado += estimar_custo_atendimento(0, True)
+        custo_estimado += custo_resumo
         custo_estimado = round(custo_estimado, 4)
 
     custo_evento_final = round(
-        max(0, custo_estimado - custo_transcricao_openai),
+        custo_resumo,
         4
     )
 
@@ -4271,11 +4778,29 @@ def transcrever_arquivo_unico():
                     limite_minutos=MAX_AUDIO_MINUTES_PER_DAY
                 )
 
-    data = datetime.now().strftime(
+    data = datetime.now(
+        ZoneInfo(APP_TIMEZONE)
+    ).strftime(
         "%d/%m/%Y %H:%M"
     )
 
     arquivo = request.files["audio"]
+    tamanho_audio, erro_tamanho = validar_tamanho_upload(
+        arquivo,
+        MAX_SINGLE_UPLOAD_MB
+    )
+
+    if erro_tamanho:
+
+        log_evento(
+            "upload_unico_rejeitado_tamanho",
+            usuario_id=usuario_id,
+            tamanho_audio=tamanho_audio,
+            limite_mb=MAX_SINGLE_UPLOAD_MB
+        )
+
+        return erro_tamanho
+
     custo_estimado = estimar_custo_atendimento(
         30,
         True
@@ -4420,9 +4945,10 @@ def transcrever_arquivo_unico():
                     urgencia,
                     categoria,
                     problema_principal,
-                    tags
+                    tags,
+                    custo_estimado_usd
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
@@ -4438,18 +4964,41 @@ def transcrever_arquivo_unico():
                     analise["urgencia"],
                     analise["categoria"],
                     analise["problema_principal"],
-                    analise["tags"]
+                    analise["tags"],
+                    custo_estimado
                 )
             )
 
             atendimento_id = cursor.fetchone()[0]
+
+            custo_resumo_upload = estimar_custo_atendimento(
+                0,
+                True
+            )
+            custo_transcricao_upload = max(
+                0,
+                round(
+                    custo_estimado - custo_resumo_upload,
+                    4
+                )
+            )
+
+            if custo_transcricao_upload:
+
+                registrar_uso_evento(
+                    cursor,
+                    usuario_id,
+                    atendimento_id,
+                    "transcricao_upload",
+                    custo_transcricao_upload
+                )
 
             registrar_uso_evento(
                 cursor,
                 usuario_id,
                 atendimento_id,
                 "resumo",
-                custo_estimado
+                custo_resumo_upload
             )
 
     log_evento(
@@ -4827,7 +5376,8 @@ def reprocessar_resumo_atendimento(atendimento_id):
                     a.transcricao_completa,
                     a.segundos_transcritos,
                     a.usuario_id,
-                    u.usuario
+                    u.usuario,
+                    a.custo_estimado_usd
                 FROM atendimentos a
                 LEFT JOIN usuarios u
                 ON u.id = a.usuario_id
@@ -4870,9 +5420,14 @@ def reprocessar_resumo_atendimento(atendimento_id):
                     "erro": "Transcricao nao disponivel"
                 }), 400
 
-            custo_estimado = estimar_custo_atendimento(
-                row[1] or 0,
+            custo_resumo_reprocessamento = estimar_custo_atendimento(
+                0,
                 True
+            )
+            custo_estimado = round(
+                float(row[4] or 0)
+                + custo_resumo_reprocessamento,
+                4
             )
             usuario_custo_id = row[2] or usuario_id
 
@@ -4880,7 +5435,7 @@ def reprocessar_resumo_atendimento(atendimento_id):
                 cursor,
                 usuario_custo_id,
                 atendimento_id,
-                custo_estimado
+                custo_resumo_reprocessamento
             )
 
             if limite_resposta:
@@ -4932,8 +5487,8 @@ def reprocessar_resumo_atendimento(atendimento_id):
                 cursor,
                 usuario_custo_id,
                 atendimento_id,
-                "resumo",
-                custo_estimado
+                "resumo_reprocessado",
+                custo_resumo_reprocessamento
             )
 
     resposta = {
@@ -4967,10 +5522,13 @@ def alterar_minha_senha():
     senha_atual = dados.get("senha_atual", "")
     nova_senha = dados.get("nova_senha", "")
 
-    if len(nova_senha) < 6:
+    if len(nova_senha) < PASSWORD_MIN_LENGTH:
 
         return jsonify({
-            "erro": "A nova senha deve ter pelo menos 6 caracteres"
+            "erro": (
+                "A nova senha deve ter pelo menos "
+                f"{PASSWORD_MIN_LENGTH} caracteres"
+            )
         }), 400
 
     with conectar_banco() as conn:
@@ -5010,6 +5568,11 @@ def alterar_minha_senha():
                     usuario_id
                 )
             )
+
+    registrar_auditoria(
+        "senha_propria_alterada",
+        alvo_usuario_id=usuario_id
+    )
 
     return jsonify({
         "status": "senha_alterada"

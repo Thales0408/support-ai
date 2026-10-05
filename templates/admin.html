@@ -16,7 +16,10 @@
     <div class="admin-shell">
         <div class="topo">
             <a class="botao voltar" href="/"><i data-lucide="arrow-left"></i> Voltar ao painel</a>
-            <a class="botao voltar" href="/logout"><i data-lucide="log-out"></i> Sair</a>
+            <form method="POST" action="/logout" class="top-action-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="botao voltar" type="submit"><i data-lucide="log-out"></i> Sair</button>
+            </form>
             <button type="button" class="theme-toggle" data-theme-toggle aria-label="Alternar modo de cor">
                 <i data-lucide="moon" class="theme-icon-moon" aria-hidden="true"></i>
                 <i data-lucide="sun" class="theme-icon-sun" aria-hidden="true"></i>
@@ -170,7 +173,7 @@
                                     <span><i data-lucide="user-cog"></i></span>
                                     <div>
                                         <strong>Conta</strong>
-                                        <small>Desative temporariamente ou exclua.</small>
+                                        <small>Contas com histórico são apenas desativadas para preservar os atendimentos.</small>
                                     </div>
                                 </div>
 
@@ -185,7 +188,7 @@
                                         {% endif %}
                                     </form>
 
-                                    <form method="POST" action="/admin/usuarios/{{ item[0] }}/excluir" onsubmit="return confirm('Excluir este usuário e todos os atendimentos vinculados?')">
+                                    <form method="POST" action="/admin/usuarios/{{ item[0] }}/excluir" onsubmit="return confirm('Excluir este usuário? Se houver atendimentos vinculados, a conta será apenas desativada e o histórico será preservado.')">
                                         <button class="perigo" type="submit" {% if item[0] == usuario_id %}disabled{% endif %}><i data-lucide="trash-2"></i> Excluir</button>
                                     </form>
                                 </div>

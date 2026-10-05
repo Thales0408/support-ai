@@ -1,7 +1,7 @@
 from config import (
-    MAX_COST_PER_USER_PER_DAY,
+    MAX_COST_BRL_PER_USER_PER_DAY,
     MAX_SUMMARIES_PER_DAY,
-    MAX_SYSTEM_COST_PER_DAY,
+    MAX_SYSTEM_COST_BRL_PER_DAY,
     USD_BRL_RATE
 )
 
@@ -74,7 +74,7 @@ def uso_eventos_diario(cursor, usuario_id=None):
             COALESCE(SUM(custo_brl), 0),
             SUM(
                 CASE
-                    WHEN tipo = 'resumo' THEN 1
+                    WHEN tipo IN ('resumo', 'resumo_reprocessado') THEN 1
                     ELSE 0
                 END
             )
@@ -164,7 +164,7 @@ def avaliar_limites_custo_resumo(
 
     if (
         uso_usuario["custo_brl"] + custo_projetado
-        > MAX_COST_PER_USER_PER_DAY
+        > MAX_COST_BRL_PER_USER_PER_DAY
     ):
 
         return {
@@ -175,18 +175,18 @@ def avaliar_limites_custo_resumo(
                 "atendimento_id": atendimento_id,
                 "custo_brl_atual": uso_usuario["custo_brl"],
                 "custo_brl_projetado": custo_projetado,
-                "limite": MAX_COST_PER_USER_PER_DAY
+                "limite": MAX_COST_BRL_PER_USER_PER_DAY
             },
             "resposta": {
                 "custo_hoje_brl": round(uso_usuario["custo_brl"], 4),
                 "custo_projetado_brl": custo_projetado,
-                "limite_custo_usuario_brl": MAX_COST_PER_USER_PER_DAY
+                "limite_custo_usuario_brl": MAX_COST_BRL_PER_USER_PER_DAY
             }
         }
 
     if (
         uso_sistema["custo_brl"] + custo_projetado
-        > MAX_SYSTEM_COST_PER_DAY
+        > MAX_SYSTEM_COST_BRL_PER_DAY
     ):
 
         return {
@@ -197,12 +197,12 @@ def avaliar_limites_custo_resumo(
                 "atendimento_id": atendimento_id,
                 "custo_brl_atual": uso_sistema["custo_brl"],
                 "custo_brl_projetado": custo_projetado,
-                "limite": MAX_SYSTEM_COST_PER_DAY
+                "limite": MAX_SYSTEM_COST_BRL_PER_DAY
             },
             "resposta": {
                 "custo_sistema_hoje_brl": round(uso_sistema["custo_brl"], 4),
                 "custo_projetado_brl": custo_projetado,
-                "limite_custo_sistema_brl": MAX_SYSTEM_COST_PER_DAY
+                "limite_custo_sistema_brl": MAX_SYSTEM_COST_BRL_PER_DAY
             }
         }
 
@@ -225,7 +225,7 @@ def avaliar_limites_custo_transcricao(
 
     if (
         uso_usuario["custo_brl"] + custo_projetado
-        > MAX_COST_PER_USER_PER_DAY
+        > MAX_COST_BRL_PER_USER_PER_DAY
     ):
 
         return {
@@ -236,18 +236,18 @@ def avaliar_limites_custo_transcricao(
                 "atendimento_id": atendimento_id,
                 "custo_brl_atual": uso_usuario["custo_brl"],
                 "custo_brl_projetado": custo_projetado,
-                "limite": MAX_COST_PER_USER_PER_DAY
+                "limite": MAX_COST_BRL_PER_USER_PER_DAY
             },
             "resposta": {
                 "custo_hoje_brl": round(uso_usuario["custo_brl"], 4),
                 "custo_projetado_brl": custo_projetado,
-                "limite_custo_usuario_brl": MAX_COST_PER_USER_PER_DAY
+                "limite_custo_usuario_brl": MAX_COST_BRL_PER_USER_PER_DAY
             }
         }
 
     if (
         uso_sistema["custo_brl"] + custo_projetado
-        > MAX_SYSTEM_COST_PER_DAY
+        > MAX_SYSTEM_COST_BRL_PER_DAY
     ):
 
         return {
@@ -258,12 +258,12 @@ def avaliar_limites_custo_transcricao(
                 "atendimento_id": atendimento_id,
                 "custo_brl_atual": uso_sistema["custo_brl"],
                 "custo_brl_projetado": custo_projetado,
-                "limite": MAX_SYSTEM_COST_PER_DAY
+                "limite": MAX_SYSTEM_COST_BRL_PER_DAY
             },
             "resposta": {
                 "custo_sistema_hoje_brl": round(uso_sistema["custo_brl"], 4),
                 "custo_projetado_brl": custo_projetado,
-                "limite_custo_sistema_brl": MAX_SYSTEM_COST_PER_DAY
+                "limite_custo_sistema_brl": MAX_SYSTEM_COST_BRL_PER_DAY
             }
         }
 
