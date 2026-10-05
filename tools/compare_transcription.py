@@ -212,8 +212,14 @@ def main():
     print("Audio original:", caminho)
     print(
         "Audio processado:",
-        preprocessado.get("audio_processado_path")
-        or "nao processado"
+        (
+            preprocessado.get("audio_processado_path")
+            or (
+                "sim (arquivo temporario removido)"
+                if preprocessado.get("audio_processado")
+                else "nao processado"
+            )
+        )
     )
     print(
         "Duracao usada no custo:",
