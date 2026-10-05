@@ -2178,7 +2178,7 @@ def analisar_com_ia(
 Voce e um analista senior de suporte ERP.
 
 Gere apenas um JSON valido para um atendimento de suporte ERP.
-Nao gere o texto final do Zendesk.
+Nao gere o texto final do ClickDesk.
 O backend montara o texto final em ordem fixa.
 Quando um campo nao aparecer na transcricao, retorne string vazia.
 Nao use texto padrao de ausencia, null ou rotulos como valor.
@@ -2187,7 +2187,7 @@ Regras:
 - Nao escrever tudo em uma linha.
 - Nao inventar CNPJ, telefone, e-mail, empresa, cliente, erro, solucao ou status.
 - Se nao tiver a informacao na transcricao, retorne string vazia no JSON.
-- Escrever como documentacao para colar no Zendesk.
+- Escrever como documentacao para colar no ClickDesk.
 - Nao usar markdown.
 - Nao usar bullets se nao houver passo a passo.
 - Se houver procedimento, separar em passos numerados.
@@ -2889,7 +2889,7 @@ def iniciar_atendimento():
 
     dados = request.get_json(silent=True) or {}
     ticket_zendesk = limpar_texto(
-        dados.get("ticket_zendesk", "")
+        dados.get("ticket_clickdesk", dados.get("ticket_zendesk", ""))
     )[:80]
 
     data = datetime.now().strftime(
@@ -4533,7 +4533,7 @@ def salvar_resumo_atendimento(atendimento_id):
         resumo
     )
     ticket_zendesk = limpar_texto(
-        dados.get("ticket_zendesk", "")
+        dados.get("ticket_clickdesk", dados.get("ticket_zendesk", ""))
     )[:80]
 
     if not resumo:
@@ -4862,8 +4862,8 @@ def exportar():
     ws.append([
         "Data",
         "Analista",
-        "Ticket Zendesk",
-        "Texto Zendesk",
+        "Ticket ClickDesk",
+        "Texto ClickDesk",
         "Transcricao",
         "Trechos",
         "Trechos com falha",

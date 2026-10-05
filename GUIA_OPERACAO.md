@@ -23,7 +23,7 @@ O analista pode:
 - Fazer login.
 - Gravar atendimento.
 - Ver apenas os proprios atendimentos.
-- Copiar resumo para Zendesk.
+- Copiar resumo para ClickDesk.
 - Abrir detalhes e transcricao completa.
 - Exportar o proprio historico para Excel.
 
@@ -96,20 +96,20 @@ Escopo:
 - `Meus atendimentos`: mostra somente atendimentos do usuario logado.
 - `Todos os analistas`: aparece apenas para admin.
 
-## Copiar resumo para Zendesk
+## Copiar resumo para ClickDesk
 
 Na lista de atendimentos:
 
 1. Localize o atendimento.
 2. Clique em `Copiar`.
-3. Cole no ticket do Zendesk.
+3. Cole no ticket do ClickDesk.
 
 Tambem e possivel clicar em `Detalhes` e copiar a partir do modal.
 
 ## Ver transcricao completa
 
 1. Clique em `Detalhes`.
-2. Leia `Resumo Zendesk`.
+2. Leia `Texto ClickDesk`.
 3. Leia `Transcricao completa`.
 
 Use isso para revisar atendimentos com falha ou resumo incompleto.
@@ -140,7 +140,7 @@ Analistas exportam o proprio historico. Admin, no estado atual da rota de export
 ## Limitacoes atuais
 
 - O usuario comum ainda nao troca a propria senha.
-- Ainda nao ha integracao automatica com Zendesk.
+- Ainda nao ha integracao automatica com ClickDesk.
 - Ainda nao ha logs estruturados ou painel de erros.
 - Ainda nao ha reprocessamento manual de resumo/chunk.
 - Exportacao do admin ainda nao alterna entre "meus" e "todos".

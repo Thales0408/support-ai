@@ -105,6 +105,20 @@
             color: white;
         }
 
+        a.btn-dark {
+            align-items: center;
+            border-radius: 8px;
+            display: inline-flex;
+            font-weight: 700;
+            min-height: 42px;
+            padding: 10px 14px;
+            text-decoration: none;
+        }
+
+        a.btn-dark[hidden] {
+            display: none;
+        }
+
         .btn-red {
             background: #d50000;
             color: white;
@@ -424,14 +438,14 @@
         <header class="header">
             <div class="title">
                 <h1>55PBX AI</h1>
-                <p>Dashboard de atendimentos e resumos para Zendesk</p>
+                <p>Dashboard de atendimentos e resumos para ClickDesk</p>
             </div>
 
             <div class="actions">
                 <input
                     class="quick-ticket"
-                    id="ticket-zendesk"
-                    placeholder="Ticket Zendesk"
+                    id="ticket-clickdesk"
+                    placeholder="Numero do ticket ClickDesk"
                 >
                 <button id="start">Iniciar Gravacao</button>
                 <button id="pause">Pausar</button>
@@ -532,7 +546,7 @@
                         <label for="filtro-busca">Buscar texto</label>
                         <input
                             id="filtro-busca"
-                            placeholder="Zendesk, transcricao, analista, tag ou data"
+                            placeholder="ClickDesk, transcricao, analista, tag ou data"
                         >
                     </div>
 
@@ -576,7 +590,7 @@
                                 <th>Analista</th>
                                 <th>Status</th>
                                 <th>Categoria</th>
-                                <th>Texto Zendesk</th>
+                                <th>Texto ClickDesk</th>
                                 <th>Tempo</th>
                                 <th>Acoes</th>
                             </tr>
@@ -624,7 +638,14 @@
                     <button
                         class="btn-blue"
                         id="copiar-modal"
-                    >Copiar Zendesk</button>
+                    >Copiar para ClickDesk</button>
+                    <a
+                        class="btn-dark"
+                        id="abrir-ticket-clickdesk"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        hidden
+                    >Abrir ticket</a>
                     <button
                         class="btn-blue"
                         id="salvar-modal"
@@ -643,7 +664,7 @@
                 <div class="modal-fields">
                     <input
                         id="modal-ticket"
-                        placeholder="Ticket Zendesk"
+                        placeholder="Numero do ticket ClickDesk"
                     >
                     <input
                         id="modal-meta"
@@ -651,7 +672,7 @@
                     >
                 </div>
                 <div>
-                    <h3>Texto Zendesk</h3>
+                    <h3>Texto ClickDesk</h3>
                     <textarea
                         class="text-box"
                         id="modal-resumo"
@@ -1480,6 +1501,8 @@
             document.getElementById("modal-ticket").value =
                 data.ticket_zendesk || ""
 
+            atualizarLinkClickDesk()
+
             document.getElementById("modal-meta").value =
                 MOSTRAR_CUSTO
                     ? `${formatarDuracao(data.duracao_segundos)} - ${formatarCusto(data.custo_estimado_usd)} / R$ ${Number(data.custo_estimado_brl || 0).toFixed(2).replace(".", ",")} - ${data.chunks_ignorados || 0} trecho(s) ignorado(s) - ${data.categoria || "outro"}`
@@ -1502,8 +1525,25 @@
 
             await navigator.clipboard.writeText(valor)
             statusArea.innerText =
-                "Texto Zendesk copiado para a area de transferencia."
+                "Texto ClickDesk copiado para a area de transferencia."
         }
+
+        function atualizarLinkClickDesk() {
+            const ticket = document.getElementById("modal-ticket").value.trim()
+            const link = document.getElementById("abrir-ticket-clickdesk")
+
+            link.hidden = !/^\d+$/.test(ticket)
+            if (!link.hidden) {
+                link.href = `https://app.clickdesk.ai/support/tickets/${ticket}`
+            } else {
+                link.removeAttribute("href")
+            }
+        }
+
+        document.getElementById("modal-ticket").addEventListener(
+            "input",
+            atualizarLinkClickDesk
+        )
 
         function exportarExcel() {
             const params =
@@ -1552,7 +1592,7 @@
                         }),
                         body: JSON.stringify({
                             resumo: document.getElementById("modal-resumo").value,
-                            ticket_zendesk: document.getElementById("modal-ticket").value
+                            ticket_clickdesk: document.getElementById("modal-ticket").value
                         })
                     })
 
@@ -1565,7 +1605,7 @@
                 }
 
                 statusArea.innerText =
-                    "Texto Zendesk salvo."
+                    "Texto ClickDesk salvo."
 
                 await carregarResultados()
             }

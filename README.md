@@ -1,14 +1,14 @@
 # Support AI / 55PBX AI
 
-Aplicacao Flask usada para apoiar atendimentos de suporte ERP feitos via 55PBX/Zendesk.
+Aplicacao Flask usada para apoiar atendimentos de suporte ERP feitos via 55PBX/ClickDesk.
 
 O sistema captura audio da aba do 55PBX e do microfone, envia trechos de audio para o backend, transcreve primeiro com Groq, usa OpenAI como fallback de transcricao quando necessario, gera o resumo com OpenAI e salva o historico no Supabase/PostgreSQL.
 
 ## Links
 
 - Repositorio: `https://github.com/Thales0408/support-ai.git`
-- App Railway: `https://web-production-b7e8f.up.railway.app/`
-- Health check: `https://web-production-b7e8f.up.railway.app/health`
+- Dominio Railway anterior: `https://web-production-b7e8f.up.railway.app/` (confirmar apos republicar).
+- Health check: `/health` no dominio ativo.
 
 ## Stack
 
@@ -51,13 +51,13 @@ O sistema captura audio da aba do 55PBX e do microfone, envia trechos de audio p
 - Gravacao de audio da aba + microfone.
 - Envio de chunks configuraveis, com padrao de 60 segundos.
 - Transcricao por chunk.
-- Finalizacao com resumo pronto para Zendesk.
+- Finalizacao com texto pronto para colar no ticket ClickDesk.
 - Registro de falhas de chunks sem derrubar o atendimento inteiro.
 - Dashboard com filtros, busca, status, TMA, grafico, alertas, copiar resumo e detalhes.
 - Exportacao para Excel.
 - Pausa de gravacao e deteccao automatica de silencio para reduzir custo.
-- Campo de ticket Zendesk por atendimento.
-- Resumo Zendesk curto, tags internas para busca, classificacao operacional, reprocessamento de resumo e troca de senha pelo usuario.
+- Campo de ticket ClickDesk por atendimento.
+- Resumo ClickDesk curto, tags internas para busca, classificacao operacional, reprocessamento de resumo e troca de senha pelo usuario.
 - Estimativa de custo por atendimento e no dashboard.
 
 ## Variaveis de ambiente
@@ -127,6 +127,14 @@ python tools/compare_transcription.py caminho/audio.webm
 A ferramenta testa Groq `whisper-large-v3-turbo`, Groq `whisper-large-v3` e OpenAI `whisper-1`, exibindo tempo, custo estimado e diferencas principais.
 
 O backend prioriza `DB_*` quando `DB_PASSWORD` esta configurada. `DATABASE_URL` pode existir no Railway, mas nao deve ser a fonte principal enquanto o pooler do Supabase estiver configurado via `DB_*`.
+
+## ClickDesk e Railway
+
+O ClickDesk cria o ticket quando a ligacao toca. Informe o numero do ticket ao iniciar a gravacao, ou salve-o depois nos detalhes do atendimento. Ao finalizar, copie o texto pronto e use "Abrir ticket" nos detalhes para colar no ClickDesk. O sistema ainda nao envia comentarios ao ClickDesk automaticamente; isso depende de uma API autorizada pela empresa.
+
+Os dados existentes continuam nas colunas `ticket_zendesk` do banco e nas chaves `ticket_zendesk`/`resumo_zendesk` da API por compatibilidade. A interface envia `ticket_clickdesk`, aceito pelo backend junto com o nome antigo. Nao renomeie a coluna sem migracao de banco.
+
+Para voltar ao Railway, conecte o repositorio GitHub ao servico web existente, confira as variaveis em `.env.example`, configure o banco Supabase pelo pooler IPv4 e publique o commit desejado. Confirme no servico Railway que `/health` retorna `{"status":"ok"}`. Uma implantacao so deve ser considerada concluida depois de testar login, inicio, chunk e finalizacao pelo dominio HTTPS ativo.
 
 ## Rodando localmente
 

@@ -565,16 +565,20 @@ class FluxosIntegracaoTest(unittest.TestCase):
         self.assertEqual(com_token.status_code, 200)
         self.assertEqual(com_token.get_json()["status"], "gravando")
 
-    def test_fluxo_gravacao_chunk_finalizacao_zendesk(self):
+    def test_fluxo_gravacao_chunk_finalizacao_clickdesk(self):
 
         self.set_session(nome="analista")
 
         inicio = self.post_json(
             "/atendimentos/iniciar",
-            {"ticket_zendesk": "ZD-10"}
+            {"ticket_clickdesk": "1052065"}
         )
         self.assertEqual(inicio.status_code, 200)
         atendimento_id = inicio.get_json()["atendimento_id"]
+        self.assertEqual(
+            self.state["atendimentos"][atendimento_id]["ticket_zendesk"],
+            "1052065"
+        )
 
         with patch("app.transcrever_chunk", return_value={
             "texto": (

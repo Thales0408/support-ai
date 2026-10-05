@@ -162,7 +162,7 @@ function pararStreams() {
 async function iniciarAtendimento() {
 
     const ticketInput =
-        document.getElementById('ticket-zendesk')
+        document.getElementById('ticket-clickdesk')
 
     const response =
         await fetch('/atendimentos/iniciar', {
@@ -171,7 +171,7 @@ async function iniciarAtendimento() {
                 'Content-Type': 'application/json',
             }),
             body: JSON.stringify({
-                ticket_zendesk: ticketInput ? ticketInput.value : ''
+                ticket_clickdesk: ticketInput ? ticketInput.value : ''
             })
         })
 
