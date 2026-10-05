@@ -202,6 +202,32 @@ class EntidadesFaladasTest(unittest.TestCase):
         self.assertEqual(entidades["analista_nome"], "Thales")
         self.assertEqual(entidades["cliente_nome"], "")
 
+    def test_cliente_luiz_e_empresa_la_gourmet_na_apresentacao(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            (
+                "Boa tarde, meu nome e Luiz Torelli, tudo bem? "
+                "Estou falando de Sao Paulo, da La Gourmet. "
+                "Eu estou fazendo a conciliacao de um banco."
+            ),
+            analista_nome="admin"
+        )
+
+        self.assertEqual(entidades["cliente_nome"], "Luiz Torelli")
+        self.assertEqual(
+            app.normalizar_para_comparacao(entidades["empresa"]),
+            "la gourmet"
+        )
+
+    def test_meu_nome_sem_contexto_de_empresa_continua_ambiguo(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            "Boa tarde, meu nome e Thales. Como posso te ajudar?",
+            analista_nome="admin"
+        )
+
+        self.assertEqual(entidades["cliente_nome"], "")
+
     def test_cliente_barbara_apos_oi_boa_tarde(self):
 
         entidades = app.extrair_entidades_transcricao(
