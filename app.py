@@ -6,7 +6,9 @@ from flask import (
     redirect,
     session,
     send_file,
-    abort
+    abort,
+    g,
+    has_request_context
 )
 
 from flask_cors import CORS
@@ -131,6 +133,20 @@ if CORS_ORIGINS:
     )
 
 
+@app.before_request
+def preparar_request_id():
+
+    recebido = limpar_texto(
+        request.headers.get("X-Request-ID", "")
+    )[:80]
+
+    g.request_id = (
+        recebido
+        if re.fullmatch(r"[A-Za-z0-9._:-]{1,80}", recebido)
+        else secrets.token_hex(12)
+    )
+
+
 @app.after_request
 def aplicar_cabecalhos_seguranca(resposta):
 
@@ -184,6 +200,11 @@ def aplicar_cabecalhos_seguranca(resposta):
             "Pragma",
             "no-cache"
         )
+
+    resposta.headers.setdefault(
+        "X-Request-ID",
+        getattr(g, "request_id", "")
+    )
 
     return resposta
 
@@ -351,10 +372,17 @@ if os.getenv("SKIP_DB_INIT", "").lower() not in {
 
 def log_evento(evento, **dados):
 
+    request_id = (
+        getattr(g, "request_id", None)
+        if has_request_context()
+        else None
+    )
+
     logger.info(
         json.dumps(
             {
                 "evento": evento,
+                "request_id": request_id,
                 **dados
             },
             ensure_ascii=False,
