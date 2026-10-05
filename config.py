@@ -59,7 +59,8 @@ def exigir_admin_senha():
         "admin",
         "senha",
         "password",
-        "troque_por_uma_senha_forte"
+        "troque_por_uma_senha_forte",
+        "troque_por_uma_senha_forte_com_12_caracteres"
     }
 
     if valor in valores_inseguros or len(valor) < 8:
