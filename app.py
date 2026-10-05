@@ -4239,25 +4239,20 @@ def finalizar_atendimento():
         int(chunks_ignorados_cliente or 0)
     )
 
+    segundos_transcritos_banco = sum(
+        max(0, int(segundos or 0))
+        for _, segundos in chunks_transcritos_provider
+    )
+
     segundos_transcritos = (
-        int(segundos_transcritos_cliente or 0)
+        segundos_transcritos_banco
+        if chunks_transcritos_provider
+        else int(segundos_transcritos_cliente or 0)
     )
 
     if not duracao_segundos:
 
-        duracao_segundos = sum(
-            max(0, int(segundos or 0))
-            for _, segundos in chunks_transcritos_provider
-        )
-
-    if not segundos_transcritos:
-
-        segundos_transcritos = (
-            min(
-                int(duracao_segundos or 0),
-                chunks_total * CHUNK_SECONDS
-            )
-        )
+        duracao_segundos = segundos_transcritos_banco
 
     if int(duracao_segundos or 0) > MAX_CALL_DURATION_MINUTES * 60:
 
