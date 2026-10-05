@@ -792,6 +792,29 @@ class FluxosIntegracaoTest(unittest.TestCase):
 
             self.assertEqual(dados["ffmpeg"], "desativado")
 
+    def test_health_retorna_503_sem_ffmpeg_quando_ativo(self):
+
+        if not app.AUDIO_PREPROCESS_ENABLED:
+
+            self.skipTest("Preprocessamento desativado")
+
+        with patch(
+            "app.shutil.which",
+            return_value=None
+        ):
+
+            response = self.client.get("/health")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            response.get_json()["status"],
+            "degradado"
+        )
+        self.assertEqual(
+            response.get_json()["ffmpeg"],
+            "indisponivel"
+        )
+
     def test_login_logout_dashboard(self):
 
         with self.client.session_transaction() as sess:
