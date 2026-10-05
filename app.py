@@ -3284,6 +3284,7 @@ def receber_chunk():
         provider_tentado = transcricao_chunk["provider_tentado"]
         provider_usado = transcricao_chunk["provider_usado"]
         fallback_usado = transcricao_chunk["fallback_usado"]
+        motivo_fallback = transcricao_chunk.get("motivo_fallback", "")
         modelo_usado = transcricao_chunk.get("modelo_usado")
 
         with conectar_banco() as conn:
@@ -3319,6 +3320,7 @@ def receber_chunk():
                         provider_tentado,
                         provider_usado,
                         fallback_usado,
+                        motivo_fallback,
                         duracao_segundos,
                         transcricao_bruta,
                         transcricao_normalizada,
@@ -3333,7 +3335,7 @@ def receber_chunk():
                         erro_preprocessamento
                     )
                     VALUES (
-                        %s, %s, %s, %s, 'transcrito', NULL, %s, %s, %s, %s,
+                        %s, %s, %s, %s, 'transcrito', NULL, %s, %s, %s, %s, %s,
                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                     )
                     ON CONFLICT (atendimento_id, ordem)
@@ -3344,6 +3346,7 @@ def receber_chunk():
                         provider_tentado = EXCLUDED.provider_tentado,
                         provider_usado = EXCLUDED.provider_usado,
                         fallback_usado = EXCLUDED.fallback_usado,
+                        motivo_fallback = EXCLUDED.motivo_fallback,
                         duracao_segundos = EXCLUDED.duracao_segundos,
                         transcricao_bruta = EXCLUDED.transcricao_bruta,
                         transcricao_normalizada = EXCLUDED.transcricao_normalizada,
@@ -3365,6 +3368,7 @@ def receber_chunk():
                         provider_tentado,
                         provider_usado,
                         fallback_usado,
+                        motivo_fallback,
                         duracao_chunk_segundos,
                         texto_original,
                         texto_normalizado,
@@ -3830,7 +3834,10 @@ def finalizar_atendimento():
             cursor.execute(
                 """
                 SELECT
+                    COALESCE(provider_tentado, %s),
                     COALESCE(provider_usado, %s),
+                    COALESCE(fallback_usado, FALSE),
+                    COALESCE(motivo_fallback, ''),
                     COALESCE(duracao_segundos, %s)
                 FROM transcricoes_chunks
                 WHERE atendimento_id = %s
@@ -3840,19 +3847,29 @@ def finalizar_atendimento():
                 """,
                 (
                     TRANSCRIBE_PROVIDER,
+                    TRANSCRIBE_PROVIDER,
                     CHUNK_SECONDS,
                     atendimento_id,
                     usuario_id
                 )
             )
 
+            chunks_transcritos_detalhes = cursor.fetchall()
             chunks_transcritos_provider = [
                 (
-                    row[0],
-                    row[1]
+                    row[1],
+                    row[4]
                 )
-                for row in cursor.fetchall()
+                for row in chunks_transcritos_detalhes
             ]
+            segundos_groq_fallback_qualidade = sum(
+                max(0, int(row[4] or 0))
+                for row in chunks_transcritos_detalhes
+                if row[0] == "groq"
+                and row[1] == "openai"
+                and bool(row[2])
+                and row[3] == "baixa_qualidade"
+            )
 
             uso = uso_diario_usuario(
                 cursor,
@@ -3953,6 +3970,10 @@ def finalizar_atendimento():
 
     custo_estimado = estimar_custo_transcricao_por_provedor(
         segundos_por_provider
+    )
+    custo_estimado += estimar_custo_transcricao(
+        segundos_groq_fallback_qualidade,
+        "groq"
     )
     custo_transcricao_openai = estimar_custo_transcricao(
         segundos_por_provider.get("openai", 0),
