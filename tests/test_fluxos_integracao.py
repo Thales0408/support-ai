@@ -83,6 +83,28 @@ class FakeCursor:
             return
 
         if (
+            "select status, texto, provider_usado, modelo_usado, fallback_usado,"
+            in sql_lower
+            and "motivo_fallback, audio_processado" in sql_lower
+            and "from transcricoes_chunks" in sql_lower
+        ):
+
+            key = (int(params[0]), int(params[2]))
+            chunk = self.state["chunks"].get(key)
+            self.result = [
+                (
+                    chunk["status"],
+                    chunk.get("texto", ""),
+                    chunk.get("provider_usado", ""),
+                    chunk.get("modelo_usado", ""),
+                    bool(chunk.get("fallback_usado")),
+                    chunk.get("motivo_fallback", ""),
+                    bool(chunk.get("audio_processado"))
+                )
+            ] if chunk else []
+            return
+
+        if (
             "select coalesce(sum(duracao_segundos), 0) from transcricoes_chunks"
             in sql_lower
             and "ordem <> %s" in sql_lower
@@ -738,6 +760,131 @@ class FluxosIntegracaoTest(unittest.TestCase):
         self.assertEqual(repetida.status_code, 200)
         self.assertTrue(repetida.get_json()["reutilizado"])
         self.assertEqual(mock_ia_repetida.call_count, 0)
+
+    def test_chunk_repetido_reutiliza_sem_retranscrever(self):
+
+        self.set_session()
+        inicio = self.post_json("/atendimentos/iniciar")
+        atendimento_id = inicio.get_json()["atendimento_id"]
+
+        resultado_transcricao = {
+            "texto": "Cliente pediu ajuda.",
+            "provider_tentado": "groq",
+            "provider_usado": "groq",
+            "fallback_usado": False,
+            "motivo_fallback": "",
+            "modelo_usado": "whisper-large-v3-turbo",
+            "audio_processado": False,
+            "tamanho_audio_original": 2048,
+            "tamanho_audio_processado": 2048,
+            "tempo_transcricao_segundos": 0.1,
+            "erro_preprocessamento": "",
+            "audio_original_path": "",
+            "audio_processado_path": ""
+        }
+
+        with patch(
+            "app.transcrever_chunk",
+            return_value=resultado_transcricao
+        ) as mock_transcrever:
+
+            primeiro = self.client.post(
+                "/atendimentos/chunk",
+                data={
+                    "atendimento_id": str(atendimento_id),
+                    "ordem": "0",
+                    "duracao_segundos": "30",
+                    "audio": (
+                        io.BytesIO(b"a" * 2048),
+                        "chunk.webm"
+                    )
+                },
+                headers={"X-CSRFToken": "csrf-teste"},
+                content_type="multipart/form-data"
+            )
+
+            segundo = self.client.post(
+                "/atendimentos/chunk",
+                data={
+                    "atendimento_id": str(atendimento_id),
+                    "ordem": "0",
+                    "duracao_segundos": "30",
+                    "audio": (
+                        io.BytesIO(b"b" * 2048),
+                        "chunk.webm"
+                    )
+                },
+                headers={"X-CSRFToken": "csrf-teste"},
+                content_type="multipart/form-data"
+            )
+
+        self.assertEqual(primeiro.status_code, 200)
+        self.assertEqual(segundo.status_code, 200)
+        self.assertTrue(segundo.get_json()["reutilizado"])
+        self.assertEqual(mock_transcrever.call_count, 1)
+
+    def test_chunk_grande_e_rejeitado(self):
+
+        self.set_session()
+        inicio = self.post_json("/atendimentos/iniciar")
+        atendimento_id = inicio.get_json()["atendimento_id"]
+
+        with patch(
+            "app.tamanho_arquivo_upload",
+            return_value=(app.MAX_CHUNK_UPLOAD_MB * 1024 * 1024) + 1
+        ):
+
+            response = self.client.post(
+                "/atendimentos/chunk",
+                data={
+                    "atendimento_id": str(atendimento_id),
+                    "ordem": "0",
+                    "duracao_segundos": "30",
+                    "audio": (
+                        io.BytesIO(b"a" * 2048),
+                        "chunk.webm"
+                    )
+                },
+                headers={"X-CSRFToken": "csrf-teste"},
+                content_type="multipart/form-data"
+            )
+
+        self.assertEqual(response.status_code, 413)
+        self.assertIn("excede", response.get_json()["erro"].lower())
+
+    def test_health_degradado_retorna_503(self):
+
+        with patch(
+            "app.shutil.which",
+            return_value=None
+        ):
+
+            response = self.client.get("/health")
+
+        if app.AUDIO_PREPROCESS_ENABLED:
+
+            self.assertEqual(response.status_code, 503)
+            self.assertEqual(
+                response.get_json()["status"],
+                "degradado"
+            )
+
+    def test_headers_de_seguranca_presentes(self):
+
+        response = self.client.get("/health")
+
+        self.assertEqual(
+            response.headers.get("X-Content-Type-Options"),
+            "nosniff"
+        )
+        self.assertEqual(
+            response.headers.get("X-Frame-Options"),
+            "DENY"
+        )
+        self.assertIn(
+            "frame-ancestors 'none'",
+            response.headers.get("Content-Security-Policy", "")
+        )
 
     def test_chunk_bloqueia_novo_audio_apos_limite_da_chamada(self):
 
