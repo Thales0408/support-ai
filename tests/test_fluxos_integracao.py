@@ -169,14 +169,15 @@ class FakeCursor:
                 "provider_tentado": params[4],
                 "provider_usado": params[5],
                 "fallback_usado": bool(params[6]),
-                "duracao_segundos": int(params[7]),
-                "transcricao_bruta": params[8],
-                "transcricao_normalizada": params[9],
-                "transcricao_limpa_para_resumo": params[10],
-                "modelo_usado": params[11],
-                "tamanho_audio_original": params[12],
-                "tamanho_audio_processado": params[13],
-                "audio_processado": bool(params[14])
+                "motivo_fallback": params[7],
+                "duracao_segundos": int(params[8]),
+                "transcricao_bruta": params[9],
+                "transcricao_normalizada": params[10],
+                "transcricao_limpa_para_resumo": params[11],
+                "modelo_usado": params[12],
+                "tamanho_audio_original": params[13],
+                "tamanho_audio_processado": params[14],
+                "audio_processado": bool(params[15])
             }
             self.result = []
             return
@@ -251,10 +252,13 @@ class FakeCursor:
             )]
             return
 
-        if "select coalesce(provider_usado" in sql_lower:
+        if (
+            "select coalesce(provider_tentado" in sql_lower
+            and "coalesce(motivo_fallback" in sql_lower
+        ):
 
-            atendimento_id = int(params[2])
-            usuario_id = int(params[3])
+            atendimento_id = int(params[3])
+            usuario_id = int(params[4])
             chunks = [
                 chunk
                 for chunk in self.state["chunks"].values()
@@ -264,7 +268,10 @@ class FakeCursor:
             ]
             self.result = [
                 (
-                    chunk["provider_usado"],
+                    chunk.get("provider_tentado") or "groq",
+                    chunk.get("provider_usado") or "groq",
+                    bool(chunk.get("fallback_usado")),
+                    chunk.get("motivo_fallback") or "",
                     chunk["duracao_segundos"]
                 )
                 for chunk in sorted(chunks, key=lambda item: item["ordem"])
