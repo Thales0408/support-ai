@@ -61,7 +61,35 @@ class FakeCursor:
                     user["senha"],
                     user["is_admin"],
                     user["ativo"],
-                    user["perfil"]
+                    user["perfil"],
+                    user.get("session_version", 1)
+                )
+            ] if user else []
+            return
+
+        if (
+            "coalesce(session_version, 1)" in sql_lower
+            and "from usuarios" in sql_lower
+            and "where id = %s" in sql_lower
+        ):
+
+            usuario_id = int(params[0])
+            user = next(
+                (
+                    item
+                    for item in self.state["users_by_name"].values()
+                    if item["id"] == usuario_id
+                ),
+                None
+            )
+
+            self.result = [
+                (
+                    user["usuario"],
+                    user["ativo"],
+                    user["perfil"],
+                    user["is_admin"],
+                    user.get("session_version", 1)
                 )
             ] if user else []
             return
@@ -760,6 +788,7 @@ class FluxosIntegracaoTest(unittest.TestCase):
             sess["perfil"] = perfil
             sess["is_admin"] = perfil == "admin_tecnico"
             sess["usuario_nome"] = nome
+            sess["session_version"] = 1
             sess["csrf_token"] = "csrf-teste"
 
     def post_json(self, url, payload=None, token_header="X-CSRFToken"):
@@ -929,6 +958,26 @@ class FluxosIntegracaoTest(unittest.TestCase):
         self.assertIn(
             "volume_por_dia",
             dados
+        )
+
+    def test_usuario_desativado_perde_sessao_imediatamente(self):
+
+        self.set_session(
+            usuario_id=1,
+            perfil="analista",
+            nome="analista"
+        )
+        self.state["users_by_name"]["analista"]["ativo"] = False
+
+        response = self.client.get(
+            "/",
+            follow_redirects=False
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(
+            "/login",
+            response.headers["Location"]
         )
 
     def test_csrf_exigido_e_aceita_header_sem_hifen(self):
