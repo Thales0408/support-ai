@@ -56,7 +56,13 @@
                             <span data-theme-label>Modo escuro</span>
                         </button>
                         {% if is_admin %}
-                            <a class="menu-action" href="/admin"><i data-lucide="users" aria-hidden="true"></i> Usuários</a>
+                            <a
+                                class="menu-action"
+                                href="/admin"
+                                target="_blank"
+                                rel="noopener"
+                                title="Abre em nova aba para não interromper uma gravação ativa"
+                            ><i data-lucide="users" aria-hidden="true"></i> Usuários <i data-lucide="external-link" class="menu-action-tail" aria-hidden="true"></i></a>
                         {% endif %}
                         <button class="menu-action" id="abrir-senha"><i data-lucide="lock-keyhole" aria-hidden="true"></i> Alterar senha</button>
                         <a class="menu-action menu-danger" href="/logout"><i data-lucide="log-out" aria-hidden="true"></i> Sair</a>

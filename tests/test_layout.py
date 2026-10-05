@@ -40,11 +40,13 @@ class LayoutTests(unittest.TestCase):
         for perfil in ("analista", "supervisor"):
             html = self.render_dashboard(perfil)
             self.assertNotIn(">Custo estimado</span>", html)
-            self.assertNotIn("Usuários</a>", html)
+            self.assertNotIn("Usuários", html)
 
         html = self.render_dashboard("admin_tecnico")
         self.assertIn("Custo estimado", html)
-        self.assertIn("Usuários</a>", html)
+        self.assertIn("Usuários", html)
+        self.assertIn('target="_blank"', html)
+        self.assertIn('rel="noopener"', html)
 
     def test_login_e_admin_usam_tema(self):
         with app.app.test_request_context("/"):
@@ -64,7 +66,9 @@ class LayoutTests(unittest.TestCase):
         self.assertIn('/static/favicon.svg', login)
         self.assertIn('/static/favicon.svg', admin)
         self.assertIn("Support AI", login)
-        self.assertIn("Administração de usuários", admin)
+        self.assertIn("Equipe e acessos", admin)
+        self.assertIn('class="user-list"', admin)
+        self.assertIn("Gerencie usuários sem poluir", admin)
         self.assertNotIn("<style>", login)
         self.assertNotIn("<style>", admin)
 
