@@ -82,6 +82,48 @@ class FakeCursor:
             self.result = [(1,)] if atendimento and atendimento["usuario_id"] == usuario_id else []
             return
 
+        if (
+            "select coalesce(sum(duracao_segundos), 0) from transcricoes_chunks"
+            in sql_lower
+            and "ordem <> %s" in sql_lower
+        ):
+
+            atendimento_id = int(params[0])
+            usuario_id = int(params[1])
+            ordem = int(params[2])
+            segundos = sum(
+                int(chunk.get("duracao_segundos") or 0)
+                for chunk in self.state["chunks"].values()
+                if chunk["atendimento_id"] == atendimento_id
+                and chunk["usuario_id"] == usuario_id
+                and chunk["status"] == "transcrito"
+                and chunk["ordem"] != ordem
+            )
+            self.result = [(segundos,)]
+            return
+
+        if (
+            "select coalesce(sum(tc.duracao_segundos), 0)"
+            in sql_lower
+            and "from transcricoes_chunks tc" in sql_lower
+        ):
+
+            usuario_id = int(params[0])
+            atendimento_id = int(params[1])
+            ordem = int(params[2])
+            segundos = sum(
+                int(chunk.get("duracao_segundos") or 0)
+                for chunk in self.state["chunks"].values()
+                if chunk["usuario_id"] == usuario_id
+                and chunk["status"] == "transcrito"
+                and not (
+                    chunk["atendimento_id"] == atendimento_id
+                    and chunk["ordem"] == ordem
+                )
+            )
+            self.result = [(segundos,)]
+            return
+
         if "select status, provider_usado, fallback_usado from transcricoes_chunks" in sql_lower:
 
             key = (int(params[0]), int(params[2]))
@@ -667,6 +709,46 @@ class FluxosIntegracaoTest(unittest.TestCase):
         self.assertEqual(repetida.status_code, 200)
         self.assertTrue(repetida.get_json()["reutilizado"])
         self.assertEqual(mock_ia_repetida.call_count, 0)
+
+    def test_chunk_bloqueia_novo_audio_apos_limite_da_chamada(self):
+
+        self.set_session()
+        inicio = self.post_json("/atendimentos/iniciar")
+        atendimento_id = inicio.get_json()["atendimento_id"]
+        self.state["chunks"][(atendimento_id, 0)] = {
+            "atendimento_id": atendimento_id,
+            "usuario_id": 1,
+            "ordem": 0,
+            "texto": "trecho anterior",
+            "status": "transcrito",
+            "provider_usado": "groq",
+            "fallback_usado": False,
+            "duracao_segundos": app.MAX_CALL_DURATION_MINUTES * 60
+        }
+
+        response = self.client.post(
+            "/atendimentos/chunk",
+            data={
+                "atendimento_id": str(atendimento_id),
+                "ordem": "1",
+                "duracao_segundos": "1",
+                "audio": (
+                    io.BytesIO(b"a" * 2048),
+                    "chunk.webm"
+                )
+            },
+            headers={"X-CSRFToken": "csrf-teste"},
+            content_type="multipart/form-data"
+        )
+
+        self.assertEqual(response.status_code, 403)
+        dados = response.get_json()
+        self.assertTrue(dados["limite"])
+        self.assertTrue(dados["deve_parar_gravacao"])
+        self.assertEqual(
+            dados["tipo"],
+            "limite_duracao_atendimento"
+        )
 
     def test_permissoes_custos_dashboard_detalhe_exportacao(self):
 
