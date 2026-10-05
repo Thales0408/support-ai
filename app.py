@@ -6,7 +6,8 @@ from flask import (
     redirect,
     session,
     send_file,
-    abort
+    abort,
+    g
 )
 
 from flask_cors import CORS
@@ -29,6 +30,7 @@ import unicodedata
 import secrets
 import hmac
 import shutil
+import time
 
 from auth import (
     perfil_usuario,
@@ -126,6 +128,54 @@ if CORS_ORIGINS:
 @app.after_request
 def aplicar_headers_seguranca(response):
 
+    request_id = getattr(
+        g,
+        "request_id",
+        ""
+    )
+
+    if request_id:
+
+        response.headers["X-Request-ID"] = request_id
+
+    inicio = getattr(
+        g,
+        "request_started",
+        None
+    )
+
+    if (
+        inicio is not None
+        and not request.path.startswith("/static/")
+    ):
+
+        duracao_ms = round(
+            (
+                time.perf_counter()
+                - inicio
+            ) * 1000,
+            1
+        )
+
+        if (
+            duracao_ms >= 1000
+            or response.status_code >= 500
+        ):
+
+            logger.warning(
+                json.dumps(
+                    {
+                        "evento": "request_lenta_ou_erro",
+                        "request_id": request_id,
+                        "metodo": request.method,
+                        "rota": request.path,
+                        "status": response.status_code,
+                        "duracao_ms": duracao_ms
+                    },
+                    ensure_ascii=False
+                )
+            )
+
     response.headers.setdefault(
         "X-Content-Type-Options",
         "nosniff"
@@ -208,6 +258,13 @@ def contexto_csrf():
     return {
         "csrf_token": obter_csrf_token
     }
+
+
+@app.before_request
+def preparar_observabilidade():
+
+    g.request_id = uuid.uuid4().hex[:16]
+    g.request_started = time.perf_counter()
 
 
 @app.before_request
