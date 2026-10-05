@@ -1695,6 +1695,37 @@ def extrair_analista_nome(texto):
 def extrair_cliente_nome(texto, analista_nome=""):
 
     texto_base = str(texto or "")
+    inicio = texto_base[:260]
+
+    apresentacao_inicial = re.search(
+        (
+            r"^\s*(?:bom\s+dia|boa\s+tarde|boa\s+noite)?\s*[,.;:-]*\s*"
+            r"(?:meu nome (?:é|e)|me chamo)\s+([^,.;\n]{2,60})"
+        ),
+        inicio,
+        flags=re.IGNORECASE
+    )
+
+    contexto_empresa = re.search(
+        (
+            r"\bestou falando de\s+[^,.;\n]{2,80}\s*[,;:-]\s*"
+            r"(?:da|do)\s+[^,.;\n]{2,100}"
+        ),
+        inicio,
+        flags=re.IGNORECASE
+    )
+
+    if apresentacao_inicial and contexto_empresa:
+
+        nome = nome_participante_confiavel(
+            apresentacao_inicial.group(1),
+            analista_nome
+        )
+
+        if nome:
+
+            return nome
+
     padroes = [
         r"\bnome do cliente (?:é|e)\s+([^,.;\n]{2,60})",
         r"\bcliente se chama\s+([^,.;\n]{2,60})",
@@ -1732,6 +1763,10 @@ def extrair_cliente_nome(texto, analista_nome=""):
 def extrair_empresa_transcricao(texto):
 
     padroes = [
+        (
+            r"\bestou falando de\s+[^,.;\n]{2,80}\s*[,;:-]\s*"
+            r"(?:da|do)\s+([^,.;\n]{3,100})"
+        ),
         r"\bqual(?: que)? (?:é|e) o nome da empresa\s*[?!.:,;-]*\s*(?:é|e)?\s*([^,.;\n]{3,100})",
         r"\ba empresa chama\s+([^,.;\n?]{3,100})",
         r"\bempresa se chama\s+([^,.;\n?]{3,100})",
