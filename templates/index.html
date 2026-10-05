@@ -1018,41 +1018,64 @@
                 }
             })
 
-            Object.values(grupos)
-                .sort((a, b) => b.total - a.total)
-                .forEach(item => {
-                    const tr =
-                        document.createElement("tr")
+            const analistas =
+                Object.values(grupos)
+                    .sort((a, b) => b.total - a.total)
 
-                    const media =
-                        item.segundos.length
-                            ? Math.round(
-                                item.segundos.reduce(
-                                    (soma, valor) => soma + valor,
-                                    0
-                                ) / item.segundos.length
-                            )
-                            : 0
+            if (!analistas.length) {
+                const tr =
+                    document.createElement("tr")
 
-                    ;[
-                        item.analista,
-                        item.total,
-                        item.finalizados,
-                        item.andamento,
-                        item.falhas,
-                        formatarDuracao(media)
-                    ].forEach(valor => {
-                        const td =
-                            document.createElement("td")
+                const td =
+                    document.createElement("td")
 
-                        td.innerText =
-                            valor
+                td.colSpan =
+                    6
 
-                        tr.appendChild(td)
-                    })
+                td.className =
+                    "table-empty"
 
-                    tbodyAnalistas.appendChild(tr)
+                td.innerText =
+                    "Nenhum atendimento no filtro atual."
+
+                tr.appendChild(td)
+                tbodyAnalistas.appendChild(tr)
+                return
+            }
+
+            analistas.forEach(item => {
+                const tr =
+                    document.createElement("tr")
+
+                const media =
+                    item.segundos.length
+                        ? Math.round(
+                            item.segundos.reduce(
+                                (soma, valor) => soma + valor,
+                                0
+                            ) / item.segundos.length
+                        )
+                        : 0
+
+                ;[
+                    item.analista || "Sem analista",
+                    item.total,
+                    item.finalizados,
+                    item.andamento,
+                    item.falhas,
+                    formatarDuracao(media)
+                ].forEach(valor => {
+                    const td =
+                        document.createElement("td")
+
+                    td.innerText =
+                        valor
+
+                    tr.appendChild(td)
                 })
+
+                tbodyAnalistas.appendChild(tr)
+            })
         }
 
         function renderizarDashboard() {
