@@ -276,6 +276,41 @@ def log_evento(evento, **dados):
     )
 
 
+def registrar_auditoria(
+    cursor,
+    acao,
+    alvo_tipo,
+    alvo_id=None,
+    detalhes=None
+):
+
+    cursor.execute(
+        """
+        INSERT INTO auditoria_eventos (
+            ator_usuario_id,
+            acao,
+            alvo_tipo,
+            alvo_id,
+            detalhes,
+            ip
+        )
+        VALUES (%s, %s, %s, %s, %s, %s)
+        """,
+        (
+            usuario_logado(),
+            str(acao or "")[:120],
+            str(alvo_tipo or "")[:80],
+            alvo_id,
+            json.dumps(
+                detalhes or {},
+                ensure_ascii=False,
+                default=str
+            )[:4000],
+            ip_requisicao()
+        )
+    )
+
+
 def limpar_texto(texto):
 
     texto = re.sub(
@@ -2879,6 +2914,7 @@ def admin_usuarios():
                                 ativo
                             )
                             VALUES (%s, %s, %s, %s, TRUE)
+                            RETURNING id
                             """,
                             (
                                 usuario,
@@ -2888,6 +2924,19 @@ def admin_usuarios():
                                 is_admin,
                                 perfil
                             )
+                        )
+
+                        novo_usuario_id = cursor.fetchone()[0]
+
+                        registrar_auditoria(
+                            cursor,
+                            "usuario_criado",
+                            "usuario",
+                            novo_usuario_id,
+                            {
+                                "usuario": usuario,
+                                "perfil": perfil
+                            }
                         )
 
                 mensagem = "Usuario criado com sucesso."
@@ -2966,6 +3015,16 @@ def admin_alterar_status(usuario_id):
                 )
             )
 
+            registrar_auditoria(
+                cursor,
+                "usuario_status_alterado",
+                "usuario",
+                usuario_id,
+                {
+                    "ativo": ativo
+                }
+            )
+
     return redirect("/admin")
 
 
@@ -3010,6 +3069,13 @@ def admin_alterar_senha(usuario_id):
                     )
                 )
 
+                registrar_auditoria(
+                    cursor,
+                    "usuario_senha_redefinida",
+                    "usuario",
+                    usuario_id
+                )
+
     return redirect("/admin")
 
 
@@ -3051,6 +3117,16 @@ def admin_alterar_nome(usuario_id):
                         novo_usuario,
                         usuario_id
                     )
+                )
+
+                registrar_auditoria(
+                    cursor,
+                    "usuario_nome_alterado",
+                    "usuario",
+                    usuario_id,
+                    {
+                        "novo_usuario": novo_usuario
+                    }
                 )
 
         if usuario_id == usuario_logado():
@@ -3117,6 +3193,16 @@ def admin_alterar_perfil(usuario_id):
                 )
             )
 
+            registrar_auditoria(
+                cursor,
+                "usuario_perfil_alterado",
+                "usuario",
+                usuario_id,
+                {
+                    "perfil": perfil
+                }
+            )
+
     if usuario_id == usuario_logado():
 
         session["perfil"] = perfil
@@ -3163,6 +3249,13 @@ def admin_excluir_usuario(usuario_id):
                 return redirect(
                     "/admin?erro=usuario_com_historico"
                 )
+
+            registrar_auditoria(
+                cursor,
+                "usuario_excluido",
+                "usuario",
+                usuario_id
+            )
 
             cursor.execute(
                 """
@@ -5472,6 +5565,13 @@ def alterar_minha_senha():
                     generate_password_hash(nova_senha),
                     usuario_id
                 )
+            )
+
+            registrar_auditoria(
+                cursor,
+                "senha_propria_alterada",
+                "usuario",
+                usuario_id
             )
 
     return jsonify({
