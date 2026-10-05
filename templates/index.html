@@ -65,7 +65,10 @@
                             ><i data-lucide="users" aria-hidden="true"></i> Usuários <i data-lucide="external-link" class="menu-action-tail" aria-hidden="true"></i></a>
                         {% endif %}
                         <button class="menu-action" id="abrir-senha"><i data-lucide="lock-keyhole" aria-hidden="true"></i> Alterar senha</button>
-                        <a class="menu-action menu-danger" href="/logout"><i data-lucide="log-out" aria-hidden="true"></i> Sair</a>
+                        <form method="POST" action="/logout" class="menu-form">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button class="menu-action menu-danger" type="submit"><i data-lucide="log-out" aria-hidden="true"></i> Sair</button>
+                        </form>
                     </div>
                 </details>
             </div>
