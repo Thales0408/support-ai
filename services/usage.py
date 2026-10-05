@@ -74,7 +74,7 @@ def uso_eventos_diario(cursor, usuario_id=None):
             COALESCE(SUM(custo_brl), 0),
             SUM(
                 CASE
-                    WHEN tipo = 'resumo' THEN 1
+                    WHEN tipo IN ('resumo', 'resumo_reprocessado') THEN 1
                     ELSE 0
                 END
             )
