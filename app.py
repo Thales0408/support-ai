@@ -5541,6 +5541,11 @@ def alterar_minha_senha():
                 )
             )
 
+    registrar_auditoria(
+        "senha_propria_alterada",
+        alvo_usuario_id=usuario_id
+    )
+
     return jsonify({
         "status": "senha_alterada"
     })
