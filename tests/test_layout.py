@@ -32,9 +32,12 @@ class LayoutTests(unittest.TestCase):
         self.assertIn('/static/theme.css', html)
         self.assertIn('/static/theme.js', html)
         self.assertIn('/static/favicon.svg', html)
-        self.assertIn('class="analyst-table"', html)
+        self.assertNotIn('class="analyst-table"', html)
         self.assertIn('class="main-table"', html)
         self.assertIn('data-theme-toggle', html)
+
+        html_supervisor = self.render_dashboard("supervisor")
+        self.assertIn('class="analyst-table"', html_supervisor)
 
     def test_custo_so_para_admin_tecnico(self):
         for perfil in ("analista", "supervisor"):
