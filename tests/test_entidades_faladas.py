@@ -28,15 +28,22 @@ class EntidadesFaladasTest(unittest.TestCase):
     def test_cnpj_falado_dois_mil_contra(self):
 
         self.assertEqual(
-            app.extrair_possivel_cnpj("08 633 889 dois mil contra 56"),
-            self.POSSIVEL + "08.633.889/0002-56" + self.CONFIRMAR
+            app.extrair_possivel_cnpj("08 633 889 dois mil contra 37"),
+            self.POSSIVEL + "08.633.889/0002-37" + self.CONFIRMAR
         )
 
     def test_cnpj_falado_cinco_mil_contra(self):
 
         self.assertEqual(
-            app.extrair_possivel_cnpj("08 633 889 cinco mil contra 56"),
-            self.POSSIVEL + "08.633.889/0005-56" + self.CONFIRMAR
+            app.extrair_possivel_cnpj("08 633 889 cinco mil contra 80"),
+            self.POSSIVEL + "08.633.889/0005-80" + self.CONFIRMAR
+        )
+
+    def test_cnpj_falado_filial_com_dv_invalido_e_rejeitado(self):
+
+        self.assertEqual(
+            app.extrair_possivel_cnpj("08 633 889 dois mil contra 56"),
+            ""
         )
 
     def test_cnpj_falado_mil_de_re(self):
@@ -71,15 +78,27 @@ class EntidadesFaladasTest(unittest.TestCase):
 
     def test_cnpj_numericamente_blocos_1000_a_9000(self):
 
-        for numero in range(1, 10):
+        dvs = {
+            1: "00",
+            2: "83",
+            3: "64",
+            4: "45",
+            5: "26",
+            6: "07",
+            7: "98",
+            8: "79",
+            9: "50"
+        }
+
+        for numero, dv in dvs.items():
 
             with self.subTest(numero=numero):
 
                 self.assertEqual(
                     app.extrair_possivel_cnpj(
-                        f"CNPJ 09-114-915-{numero}000-00"
+                        f"CNPJ 09-114-915-{numero}000-{dv}"
                     ),
-                    self.POSSIVEL + f"09.114.915/000{numero}-00" + self.CONFIRMAR
+                    self.POSSIVEL + f"09.114.915/000{numero}-{dv}" + self.CONFIRMAR
                 )
 
     def test_cnpj_possivel_invalido_tambem_e_rejeitado(self):
