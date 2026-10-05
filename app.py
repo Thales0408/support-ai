@@ -801,10 +801,9 @@ def formatar_cnpj(digitos):
 def normalizar_cnpj(valor, permitir_possivel=False):
 
     texto = str(valor or "")
-
-    if texto.lower().startswith("possível cnpj informado:"):
-
-        return texto[:120]
+    era_possivel = texto.lower().startswith(
+        "possível cnpj informado:"
+    )
 
     digitos = re.sub(
         r"\D",
@@ -812,19 +811,18 @@ def normalizar_cnpj(valor, permitir_possivel=False):
         texto
     )
 
-    if len(digitos) == 14 and validar_cnpj_digitos(digitos):
+    if (
+        len(digitos) != 14
+        or not validar_cnpj_digitos(digitos)
+    ):
 
-        return formatar_cnpj(digitos)
+        return ""
 
-    if permitir_possivel and len(digitos) == 14:
+    if era_possivel and permitir_possivel:
 
-        return (
-            "Possível CNPJ informado: "
-            + formatar_cnpj(digitos)
-            + " — confirmar com cliente"
-        )
+        return possivel_cnpj_formatado(digitos)
 
-    return ""
+    return formatar_cnpj(digitos)
 
 
 def possivel_cnpj_formatado(digitos):
@@ -1669,7 +1667,7 @@ def extrair_cliente_nome(texto, analista_nome=""):
     padroes = [
         r"\bnome do cliente (?:é|e)\s+([^,.;\n]{2,60})",
         r"\bcliente se chama\s+([^,.;\n]{2,60})",
-        r"\bcliente[:\s]+([^,.;\n]{2,60})",
+        r"\bcliente\s*:\s*([^,.;\n]{2,60})",
         (
             r"\bcom quem eu falo\s*[?!.:,;-]*\s*"
             r"(?:boa\s+(?:tarde|noite)|bom\s+dia)?\s*[,.;:-]*\s*"
@@ -1678,7 +1676,7 @@ def extrair_cliente_nome(texto, analista_nome=""):
         ),
         (
             r"\bqual (?:é|e) (?:o )?seu nome\s*[?!.:,;-]*\s*"
-            r"(?:meu nome (?:é|e)|me chamo|aqui (?:é|e)|sou (?:o|a)?)?\s*"
+            r"(?:meu nome (?:é|e)|me chamo|aqui (?:é|e)|sou (?:o|a)?)\s+"
             r"([^,.;\n]{2,60})"
         )
     ]
@@ -2247,7 +2245,7 @@ Regras:
 - Quando houver pergunta como "com quem eu falo?" ou "qual e seu nome?" seguida de "meu nome e X", X e o cliente.
 - Nunca use ruido de transcricao, palavras sem nexo ou nomes sem evidencia explicita como nome do cliente.
 - Se houver duvida entre analista e cliente, deixe nome_cliente vazio.
-- Se o CNPJ nao tiver exatamente 14 digitos claros, retorne vazio no JSON, exceto quando houver sequencia parecida com CNPJ.
+- Se o CNPJ nao tiver exatamente 14 digitos validos ou uma entidade de CNPJ validada pelo backend, retorne vazio no JSON.
 - Nao considerar e-mail valido sem @.
 - Nao preencher e-mail com dominio incompleto.
 - Para CNPJ, quando houver ambiguidade, sinalizar confirmacao em vez de afirmar.
@@ -2259,8 +2257,8 @@ Regras:
 
 - Corrija termos fiscais comuns quando o contexto confirmar: ISDS-QN, ISQN ou ISS QN = ISSQN; Sintes Nacional ou Sintese Nacional = Simples Nacional; nota de servico = NFS-e; retencao de IS = retencao de ISS.
 - Use correcoes de termos apenas para vocabulario tecnico. Nao use isso para inventar CNPJ, telefone, e-mail, empresa, loja ou nome de cliente.
-- Nunca ignore um CNPJ parcialmente identificado.
-- Se houver uma sequencia parecida com CNPJ, mas incerta, informe como "Possível CNPJ informado" e peça confirmacao.
+- Nunca transforme sequencia numerica parcial em CNPJ.
+- Somente use "Possível CNPJ informado" quando o backend fornecer uma entidade de 14 digitos validada e marcada como baixa confianca.
 
 Analista logado:
 {normalizar_campo_zendesk(analista_responsavel, limite=120)}
