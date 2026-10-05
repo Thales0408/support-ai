@@ -12,8 +12,9 @@ from flask import (
 from flask_cors import CORS
 from openai import RateLimitError
 from waitress import serve
-from datetime import datetime
+from datetime import datetime, timedelta
 from openpyxl import Workbook
+from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import generate_password_hash
 
 from io import BytesIO
@@ -49,7 +50,11 @@ from config import (
     MAX_CALL_DURATION_MINUTES,
     MAX_CALLS_PER_DAY,
     MAX_CHUNKS_PER_CALL,
+    MAX_CHUNK_UPLOAD_MB,
+    MAX_CONTENT_LENGTH_MB,
+    PASSWORD_MIN_LENGTH,
     SECRET_KEY,
+    SESSION_HOURS,
     SUMMARY_MODEL,
     TRANSCRIBE_FALLBACK_PROVIDER,
     TRANSCRIBE_PROVIDER,
@@ -88,6 +93,12 @@ logging.basicConfig(
 logger = logging.getLogger("support_ai")
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(
+    app.wsgi_app,
+    x_for=1,
+    x_proto=1,
+    x_host=1
+)
 
 app.secret_key = SECRET_KEY
 app.config.update(
@@ -96,7 +107,10 @@ app.config.update(
     SESSION_COOKIE_SECURE=bool(
         os.getenv("RAILWAY_ENVIRONMENT")
         or os.getenv("RAILWAY_PUBLIC_DOMAIN")
-    )
+    ),
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=SESSION_HOURS),
+    SESSION_REFRESH_EACH_REQUEST=True,
+    MAX_CONTENT_LENGTH=MAX_CONTENT_LENGTH_MB * 1024 * 1024
 )
 
 if CORS_ORIGINS:
@@ -106,6 +120,73 @@ if CORS_ORIGINS:
         origins=CORS_ORIGINS,
         supports_credentials=True
     )
+
+
+@app.after_request
+def aplicar_headers_seguranca(response):
+
+    response.headers.setdefault(
+        "X-Content-Type-Options",
+        "nosniff"
+    )
+    response.headers.setdefault(
+        "X-Frame-Options",
+        "DENY"
+    )
+    response.headers.setdefault(
+        "Referrer-Policy",
+        "no-referrer"
+    )
+    response.headers.setdefault(
+        "Permissions-Policy",
+        "camera=(), microphone=(self), display-capture=(self)"
+    )
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "connect-src 'self'; "
+            "media-src 'self' blob:; "
+            "object-src 'none'; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self'"
+        )
+    )
+
+    if request.is_secure:
+
+        response.headers.setdefault(
+            "Strict-Transport-Security",
+            "max-age=31536000; includeSubDomains"
+        )
+
+    if request.path.startswith("/static/"):
+
+        response.headers.setdefault(
+            "Cache-Control",
+            "public, max-age=86400"
+        )
+
+    else:
+
+        response.headers["Cache-Control"] = "no-store"
+
+    return response
+
+
+@app.errorhandler(413)
+def arquivo_muito_grande(_erro):
+
+    return jsonify({
+        "erro": (
+            "Arquivo maior que o limite permitido "
+            f"de {MAX_CONTENT_LENGTH_MB} MB."
+        )
+    }), 413
 
 
 def obter_csrf_token():
@@ -170,9 +251,10 @@ try:
 
     inicializar_banco()
 
-except Exception as e:
+except Exception:
 
-    print("ERRO AO INICIALIZAR BANCO:", e)
+    logger.exception("ERRO AO INICIALIZAR BANCO")
+    raise
 
 
 # =========================================
@@ -202,6 +284,24 @@ def limpar_texto(texto):
     )
 
     return texto.strip()
+
+
+def erro_validacao_senha(senha):
+
+    senha = str(senha or "")
+
+    if len(senha) < PASSWORD_MIN_LENGTH:
+
+        return (
+            "A senha deve ter pelo menos "
+            f"{PASSWORD_MIN_LENGTH} caracteres."
+        )
+
+    if len(senha) > 256:
+
+        return "A senha deve ter no maximo 256 caracteres."
+
+    return ""
 
 
 def limpar_vazamento_prompt_transcricao(texto):
@@ -2532,6 +2632,8 @@ def login():
                             )
                         )
 
+                    session.clear()
+                    session.permanent = True
                     session["usuario_id"] = user[0]
                     perfil = (
                         user[4]
@@ -2569,7 +2671,10 @@ def login():
     )
 
 
-@app.route("/logout")
+@app.route(
+    "/logout",
+    methods=["POST"]
+)
 def logout():
 
     session.clear()
@@ -2613,8 +2718,25 @@ def admin_usuarios():
 
         return redirect("/")
 
+    mensagens_erro = {
+        "senha_invalida": (
+            "A senha precisa ter pelo menos "
+            f"{PASSWORD_MIN_LENGTH} caracteres."
+        ),
+        "usuario_com_historico": (
+            "Esse usuario possui atendimentos vinculados. "
+            "Desative a conta para preservar o historico."
+        ),
+        "perfil_proprio": (
+            "O administrador logado nao pode remover o proprio perfil tecnico."
+        ),
+        "erro_interno": "Nao foi possivel concluir a operacao."
+    }
+
     mensagem = None
-    erro = None
+    erro = mensagens_erro.get(
+        request.args.get("erro", "")
+    )
 
     if request.method == "POST":
 
@@ -2635,9 +2757,15 @@ def admin_usuarios():
             perfil == "admin_tecnico"
         )
 
+        erro_senha = erro_validacao_senha(senha)
+
         if not usuario or not senha:
 
             erro = "Informe usuario e senha."
+
+        elif erro_senha:
+
+            erro = erro_senha
 
         else:
 
@@ -2674,9 +2802,10 @@ def admin_usuarios():
 
                 erro = "Esse usuario ja existe."
 
-            except Exception as e:
+            except Exception:
 
-                erro = f"Erro ao criar usuario: {e}"
+                logger.exception("ERRO AO CRIAR USUARIO")
+                erro = "Nao foi possivel criar o usuario."
 
     with conectar_banco() as conn:
 
@@ -2761,6 +2890,11 @@ def admin_alterar_senha(usuario_id):
         return redirect("/")
 
     senha = request.form.get("senha") or ""
+    erro_senha = erro_validacao_senha(senha)
+
+    if erro_senha:
+
+        return redirect("/admin?erro=senha_invalida")
 
     if senha:
 
@@ -2859,6 +2993,13 @@ def admin_alterar_perfil(usuario_id):
 
         perfil = "analista"
 
+    if (
+        usuario_id == usuario_logado()
+        and perfil != "admin_tecnico"
+    ):
+
+        return redirect("/admin?erro=perfil_proprio")
+
     is_admin = (
         perfil == "admin_tecnico"
     )
@@ -2911,6 +3052,23 @@ def admin_excluir_usuario(usuario_id):
     with conectar_banco() as conn:
 
         with conn.cursor() as cursor:
+
+            cursor.execute(
+                """
+                SELECT COUNT(*)
+                FROM atendimentos
+                WHERE usuario_id = %s
+                """,
+                (
+                    usuario_id,
+                )
+            )
+
+            if int(cursor.fetchone()[0] or 0) > 0:
+
+                return redirect(
+                    "/admin?erro=usuario_com_historico"
+                )
 
             cursor.execute(
                 """
@@ -3277,6 +3435,24 @@ def receber_chunk():
         tamanho_audio = (
             tamanho_arquivo_upload(arquivo)
         )
+
+        if tamanho_audio > MAX_CHUNK_UPLOAD_MB * 1024 * 1024:
+
+            log_evento(
+                "chunk_rejeitado_tamanho",
+                usuario_id=usuario_id,
+                atendimento_id=atendimento_id,
+                ordem=ordem_int,
+                tamanho_audio=tamanho_audio,
+                limite_mb=MAX_CHUNK_UPLOAD_MB
+            )
+
+            return jsonify({
+                "erro": (
+                    "Trecho de audio maior que o limite "
+                    f"de {MAX_CHUNK_UPLOAD_MB} MB."
+                )
+            }), 413
 
         if (
             tamanho_audio < 1024
@@ -4967,10 +5143,14 @@ def alterar_minha_senha():
     senha_atual = dados.get("senha_atual", "")
     nova_senha = dados.get("nova_senha", "")
 
-    if len(nova_senha) < 6:
+    erro_senha = erro_validacao_senha(
+        nova_senha
+    )
+
+    if erro_senha:
 
         return jsonify({
-            "erro": "A nova senha deve ter pelo menos 6 caracteres"
+            "erro": erro_senha
         }), 400
 
     with conectar_banco() as conn:
