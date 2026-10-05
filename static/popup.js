@@ -384,67 +384,131 @@ async function iniciarAtendimento() {
     return data.atendimento_id
 }
 
+async function esperar(ms) {
+
+    return new Promise(
+        resolve => setTimeout(resolve, ms)
+    )
+}
+
 async function enviarChunk(blob, ordem, duracaoMs) {
 
-    const formData =
-        new FormData()
+    const maxTentativas =
+        3
 
-    formData.append(
-        'atendimento_id',
-        atendimentoId
-    )
+    let ultimoErro =
+        null
 
-    formData.append(
-        'ordem',
-        ordem
-    )
+    for (
+        let tentativa = 1;
+        tentativa <= maxTentativas;
+        tentativa++
+    ) {
 
-    formData.append(
-        'duracao_segundos',
-        Math.floor((duracaoMs || TAMANHO_CHUNK_MS) / 1000)
-    )
+        try {
 
-    formData.append(
-        'audio',
-        blob,
-        `chunk-${ordem}.webm`
-    )
+            const formData =
+                new FormData()
 
-    const response =
-        await fetch('/atendimentos/chunk', {
-            method: 'POST',
-            headers: csrfHeaders(),
-            body: formData
-        })
-
-    const data =
-        await lerRespostaJson(
-            response,
-            'Erro transcrevendo trecho'
-        )
-
-    if (!response.ok) {
-
-        const erro =
-            new Error(
-                data.mensagem ||
-                data.erro ||
-                'Erro transcrevendo trecho'
+            formData.append(
+                'atendimento_id',
+                atendimentoId
             )
 
-        erro.limite =
-            Boolean(data.limite)
+            formData.append(
+                'ordem',
+                ordem
+            )
 
-        erro.tipo =
-            data.tipo
+            formData.append(
+                'duracao_segundos',
+                Math.floor((duracaoMs || TAMANHO_CHUNK_MS) / 1000)
+            )
 
-        erro.devePararGravacao =
-            Boolean(data.deve_parar_gravacao)
+            formData.append(
+                'audio',
+                blob,
+                `chunk-${ordem}.webm`
+            )
 
-        throw erro
+            const response =
+                await fetch('/atendimentos/chunk', {
+                    method: 'POST',
+                    headers: csrfHeaders(),
+                    body: formData
+                })
+
+            const data =
+                await lerRespostaJson(
+                    response,
+                    'Erro transcrevendo trecho'
+                )
+
+            if (!response.ok) {
+
+                const erro =
+                    new Error(
+                        data.mensagem ||
+                        data.erro ||
+                        'Erro transcrevendo trecho'
+                    )
+
+                erro.status =
+                    response.status
+
+                erro.limite =
+                    Boolean(data.limite)
+
+                erro.tipo =
+                    data.tipo
+
+                erro.devePararGravacao =
+                    Boolean(data.deve_parar_gravacao)
+
+                throw erro
+            }
+
+            return data
+
+        } catch (erro) {
+
+            ultimoErro =
+                erro
+
+            const status =
+                Number(erro.status || 0)
+
+            const naoRepetir =
+                erro.devePararGravacao ||
+                (
+                    status >= 400 &&
+                    status < 500 &&
+                    status !== 408 &&
+                    status !== 429
+                )
+
+            if (
+                naoRepetir ||
+                tentativa >= maxTentativas
+            ) {
+
+                throw erro
+            }
+
+            const espera =
+                tentativa === 1
+                    ? 600
+                    : 1600
+
+            statusDiv.innerText =
+                `Reconectando trecho ${ordem + 1}... tentativa ${tentativa + 1}/${maxTentativas}`
+
+            await esperar(espera)
+        }
     }
 
-    return data
+    throw ultimoErro ||
+        new Error('Erro transcrevendo trecho')
 }
 
 async function pararGravacaoPorLimite(mensagem) {
@@ -548,9 +612,6 @@ function registrarUpload(blob, duracaoMs, temAtividade = true) {
     const ordemAtual =
         ordemChunk++
 
-    audioEnviadoMs +=
-        duracaoMs || TAMANHO_CHUNK_MS
-
     const upload =
         enviarChunk(
             blob,
@@ -566,6 +627,9 @@ function registrarUpload(blob, duracaoMs, temAtividade = true) {
                 chunksIgnorados++
                 return {ok: true, ordem: ordemAtual, ignorado: true}
             }
+
+            audioEnviadoMs +=
+                duracaoMs || TAMANHO_CHUNK_MS
 
             if (
                 gravacaoAtiva &&
