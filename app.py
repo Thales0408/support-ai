@@ -42,6 +42,7 @@ from auth import (
 from config import (
     AUDIO_PREPROCESS_ENABLED,
     CHUNK_SECONDS,
+    DASHBOARD_PAGE_SIZE,
     CORS_ORIGINS,
     FFMPEG_PATH,
     LOGIN_BLOCK_MINUTES,
@@ -623,6 +624,99 @@ def usuario_filtro_atendimentos():
         "params": [analista_id],
         "escopo": "analista",
         "analista_id": analista_id
+    }
+
+
+def filtros_dashboard_sql():
+
+    filtro_usuario = usuario_filtro_atendimentos()
+    condicoes = [
+        filtro_usuario["where"]
+    ]
+    params = list(
+        filtro_usuario["params"]
+    )
+
+    busca = limpar_texto(
+        request.args.get("q", "")
+    )[:160]
+    periodo = request.args.get(
+        "periodo",
+        "todos"
+    )
+    status = request.args.get(
+        "status",
+        "todos"
+    )
+
+    if busca:
+
+        termo = f"%{busca}%"
+        campos_busca = [
+            "a.data",
+            "u.usuario",
+            "a.status",
+            "a.categoria",
+            "a.problema_principal",
+            "a.tags",
+            "a.ticket_zendesk",
+            "a.conteudo",
+            "a.transcricao_completa"
+        ]
+        condicoes.append(
+            "("
+            + " OR ".join(
+                f"COALESCE({campo}, '') ILIKE %s"
+                for campo in campos_busca
+            )
+            + ")"
+        )
+        params.extend(
+            [termo] * len(campos_busca)
+        )
+
+    if periodo == "hoje":
+
+        condicoes.append(
+            "a.inicio_em >= CURRENT_DATE"
+        )
+
+    elif periodo in {"7", "30"}:
+
+        dias = int(periodo)
+        condicoes.append(
+            (
+                "a.inicio_em >= CURRENT_DATE "
+                f"- INTERVAL '{dias - 1} days'"
+            )
+        )
+
+    if status == "finalizado":
+
+        condicoes.append(
+            "a.status = 'finalizado'"
+        )
+
+    elif status == "andamento":
+
+        condicoes.append(
+            "a.status <> 'finalizado'"
+        )
+
+    elif status == "falha":
+
+        condicoes.append(
+            "COALESCE(a.chunks_falhos, 0) > 0"
+        )
+
+    return {
+        "where": " AND ".join(condicoes),
+        "params": params,
+        "escopo": filtro_usuario["escopo"],
+        "analista_id": filtro_usuario["analista_id"],
+        "busca": busca,
+        "periodo": periodo,
+        "status": status
     }
 
 
@@ -4657,12 +4751,29 @@ def resultados():
     if not usuario_id:
 
         return jsonify({
-            "resultados": [],
-            "processando": []
-        })
+            "erro": "Nao autenticado"
+        }), 401
 
     mostrar_custo = usuario_admin_tecnico()
-    filtro_usuario = usuario_filtro_atendimentos()
+    filtro = filtros_dashboard_sql()
+    limite = max(
+        20,
+        min(
+            int(DASHBOARD_PAGE_SIZE or 100),
+            200
+        )
+    )
+
+    try:
+
+        pagina = max(
+            1,
+            int(request.args.get("pagina", "1"))
+        )
+
+    except (TypeError, ValueError):
+
+        pagina = 1
 
     with conectar_banco() as conn:
 
@@ -4671,15 +4782,64 @@ def resultados():
             cursor.execute(
                 f"""
                 SELECT
+                    COUNT(*),
+                    COUNT(*) FILTER (
+                        WHERE a.status = 'finalizado'
+                    ),
+                    COUNT(*) FILTER (
+                        WHERE a.status <> 'finalizado'
+                    ),
+                    COUNT(*) FILTER (
+                        WHERE COALESCE(a.chunks_falhos, 0) > 0
+                    ),
+                    COALESCE(
+                        AVG(
+                            NULLIF(a.duracao_segundos, 0)
+                        ),
+                        0
+                    ),
+                    COALESCE(
+                        SUM(a.custo_estimado_usd),
+                        0
+                    ),
+                    COUNT(*) FILTER (
+                        WHERE COALESCE(
+                            TRIM(a.ticket_zendesk),
+                            ''
+                        ) = ''
+                    )
+                FROM atendimentos a
+                LEFT JOIN usuarios u
+                ON u.id = a.usuario_id
+                WHERE {filtro["where"]}
+                """,
+                filtro["params"]
+            )
+
+            metricas_row = cursor.fetchone()
+            total = int(metricas_row[0] or 0)
+            total_paginas = max(
+                1,
+                (total + limite - 1) // limite
+            )
+            pagina = min(
+                pagina,
+                total_paginas
+            )
+            offset = (
+                pagina - 1
+            ) * limite
+
+            cursor.execute(
+                f"""
+                SELECT
                     a.id,
-                    a.arquivo,
                     a.conteudo,
                     a.data,
                     a.status,
                     a.chunks_total,
                     a.chunks_falhos,
                     a.duracao_segundos,
-                    a.transcricao_completa,
                     a.ticket_zendesk,
                     a.chunks_ignorados,
                     a.segundos_transcritos,
@@ -4695,18 +4855,105 @@ def resultados():
                 FROM atendimentos a
                 LEFT JOIN usuarios u
                 ON u.id = a.usuario_id
-                WHERE {filtro_usuario["where"]}
+                WHERE {filtro["where"]}
                 ORDER BY a.id DESC
-                LIMIT 300
+                LIMIT %s
+                OFFSET %s
                 """,
-                filtro_usuario["params"]
+                [
+                    *filtro["params"],
+                    limite,
+                    offset
+                ]
             )
 
             rows = cursor.fetchall()
 
-            usuarios = []
+            cursor.execute(
+                f"""
+                SELECT
+                    TO_CHAR(
+                        DATE(
+                            a.inicio_em
+                            AT TIME ZONE 'America/Sao_Paulo'
+                        ),
+                        'DD/MM/YYYY'
+                    ),
+                    COUNT(*)
+                FROM atendimentos a
+                LEFT JOIN usuarios u
+                ON u.id = a.usuario_id
+                WHERE {filtro["where"]}
+                GROUP BY DATE(
+                    a.inicio_em
+                    AT TIME ZONE 'America/Sao_Paulo'
+                )
+                ORDER BY DATE(
+                    a.inicio_em
+                    AT TIME ZONE 'America/Sao_Paulo'
+                ) DESC
+                LIMIT 30
+                """,
+                filtro["params"]
+            )
+
+            volume_por_dia = [
+                {
+                    "data": row[0],
+                    "total": int(row[1] or 0)
+                }
+                for row in reversed(
+                    cursor.fetchall()
+                )
+            ]
+
+            analistas_metricas = []
 
             if usuario_supervisor():
+
+                cursor.execute(
+                    f"""
+                    SELECT
+                        COALESCE(u.usuario, 'Sem analista'),
+                        COUNT(*),
+                        COUNT(*) FILTER (
+                            WHERE a.status = 'finalizado'
+                        ),
+                        COUNT(*) FILTER (
+                            WHERE a.status <> 'finalizado'
+                        ),
+                        COUNT(*) FILTER (
+                            WHERE COALESCE(a.chunks_falhos, 0) > 0
+                        ),
+                        COALESCE(
+                            AVG(
+                                NULLIF(a.duracao_segundos, 0)
+                            ),
+                            0
+                        )
+                    FROM atendimentos a
+                    LEFT JOIN usuarios u
+                    ON u.id = a.usuario_id
+                    WHERE {filtro["where"]}
+                    GROUP BY
+                        a.usuario_id,
+                        u.usuario
+                    ORDER BY COUNT(*) DESC
+                    """,
+                    filtro["params"]
+                )
+
+                analistas_metricas = [
+                    {
+                        "analista": row[0],
+                        "total": int(row[1] or 0),
+                        "finalizados": int(row[2] or 0),
+                        "andamento": int(row[3] or 0),
+                        "falhas": int(row[4] or 0),
+                        "tma": int(round(float(row[5] or 0)))
+                    }
+                    for row in cursor.fetchall()
+                ]
 
                 cursor.execute(
                     """
@@ -4725,6 +4972,10 @@ def resultados():
                     for row in cursor.fetchall()
                 ]
 
+            else:
+
+                usuarios = []
+
     itens = []
     processando = []
 
@@ -4732,47 +4983,84 @@ def resultados():
 
         item = {
             "id": row[0],
-            "arquivo": row[1],
-            "conteudo": texto_zendesk_formatado(row[2]),
-            "data": row[3],
-            "status": row[4],
-            "chunks_total": row[5] or 0,
-            "chunks_falhos": row[6] or 0,
-            "duracao_segundos": row[7] or 0,
-            "transcricao_completa": row[8] or "",
-            "ticket_zendesk": row[9] or "",
-            "chunks_ignorados": row[10] or 0,
-            "segundos_transcritos": row[11] or 0,
-            "resumo_editado": bool(row[13]),
-            "sentimento_cliente": row[14] or "neutro",
-            "urgencia": row[15] or "media",
-            "categoria": row[16] or "outro",
-            "problema_principal": row[17] or "",
-            "tags": row[18] or "",
-            "usuario": row[19] or "",
-            "usuario_id": row[20],
-            "pode_finalizar": row[20] == usuario_id and row[4] != "finalizado"
+            "conteudo": texto_zendesk_formatado(row[1]),
+            "data": row[2],
+            "status": row[3],
+            "chunks_total": row[4] or 0,
+            "chunks_falhos": row[5] or 0,
+            "duracao_segundos": row[6] or 0,
+            "ticket_zendesk": row[7] or "",
+            "chunks_ignorados": row[8] or 0,
+            "segundos_transcritos": row[9] or 0,
+            "resumo_editado": bool(row[11]),
+            "sentimento_cliente": row[12] or "neutro",
+            "urgencia": row[13] or "media",
+            "categoria": row[14] or "outro",
+            "problema_principal": row[15] or "",
+            "tags": row[16] or "",
+            "usuario": row[17] or "",
+            "usuario_id": row[18],
+            "pode_finalizar": (
+                row[18] == usuario_id
+                and row[3] != "finalizado"
+            )
         }
 
         if mostrar_custo:
 
-            item["custo_estimado_usd"] = float(row[12] or 0)
+            item["custo_estimado_usd"] = float(
+                row[10] or 0
+            )
             item["custo_estimado_brl"] = custo_brl(
                 item["custo_estimado_usd"]
             )
 
         itens.append(item)
 
-        if row[4] != "finalizado":
+        if row[3] != "finalizado":
 
-            processando.append(str(row[0]))
+            processando.append(
+                str(row[0])
+            )
+
+    metricas = {
+        "total": int(metricas_row[0] or 0),
+        "finalizados": int(metricas_row[1] or 0),
+        "andamento": int(metricas_row[2] or 0),
+        "falhas": int(metricas_row[3] or 0),
+        "tma": int(
+            round(
+                float(metricas_row[4] or 0)
+            )
+        ),
+        "sem_ticket": int(metricas_row[6] or 0)
+    }
+
+    if mostrar_custo:
+
+        custo_usd = float(
+            metricas_row[5] or 0
+        )
+        metricas["custo_estimado_usd"] = custo_usd
+        metricas["custo_estimado_brl"] = custo_brl(
+            custo_usd
+        )
 
     resposta = {
         "resultados": itens,
         "processando": processando,
-        "escopo": filtro_usuario["escopo"],
-        "analista_id": filtro_usuario["analista_id"],
+        "escopo": filtro["escopo"],
+        "analista_id": filtro["analista_id"],
         "usuarios": usuarios,
+        "metricas": metricas,
+        "volume_por_dia": volume_por_dia,
+        "analistas_metricas": analistas_metricas,
+        "paginacao": {
+            "pagina": pagina,
+            "por_pagina": limite,
+            "total": total,
+            "total_paginas": total_paginas
+        },
         "is_admin": usuario_admin_tecnico(),
         "is_supervisor": usuario_supervisor(),
         "mostrar_custo": mostrar_custo,
