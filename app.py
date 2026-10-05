@@ -3433,8 +3433,10 @@ def receber_chunk():
             provider_usado=provider_usado,
             modelo_usado=modelo_usado,
             fallback_usado=fallback_usado,
+            motivo_fallback=transcricao_chunk.get("motivo_fallback", ""),
             tempo_transcricao_segundos=transcricao_chunk.get("tempo_transcricao_segundos", 0),
-            erro_preprocessamento=transcricao_chunk.get("erro_preprocessamento", "")
+            erro_preprocessamento=transcricao_chunk.get("erro_preprocessamento", ""),
+            erro_fallback_qualidade=transcricao_chunk.get("erro_fallback_qualidade", "")
         )
 
         return jsonify({
@@ -3443,6 +3445,7 @@ def receber_chunk():
             "provider_usado": provider_usado,
             "modelo_usado": modelo_usado,
             "fallback_usado": fallback_usado,
+            "motivo_fallback": transcricao_chunk.get("motivo_fallback", ""),
             "audio_processado": bool(transcricao_chunk.get("audio_processado"))
         })
 
