@@ -233,7 +233,8 @@ class FakeCursor:
                 atendimento["chunks_falhos"],
                 atendimento["chunks_ignorados"],
                 atendimento["segundos_transcritos"],
-                atendimento["custo_estimado_usd"]
+                atendimento["custo_estimado_usd"],
+                False
             )]
             return
 
