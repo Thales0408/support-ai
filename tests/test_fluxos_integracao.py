@@ -1017,6 +1017,13 @@ class FluxosIntegracaoTest(unittest.TestCase):
             "frame-ancestors 'none'",
             response.headers.get("Content-Security-Policy", "")
         )
+        self.assertTrue(
+            response.headers.get("X-Request-ID")
+        )
+        self.assertIn(
+            "no-store",
+            response.headers.get("Cache-Control", "")
+        )
 
     def test_chunk_bloqueia_novo_audio_apos_limite_da_chamada(self):
 
