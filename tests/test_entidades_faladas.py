@@ -202,6 +202,28 @@ class EntidadesFaladasTest(unittest.TestCase):
         self.assertEqual(entidades["analista_nome"], "Thales")
         self.assertEqual(entidades["cliente_nome"], "")
 
+    def test_cliente_barbara_apos_oi_boa_tarde(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            (
+                "Suporte tecnico, boa tarde, com quem eu falo? "
+                "Oi, boa tarde, aqui e Barbara, Medecientific, tudo bem?"
+            ),
+            analista_nome="admin"
+        )
+
+        self.assertEqual(entidades["cliente_nome"], "Barbara")
+
+    def test_cnpj_32694456_000_contra_95(self):
+
+        self.assertEqual(
+            app.extrair_possivel_cnpj(
+                "Me fala o seu CNPJ, por gentileza. "
+                "E o 32694 456.000 contra 95."
+            ),
+            self.POSSIVEL + "32.694.456/0001-95" + self.CONFIRMAR
+        )
+
     def test_cliente_joao_pedro_apos_pergunta_com_quem_falo(self):
 
         entidades = app.extrair_entidades_transcricao(
@@ -284,6 +306,23 @@ class EntidadesFaladasTest(unittest.TestCase):
             app.normalizar_para_comparacao(entidades["empresa"]),
             "cpa digital"
         )
+
+    def test_limpeza_remove_transcreva_em_portugues_curto(self):
+
+        texto = app.limpar_vazamento_prompt_transcricao(
+            "Transcreva em português. Cliente pediu ajuda."
+        )
+
+        self.assertEqual(texto, "Cliente pediu ajuda")
+
+    def test_limpeza_remove_contexto_hallucinado(self):
+
+        texto = app.limpar_vazamento_prompt_transcricao(
+            "Contexto, cumprimento de suporte tecnico para o seu. "
+            "Cliente pediu ajuda."
+        )
+
+        self.assertEqual(texto, "Cliente pediu ajuda")
 
     def test_limpeza_remove_vazamento_transcreva_somente_palavras(self):
 

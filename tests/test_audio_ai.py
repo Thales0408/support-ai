@@ -47,6 +47,30 @@ class AudioAiTest(unittest.TestCase):
                 places=4
             )
 
+    def test_ruido_detecta_transcreva_com_acento(self):
+
+        self.assertTrue(
+            ai.transcricao_parece_baixa_qualidade(
+                "Transcreva em português. Cliente pediu ajuda."
+            )
+        )
+
+    def test_ruido_detecta_tristanius_e_tristao(self):
+
+        self.assertTrue(
+            ai.transcricao_parece_baixa_qualidade(
+                "TRISTANIUS atendimento TRISTÃO resposta"
+            )
+        )
+
+    def test_ruido_detecta_repeticao_e_ai(self):
+
+        self.assertTrue(
+            ai.transcricao_parece_baixa_qualidade(
+                "E ai E ai E ai E ai o cliente continuou falando."
+            )
+        )
+
     def test_audio_temporario_e_removido_por_padrao(self):
 
         with tempfile.TemporaryDirectory() as pasta:
