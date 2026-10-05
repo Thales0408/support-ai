@@ -1,6 +1,11 @@
+from contextlib import contextmanager
+from threading import BoundedSemaphore, Lock
+import atexit
+
 from werkzeug.security import generate_password_hash
 
 import psycopg2
+from psycopg2.pool import ThreadedConnectionPool
 
 from config import (
     ADMIN_SENHA,
@@ -9,6 +14,8 @@ from config import (
     DB_HOST,
     DB_NAME,
     DB_PASSWORD,
+    DB_POOL_MAX,
+    DB_POOL_MIN,
     DB_PORT,
     DB_USER
 )
@@ -28,7 +35,12 @@ def senha_banco():
     return DB_PASSWORD
 
 
-def conectar_banco():
+_pool = None
+_pool_lock = Lock()
+_pool_slots = BoundedSemaphore(max(1, DB_POOL_MAX))
+
+
+def parametros_banco():
 
     db_password = senha_banco()
 
@@ -40,20 +52,113 @@ def conectar_banco():
                 "DB_HOST, DB_PORT, DB_NAME e DB_USER precisam estar configuradas"
             )
 
-        return psycopg2.connect(
-            host=DB_HOST,
-            port=DB_PORT,
-            dbname=DB_NAME,
-            user=DB_USER,
-            password=db_password,
-            sslmode="require"
-        )
+        return {
+            "host": DB_HOST,
+            "port": DB_PORT,
+            "dbname": DB_NAME,
+            "user": DB_USER,
+            "password": db_password,
+            "sslmode": "require",
+            "connect_timeout": 10
+        }
 
     if not DATABASE_URL:
 
         raise RuntimeError("DATABASE_URL ou DB_PASSWORD nao configurada")
 
-    return psycopg2.connect(DATABASE_URL)
+    return {
+        "dsn": DATABASE_URL,
+        "connect_timeout": 10
+    }
+
+
+def obter_pool():
+
+    global _pool
+
+    if _pool is not None:
+
+        return _pool
+
+    with _pool_lock:
+
+        if _pool is None:
+
+            parametros = parametros_banco()
+            dsn = parametros.pop("dsn", None)
+
+            if dsn:
+
+                _pool = ThreadedConnectionPool(
+                    max(1, DB_POOL_MIN),
+                    max(DB_POOL_MIN, DB_POOL_MAX),
+                    dsn,
+                    **parametros
+                )
+
+            else:
+
+                _pool = ThreadedConnectionPool(
+                    max(1, DB_POOL_MIN),
+                    max(DB_POOL_MIN, DB_POOL_MAX),
+                    **parametros
+                )
+
+    return _pool
+
+
+@contextmanager
+def conectar_banco():
+
+    _pool_slots.acquire()
+    conn = None
+    pool = obter_pool()
+
+    try:
+
+        conn = pool.getconn()
+
+        if conn.closed:
+
+            pool.putconn(conn, close=True)
+            conn = pool.getconn()
+
+        yield conn
+        conn.commit()
+
+    except Exception:
+
+        if conn and not conn.closed:
+
+            conn.rollback()
+
+        raise
+
+    finally:
+
+        if conn:
+
+            pool.putconn(
+                conn,
+                close=bool(conn.closed)
+            )
+
+        _pool_slots.release()
+
+
+def fechar_pool():
+
+    global _pool
+
+    with _pool_lock:
+
+        if _pool is not None:
+
+            _pool.closeall()
+            _pool = None
+
+
+atexit.register(fechar_pool)
 
 
 def diagnostico_banco():
@@ -453,6 +558,41 @@ def inicializar_banco():
                 """
                 CREATE INDEX IF NOT EXISTS idx_uso_eventos_dia_usuario
                 ON uso_eventos (usuario_id, criado_em)
+                """
+            )
+
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_atendimentos_usuario_id_desc
+                ON atendimentos (usuario_id, id DESC)
+                """
+            )
+
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_atendimentos_usuario_inicio
+                ON atendimentos (usuario_id, inicio_em DESC)
+                """
+            )
+
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_atendimentos_status_inicio
+                ON atendimentos (status, inicio_em DESC)
+                """
+            )
+
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_chunks_usuario_criado
+                ON transcricoes_chunks (usuario_id, criado_em DESC)
+                """
+            )
+
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_usuarios_ativo_usuario
+                ON usuarios (ativo, usuario)
                 """
             )
 
