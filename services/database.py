@@ -2,6 +2,8 @@ from werkzeug.security import generate_password_hash
 
 import psycopg2
 
+from auth import senha_esta_em_hash
+
 from config import (
     ADMIN_SENHA,
     APP_TIMEZONE,
@@ -582,6 +584,34 @@ def inicializar_banco():
                 ON auditoria_eventos (ator_usuario_id, criado_em DESC)
                 """
             )
+
+            cursor.execute(
+                """
+                SELECT id, senha
+                FROM usuarios
+                """
+            )
+
+            for usuario_id, senha_salva in cursor.fetchall():
+
+                if (
+                    senha_salva
+                    and not senha_esta_em_hash(senha_salva)
+                ):
+
+                    cursor.execute(
+                        """
+                        UPDATE usuarios
+                        SET senha = %s
+                        WHERE id = %s
+                        """,
+                        (
+                            generate_password_hash(
+                                senha_salva
+                            ),
+                            usuario_id
+                        )
+                    )
 
             admin_hash = generate_password_hash(ADMIN_SENHA)
 
