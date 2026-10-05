@@ -63,10 +63,10 @@ def exigir_admin_senha():
         "troque_por_uma_senha_forte_com_12_caracteres"
     }
 
-    if valor in valores_inseguros or len(valor) < 8:
+    if valor in valores_inseguros or len(valor) < 12:
 
         raise RuntimeError(
-            "ADMIN_SENHA precisa ser definida no ambiente e nao pode ser uma senha padrao"
+            "ADMIN_SENHA precisa ter pelo menos 12 caracteres e nao pode ser uma senha padrao"
         )
 
     return valor
