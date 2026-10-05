@@ -247,6 +247,13 @@ def inicializar_banco():
 
             cursor.execute(
                 """
+                ALTER TABLE usuarios
+                ADD COLUMN IF NOT EXISTS session_version INTEGER DEFAULT 1
+                """
+            )
+
+            cursor.execute(
+                """
                 UPDATE usuarios
                 SET perfil = 'admin_tecnico'
                 WHERE is_admin = TRUE
@@ -669,15 +676,3 @@ def inicializar_banco():
                 )
             )
 
-            cursor.execute(
-                """
-                UPDATE usuarios
-                SET is_admin = TRUE,
-                    ativo = TRUE,
-                    perfil = 'admin_tecnico'
-                WHERE usuario = %s
-                """,
-                (
-                    ADMIN_USUARIO,
-                )
-            )
