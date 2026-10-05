@@ -174,6 +174,17 @@ def aplicar_cabecalhos_seguranca(resposta):
             "max-age=31536000; includeSubDomains"
         )
 
+    if not request.path.startswith("/static/"):
+
+        resposta.headers.setdefault(
+            "Cache-Control",
+            "no-store, max-age=0"
+        )
+        resposta.headers.setdefault(
+            "Pragma",
+            "no-cache"
+        )
+
     return resposta
 
 
@@ -2932,9 +2943,12 @@ def admin_usuarios():
 
                 erro = "Esse usuario ja existe."
 
-            except Exception as e:
+            except Exception:
 
-                erro = f"Erro ao criar usuario: {e}"
+                logger.exception(
+                    "ERRO AO CRIAR USUARIO"
+                )
+                erro = "Nao foi possivel criar o usuario."
 
     with conectar_banco() as conn:
 
