@@ -14,6 +14,7 @@ import re
 import unicodedata
 
 from config import (
+    AI_TIMEOUT_SECONDS,
     GROQ_API_KEY,
     GROQ_BASE_URL,
     OPENAI_API_KEY,
@@ -40,7 +41,11 @@ class LimiteCustoFallbackTranscricao(Exception):
 
 
 summary_client = (
-    OpenAI(api_key=OPENAI_API_KEY)
+    OpenAI(
+        api_key=OPENAI_API_KEY,
+        timeout=AI_TIMEOUT_SECONDS,
+        max_retries=1
+    )
     if OPENAI_API_KEY
     else None
 )
@@ -56,12 +61,11 @@ def cliente_resumo():
 
 
 PROMPT_TRANSCRICAO = (
-    "Atendimento de suporte tecnico ERP em portugues do Brasil. "
-    "Vocabulario frequente: GestaoClick, ClickDesk, CNPJ, CPF, NCM, "
-    "NF-e, NFC-e, NFS-e, nota fiscal, ISSQN, ICMS, PIS, COFINS, IBS, CBS, "
-    "Simples Nacional, certificado digital, XML, Banco Inter, integracao, "
-    "financeiro, estoque, venda, orcamento, produto, PDV, SAT, boleto, "
-    "AnyDesk, TeamViewer, Chrome, Edge."
+    "GestaoClick, ClickDesk, ERP, CNPJ, CPF, NCM, NF-e, NFC-e, NFS-e, "
+    "nota fiscal, ISSQN, ICMS, PIS, COFINS, IBS, CBS, Simples Nacional, "
+    "certificado digital, XML, Banco Inter, integracao, financeiro, estoque, "
+    "venda, orcamento, produto, PDV, SAT, boleto, AnyDesk, TeamViewer, "
+    "Chrome, Edge"
 )
 
 
@@ -157,7 +161,9 @@ def cliente_transcricao(provider):
 
         return OpenAI(
             api_key=GROQ_API_KEY,
-            base_url=GROQ_BASE_URL
+            base_url=GROQ_BASE_URL,
+            timeout=AI_TIMEOUT_SECONDS,
+            max_retries=1
         )
 
     if provider == "openai":
