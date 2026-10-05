@@ -195,7 +195,8 @@ def main():
             )
             custo = estimar_custo_transcricao(
                 max(1, int(args.duracao_segundos)),
-                provider
+                provider,
+                modelo=modelo
             )
 
             resultados.append({
