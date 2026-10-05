@@ -15,190 +15,6 @@
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
 
-    <style>
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            background: #0f1115;
-            color: white;
-            font-family: Arial;
-            padding: 20px;
-        }
-
-        h1,
-        h2 {
-            margin-bottom: 18px;
-        }
-
-        a {
-            color: white;
-            text-decoration: none;
-        }
-
-        .topo {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-        }
-
-        .box {
-            background: #1b1f27;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 12px;
-        }
-
-        label {
-            color: #c7ccd6;
-            display: block;
-            font-size: 14px;
-            margin-bottom: 6px;
-        }
-
-        input,
-        select {
-            width: 100%;
-            padding: 12px;
-            border: none;
-            border-radius: 8px;
-            background: #2a2f3a;
-            color: white;
-        }
-
-        .check {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-top: 24px;
-        }
-
-        .check input {
-            width: auto;
-        }
-
-        button,
-        .botao {
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: bold;
-            padding: 12px 18px;
-        }
-
-        .principal {
-            background: #2962ff;
-            color: white;
-        }
-
-        .voltar {
-            background: #2a2f3a;
-        }
-
-        .perigo {
-            background: #d50000;
-            color: white;
-        }
-
-        .sucesso {
-            background: #00c853;
-            color: white;
-        }
-
-        .mensagem {
-            background: #103d24;
-            border-left: 5px solid #00c853;
-            padding: 14px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-
-        .erro {
-            background: #421616;
-            border-left: 5px solid #d50000;
-            padding: 14px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-
-        table {
-            border-collapse: collapse;
-            width: 100%;
-        }
-
-        th,
-        td {
-            border-bottom: 1px solid #2a2f3a;
-            padding: 12px;
-            text-align: left;
-            vertical-align: middle;
-        }
-
-        th {
-            color: #aaa;
-            font-size: 14px;
-        }
-
-        .acoes {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-
-        .inline-form {
-            display: flex;
-            gap: 8px;
-        }
-
-        .inline-form input {
-            min-width: 180px;
-        }
-
-        .hint {
-            color: #aaa;
-            font-size: 13px;
-            margin-bottom: 16px;
-        }
-
-        @media (max-width: 760px) {
-
-            table,
-            thead,
-            tbody,
-            th,
-            td,
-            tr {
-                display: block;
-            }
-
-            thead {
-                display: none;
-            }
-
-            tr {
-                background: #1b1f27;
-                border-radius: 8px;
-                margin-bottom: 12px;
-                padding: 10px;
-            }
-
-            td {
-                border-bottom: none;
-            }
-        }
-
-    </style>
     <link rel="stylesheet" href="{{ url_for('static', filename='theme.css') }}">
 
 </head>
@@ -207,18 +23,18 @@
 
     <div class="topo">
         <button type="button" class="theme-toggle" data-theme-toggle aria-label="Alternar modo de cor"><i data-lucide="moon" class="theme-icon-moon" aria-hidden="true"></i><i data-lucide="sun" class="theme-icon-sun" aria-hidden="true"></i><span data-theme-label>Noite</span></button>
-        <a
-            class="botao voltar"
-            href="/"
-        >Voltar</a>
-
-        <a
-            class="botao voltar"
-            href="/logout"
-        >Logout</a>
+        <a class="botao voltar" href="/"><i data-lucide="arrow-left"></i> Voltar ao painel</a>
+        <a class="botao voltar" href="/logout"><i data-lucide="log-out"></i> Sair</a>
     </div>
 
-    <h1>Administração de usuários</h1>
+    <div class="admin-heading">
+        <span class="admin-heading-icon"><i data-lucide="users-round"></i></span>
+        <div>
+            <span class="admin-kicker">Configurações</span>
+            <h1>Administração de usuários</h1>
+            <p>Gerencie acessos, perfis e credenciais da equipe.</p>
+        </div>
+    </div>
 
     {% if mensagem %}
         <div class="mensagem">{{ mensagem }}</div>
@@ -229,7 +45,9 @@
     {% endif %}
 
     <section class="box">
+        <span class="admin-kicker">Acesso</span>
         <h2>Novo usuário</h2>
+        <p class="section-copy">Crie um acesso e defina o nível de permissão inicial.</p>
 
         <form method="POST">
             <div class="grid">
@@ -274,6 +92,7 @@
     </section>
 
     <section class="box">
+        <span class="admin-kicker">Equipe</span>
         <h2>Usuários cadastrados</h2>
 
         <p class="hint">
