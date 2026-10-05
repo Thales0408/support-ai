@@ -26,6 +26,8 @@ class LayoutTests(unittest.TestCase):
         self.assertIn('id="status"', html)
         self.assertIn('name="csrf-token"', html)
         self.assertIn('/static/theme.css', html)
+        self.assertIn('/static/theme.js', html)
+        self.assertIn('data-theme-toggle', html)
 
     def test_custo_so_para_admin_tecnico(self):
         for perfil in ("analista", "supervisor"):
@@ -48,6 +50,10 @@ class LayoutTests(unittest.TestCase):
         self.assertIn('class="admin-page"', admin)
         self.assertIn('/static/theme.css', login)
         self.assertIn('/static/theme.css', admin)
+        self.assertIn('data-theme-toggle', login)
+        self.assertIn('data-theme-toggle', admin)
+        self.assertIn('/static/theme.js', login)
+        self.assertIn('/static/theme.js', admin)
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@
         content="{{ csrf_token() }}"
     >
     <title>55PBX AI</title>
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
 
@@ -444,6 +445,7 @@
             </div>
 
             <div class="actions">
+                <button type="button" class="theme-toggle" data-theme-toggle aria-label="Alternar modo de cor"><i data-lucide="moon" class="theme-icon-moon" aria-hidden="true"></i><i data-lucide="sun" class="theme-icon-sun" aria-hidden="true"></i><span data-theme-label>Noite</span></button>
                 {% if is_admin %}
                     <a class="utility-link" href="/admin"><i data-lucide="users" aria-hidden="true"></i> Usuarios</a>
                 {% endif %}
@@ -1175,6 +1177,9 @@
 
             const ctx =
                 document.getElementById("grafico")
+            const escuro = document.documentElement.dataset.theme === "dark"
+            const corTexto = escuro ? "#abbcb0" : "#64756d"
+            const corGrade = escuro ? "#3d4b41" : "#d9e2dc"
 
             if (typeof Chart === "undefined") {
                 return
@@ -1205,9 +1210,15 @@
                             }
                         },
                         scales: {
+                            x: {
+                                ticks: { color: corTexto },
+                                grid: { color: corGrade }
+                            },
                             y: {
                                 beginAtZero: true,
+                                grid: { color: corGrade },
                                 ticks: {
+                                    color: corTexto,
                                     precision: 0
                                 }
                             }
@@ -1726,6 +1737,8 @@
                 carregarResultados()
             }
         })
+
+        document.addEventListener("themechange", renderizarGrafico)
     </script>
 </body>
 

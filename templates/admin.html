@@ -12,6 +12,8 @@
     >
 
     <title>Admin - 55PBX AI</title>
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
 
     <style>
 
@@ -204,6 +206,7 @@
 <body class="admin-page">
 
     <div class="topo">
+        <button type="button" class="theme-toggle" data-theme-toggle aria-label="Alternar modo de cor"><i data-lucide="moon" class="theme-icon-moon" aria-hidden="true"></i><i data-lucide="sun" class="theme-icon-sun" aria-hidden="true"></i><span data-theme-label>Noite</span></button>
         <a
             class="botao voltar"
             href="/"
@@ -425,6 +428,7 @@
             })
     </script>
 
+    <script>document.addEventListener("DOMContentLoaded", () => window.lucide?.createIcons())</script>
 </body>
 
 </html>
