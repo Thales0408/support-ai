@@ -1676,11 +1676,6 @@ def extrair_cliente_nome(texto, analista_nome=""):
             r"(?:boa\s+(?:tarde|noite)|bom\s+dia)?\s*[,.;:-]*\s*"
             r"(?:meu nome (?:é|e)|me chamo|aqui (?:é|e)|sou (?:o|a)?)\s+"
             r"([^,.;\n]{2,60})"
-        ),
-        (
-            r"\bqual (?:é|e) (?:o )?seu nome\s*[?!.:,;-]*\s*"
-            r"(?:meu nome (?:é|e)|me chamo|aqui (?:é|e)|sou (?:o|a)?)\s+"
-            r"([^,.;\n]{2,60})"
         )
     ]
 
@@ -1704,34 +1699,6 @@ def extrair_cliente_nome(texto, analista_nome=""):
                 return nome
 
     return ""
-
-
-def validar_valor_ia_na_transcricao(valor, transcricao, limite=160):
-
-    valor_limpo = limpar_valor_estruturado(
-        valor,
-        limite=limite
-    )
-
-    if not valor_limpo:
-
-        return ""
-
-    valor_comparacao = normalizar_para_comparacao(
-        valor_limpo
-    )
-    texto_comparacao = normalizar_para_comparacao(
-        transcricao
-    )
-
-    if (
-        not valor_comparacao
-        or valor_comparacao not in texto_comparacao
-    ):
-
-        return ""
-
-    return valor_limpo
 
 
 def extrair_empresa_transcricao(texto):
@@ -2358,19 +2325,8 @@ Entidades estruturadas extraidas pelo backend:
         cliente_final = ""
 
     resumo = resumo_zendesk_exato(
-        nome_empresa=(
-            entidades_extraidas.get("empresa")
-            or validar_valor_ia_na_transcricao(
-                dados.get("nome_empresa"),
-                transcricao,
-                limite=120
-            )
-        ),
-        empresa_loja=validar_valor_ia_na_transcricao(
-            dados.get("empresa_loja"),
-            transcricao,
-            limite=120
-        ),
+        nome_empresa=entidades_extraidas.get("empresa"),
+        empresa_loja="",
         cnpj=entidades_extraidas.get("cnpj"),
         cnpj_contexto=transcricao,
         cliente=cliente_final,
