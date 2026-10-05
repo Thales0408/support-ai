@@ -90,6 +90,14 @@ logger = logging.getLogger("support_ai")
 app = Flask(__name__)
 
 app.secret_key = SECRET_KEY
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=bool(
+        os.getenv("RAILWAY_ENVIRONMENT")
+        or os.getenv("RAILWAY_PUBLIC_DOMAIN")
+    )
+)
 
 if CORS_ORIGINS:
 
