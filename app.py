@@ -501,12 +501,15 @@ def validar_tamanho_upload(arquivo, limite_mb):
 
     if tamanho > tamanho_maximo_bytes(limite_mb):
 
-        return tamanho, jsonify({
-            "erro": (
-                "Arquivo de audio excede o limite de "
-                f"{limite_mb} MB."
-            )
-        }), 413
+        return tamanho, (
+            jsonify({
+                "erro": (
+                    "Arquivo de audio excede o limite de "
+                    f"{limite_mb} MB."
+                )
+            }),
+            413
+        )
 
     return tamanho, None
 
