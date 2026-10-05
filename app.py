@@ -1632,6 +1632,8 @@ RUIDOS_NOME_PARTICIPANTE = {
     "trisha",
     "trisonso",
     "tristares",
+    "tristanius",
+    "tristao",
     "trishui",
     "drishuizsorvagencia"
 }
