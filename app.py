@@ -2611,6 +2611,8 @@ def login():
                             )
                         )
 
+                    session.clear()
+                    session.permanent = True
                     session["usuario_id"] = user[0]
                     perfil = (
                         user[4]
@@ -2695,6 +2697,22 @@ def admin_usuarios():
     mensagem = None
     erro = None
 
+    mensagem_codigo = request.args.get("mensagem", "")
+    erro_codigo = request.args.get("erro", "")
+
+    if mensagem_codigo == "usuario_desativado_historico_preservado":
+
+        mensagem = (
+            "Usuario desativado. O historico de atendimentos foi preservado."
+        )
+
+    if erro_codigo.startswith("senha_minima_"):
+
+        erro = (
+            "A nova senha deve ter pelo menos "
+            f"{PASSWORD_MIN_LENGTH} caracteres."
+        )
+
     if request.method == "POST":
 
         usuario = limpar_texto(
@@ -2717,6 +2735,13 @@ def admin_usuarios():
         if not usuario or not senha:
 
             erro = "Informe usuario e senha."
+
+        elif len(senha) < PASSWORD_MIN_LENGTH:
+
+            erro = (
+                "A senha inicial deve ter pelo menos "
+                f"{PASSWORD_MIN_LENGTH} caracteres."
+            )
 
         else:
 
@@ -2840,6 +2865,12 @@ def admin_alterar_senha(usuario_id):
         return redirect("/")
 
     senha = request.form.get("senha") or ""
+
+    if senha and len(senha) < PASSWORD_MIN_LENGTH:
+
+        return redirect(
+            f"/admin?erro=senha_minima_{PASSWORD_MIN_LENGTH}"
+        )
 
     if senha:
 
@@ -2993,6 +3024,45 @@ def admin_excluir_usuario(usuario_id):
 
             cursor.execute(
                 """
+                SELECT COUNT(*)
+                FROM atendimentos
+                WHERE usuario_id = %s
+                """,
+                (
+                    usuario_id,
+                )
+            )
+
+            atendimentos_vinculados = int(
+                cursor.fetchone()[0] or 0
+            )
+
+            if atendimentos_vinculados:
+
+                cursor.execute(
+                    """
+                    UPDATE usuarios
+                    SET ativo = FALSE
+                    WHERE id = %s
+                    """,
+                    (
+                        usuario_id,
+                    )
+                )
+
+                log_evento(
+                    "usuario_desativado_preservando_historico",
+                    usuario_id_alvo=usuario_id,
+                    usuario_id_admin=usuario_logado(),
+                    atendimentos_vinculados=atendimentos_vinculados
+                )
+
+                return redirect(
+                    "/admin?mensagem=usuario_desativado_historico_preservado"
+                )
+
+            cursor.execute(
+                """
                 DELETE FROM usuarios
                 WHERE id = %s
                 """,
@@ -3000,6 +3070,12 @@ def admin_excluir_usuario(usuario_id):
                     usuario_id,
                 )
             )
+
+    log_evento(
+        "usuario_excluido_sem_historico",
+        usuario_id_alvo=usuario_id,
+        usuario_id_admin=usuario_logado()
+    )
 
     return redirect("/admin")
 
@@ -5046,10 +5122,13 @@ def alterar_minha_senha():
     senha_atual = dados.get("senha_atual", "")
     nova_senha = dados.get("nova_senha", "")
 
-    if len(nova_senha) < 6:
+    if len(nova_senha) < PASSWORD_MIN_LENGTH:
 
         return jsonify({
-            "erro": "A nova senha deve ter pelo menos 6 caracteres"
+            "erro": (
+                "A nova senha deve ter pelo menos "
+                f"{PASSWORD_MIN_LENGTH} caracteres"
+            )
         }), 400
 
     with conectar_banco() as conn:
