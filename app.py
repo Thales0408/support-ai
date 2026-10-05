@@ -2890,7 +2890,13 @@ def health():
     return jsonify({
         "status": (
             "ok"
-            if banco == "ok"
+            if (
+                banco == "ok"
+                and (
+                    not AUDIO_PREPROCESS_ENABLED
+                    or ffmpeg == "ok"
+                )
+            )
             else "degradado"
         ),
         "database": banco,
