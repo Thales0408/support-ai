@@ -261,9 +261,9 @@ def transcrever_chunk(arquivo, validar_fallback=None):
 
                 fallback = transcrever_bytes_diagnostico(
                     fallback_provider,
-                    audio_bytes,
-                    nome_transcricao,
-                    mime_transcricao
+                    audio_original,
+                    nome,
+                    mime
                 )
 
             except LimiteCustoFallbackTranscricao:
@@ -290,6 +290,7 @@ def transcrever_chunk(arquivo, validar_fallback=None):
                 "provider_usado": fallback_provider,
                 "fallback_usado": True,
                 "motivo_fallback": "baixa_qualidade",
+                "fallback_audio_original": True,
                 "modelo_usado": fallback["modelo_usado"],
                 "tempo_transcricao_segundos": (
                     transcricao["tempo_transcricao_segundos"]
