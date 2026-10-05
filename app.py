@@ -1130,18 +1130,7 @@ def fragmentos_com_evidencia_cnpj(texto):
     evidencias = [
         "cnpj",
         "c n p j",
-        "cadastro nacional",
-        "barra",
-        "traco",
-        "traço",
-        "contrario",
-        "contrário",
-        "contra",
-        "de re",
-        "de rÃ©",
-        "dere",
-        "dre",
-        "mil"
+        "cadastro nacional"
     ]
 
     for match in re.finditer(
@@ -1674,7 +1663,6 @@ def extrair_cliente_nome(texto, analista_nome=""):
     padroes = [
         r"\bnome do cliente (?:é|e)\s+([^,.;\n]{2,60})",
         r"\bcliente se chama\s+([^,.;\n]{2,60})",
-        r"\bcliente\s*:\s*([^,.;\n]{2,60})",
         (
             r"\bcom quem eu falo\s*[?!.:,;-]*\s*"
             r"(?:boa\s+(?:tarde|noite)|bom\s+dia)?\s*[,.;:-]*\s*"
@@ -1775,9 +1763,10 @@ def extrair_empresa_transcricao(texto):
         r"\bqual(?: que)? (?:é|e) o nome da empresa\s*[?!.:,;-]*\s*(?:é|e)?\s*([^,.;\n]{3,100})",
         r"\ba empresa chama\s+([^,.;\n?]{3,100})",
         r"\bempresa se chama\s+([^,.;\n?]{3,100})",
-        r"\braz[aã]o social (?:é|e|da|do)?\s+([^,.;\n]{3,100})",
-        r"\bempresa (?:é|e|da|do)?\s+([^,.;\n]{3,100})",
-        r"\bloja (?:é|e|da|do)?\s+([^,.;\n]{3,100})"
+        r"\braz[aã]o social (?:é|e)\s+([^,.;\n]{3,100})",
+        r"\bnome da empresa (?:é|e)\s+([^,.;\n]{3,100})",
+        r"\bempresa (?:é|e)\s+([^,.;\n]{3,100})",
+        r"\bloja (?:é|e)\s+([^,.;\n]{3,100})"
     ]
 
     for padrao in padroes:
@@ -2378,11 +2367,7 @@ Entidades estruturadas extraidas pelo backend:
     )
     cliente_final = (
         entidades_extraidas.get("cliente_nome")
-        or validar_nome_cliente_ia(
-            dados.get("nome_cliente"),
-            transcricao,
-            analista_final
-        )
+        or ""
     )
 
     if nomes_iguais(
