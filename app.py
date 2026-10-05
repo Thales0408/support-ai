@@ -5498,26 +5498,37 @@ def exportar():
         return redirect("/login")
 
     mostrar_custo = usuario_admin_tecnico()
-    filtro_usuario = usuario_filtro_atendimentos()
-    ids = [
-        int(valor)
-        for valor in re.findall(
-            r"\d+",
-            request.args.get("ids", "")
-        )
-    ]
+    filtro = filtros_dashboard_sql()
 
     with conectar_banco() as conn:
 
         with conn.cursor() as cursor:
 
-            where = filtro_usuario["where"]
-            params = list(filtro_usuario["params"])
+            cursor.execute(
+                f"""
+                SELECT COUNT(*)
+                FROM atendimentos a
+                LEFT JOIN usuarios u
+                ON u.id = a.usuario_id
+                WHERE {filtro["where"]}
+                """,
+                filtro["params"]
+            )
 
-            if ids:
+            total_exportacao = int(
+                cursor.fetchone()[0] or 0
+            )
 
-                where += " AND a.id = ANY(%s)"
-                params.append(ids)
+            if total_exportacao > EXPORT_MAX_ROWS:
+
+                return jsonify({
+                    "erro": (
+                        "O filtro possui muitos atendimentos para exportacao "
+                        "sincrona. Reduza o periodo ou refine a busca."
+                    ),
+                    "total": total_exportacao,
+                    "limite": EXPORT_MAX_ROWS
+                }), 413
 
             cursor.execute(
                 f"""
@@ -5540,16 +5551,31 @@ def exportar():
                 FROM atendimentos a
                 LEFT JOIN usuarios u
                 ON u.id = a.usuario_id
-                WHERE {where}
+                WHERE {filtro["where"]}
                 ORDER BY a.id DESC
                 """,
-                params
+                filtro["params"]
             )
 
             rows = cursor.fetchall()
 
+    def excel_seguro(valor):
+
+        if not isinstance(valor, str):
+
+            return valor
+
+        if valor.lstrip().startswith(
+            ("=", "+", "-", "@")
+        ):
+
+            return "'" + valor
+
+        return valor
+
     wb = Workbook()
     ws = wb.active
+    ws.title = "Atendimentos"
 
     ws.append([
         "Data",
@@ -5600,9 +5626,15 @@ def exportar():
                 10,
                 custo_brl(custo_estimado_usd)
             )
+
         else:
 
             linha.pop(9)
+
+        linha = [
+            excel_seguro(valor)
+            for valor in linha
+        ]
 
         ws.append(linha)
 
