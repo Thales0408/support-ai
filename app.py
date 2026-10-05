@@ -4308,12 +4308,28 @@ def transcrever_arquivo_unico():
         transcricao_chunk["texto"]
     )
     texto = normalizar_entidades_faladas(texto_original)
-    entidades_extraidas = extrair_entidades_transcricao(texto_original)
-    custo_estimado = round(
-        estimar_custo_transcricao(
+    entidades_extraidas = extrair_entidades_transcricao(
+        texto_original,
+        session.get("usuario_nome")
+    )
+    custo_estimado = estimar_custo_transcricao(
+        30,
+        transcricao_chunk["provider_usado"]
+    )
+
+    if (
+        transcricao_chunk.get("motivo_fallback") == "baixa_qualidade"
+        and transcricao_chunk.get("provider_tentado") == "groq"
+        and transcricao_chunk.get("provider_usado") == "openai"
+    ):
+
+        custo_estimado += estimar_custo_transcricao(
             30,
-            transcricao_chunk["provider_usado"]
+            "groq"
         )
+
+    custo_estimado = round(
+        custo_estimado
         + estimar_custo_atendimento(0, True),
         4
     )
