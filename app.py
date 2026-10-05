@@ -206,7 +206,11 @@ def limpar_vazamento_prompt_transcricao(texto):
         "Não invente palavras quando houver silêncio",
         "Nao invente palavras quando houver silencio",
         "Não invente palavras quando houver silencio",
-        "Nao invente palavras quando houver silêncio"
+        "Nao invente palavras quando houver silêncio",
+        "Se um trecho estiver confuso, transcreva somente as palavras audiveis",
+        "Se um trecho estiver confuso, transcreva somente as palavras audíveis",
+        "Transcreva somente as palavras audiveis",
+        "Transcreva somente as palavras audíveis"
     ]
 
     for frase in frases_prompt:
@@ -1159,9 +1163,6 @@ def fragmentos_com_evidencia_cnpj(texto):
 
 def extrair_possivel_cnpj(texto):
 
-    melhor_possivel = ""
-    melhor_bruto = ""
-
     for fragmento in fragmentos_com_evidencia_cnpj(texto):
 
         digitos = texto_para_digitos_cnpj(fragmento)
@@ -1209,46 +1210,6 @@ def extrair_possivel_cnpj(texto):
                     return possivel_cnpj_formatado(candidato)
 
                 return formatar_cnpj(candidato)
-
-            if not melhor_possivel:
-
-                melhor_possivel = candidato
-
-        if not melhor_bruto:
-
-            bruto = re.search(
-                r"\d[\d\s.,/\-]{7,}\d",
-                fragmento
-            )
-
-            if bruto:
-
-                valor_bruto = re.sub(
-                    r"\s+",
-                    " ",
-                    bruto.group(0)
-                ).strip(" ,.;:")
-                digitos_bruto = re.sub(
-                    r"\D",
-                    "",
-                    valor_bruto
-                )
-
-                if 8 <= len(digitos_bruto) < 14:
-
-                    melhor_bruto = valor_bruto
-
-    if melhor_possivel:
-
-        return possivel_cnpj_formatado(melhor_possivel)
-
-    if melhor_bruto:
-
-        return (
-            "Possível CNPJ informado: "
-            + melhor_bruto
-            + " — confirmar com cliente"
-        )
 
     return ""
 
@@ -1636,13 +1597,49 @@ def nomes_iguais(nome_a, nome_b):
     )
 
 
+RUIDOS_NOME_PARTICIPANTE = {
+    "trisk",
+    "trishul",
+    "tristra",
+    "trista",
+    "trisha",
+    "trisonso",
+    "tristares",
+    "trishui",
+    "drishuizsorvagencia"
+}
+
+
+def nome_participante_confiavel(valor, analista_nome=""):
+
+    nome = limpar_nome_participante(valor)
+
+    if not nome or nomes_iguais(nome, analista_nome):
+
+        return ""
+
+    comparacao = normalizar_para_comparacao(nome)
+    tokens = set(comparacao.split())
+
+    if tokens & RUIDOS_NOME_PARTICIPANTE:
+
+        return ""
+
+    if comparacao.startswith(("entao ", "entendido ", "obrigado ", "beleza ")):
+
+        return ""
+
+    return nome
+
+
 def extrair_analista_nome(texto):
 
+    # O usuario autenticado e a fonte primaria do analista.
+    # Esta heuristica existe apenas como fallback para textos antigos.
     padroes = [
-        r"\bmeu nome (?:é|e)\s+([^,.;\n]{2,60})",
-        r"\bsou (?:o|a)?\s*([^,.;\n]{2,60})",
-        r"\bfala com\s+([^,.;\n]{2,60})",
-        r"\baqui (?:é|e)\s+([^,.;\n]{2,60})"
+        r"\baqui (?:é|e)\s+([^,.;\n]{2,45})\s+(?:do|da)\s+(?:suporte|atendimento)",
+        r"\bfala com\s+([^,.;\n]{2,45})\s+(?:do|da)\s+(?:suporte|atendimento)",
+        r"\bsou (?:o|a)?\s*([^,.;\n]{2,45})\s+(?:do|da)\s+(?:suporte|atendimento)"
     ]
 
     for padrao in padroes:
@@ -1655,7 +1652,7 @@ def extrair_analista_nome(texto):
 
         if match:
 
-            nome = limpar_nome_participante(
+            nome = nome_participante_confiavel(
                 match.group(1)
             )
 
@@ -1668,36 +1665,81 @@ def extrair_analista_nome(texto):
 
 def extrair_cliente_nome(texto, analista_nome=""):
 
+    texto_base = str(texto or "")
     padroes = [
         r"\bnome do cliente (?:é|e)\s+([^,.;\n]{2,60})",
         r"\bcliente se chama\s+([^,.;\n]{2,60})",
-        r"\bcliente[:\s]+([^,.;\n]{2,60})"
+        r"\bcliente[:\s]+([^,.;\n]{2,60})",
+        (
+            r"\bcom quem eu falo\s*[?!.:,;-]*\s*"
+            r"(?:boa\s+(?:tarde|noite)|bom\s+dia)?\s*[,.;:-]*\s*"
+            r"(?:meu nome (?:é|e)|me chamo|aqui (?:é|e)|sou (?:o|a)?)\s+"
+            r"([^,.;\n]{2,60})"
+        ),
+        (
+            r"\bqual (?:é|e) (?:o )?seu nome\s*[?!.:,;-]*\s*"
+            r"(?:meu nome (?:é|e)|me chamo|aqui (?:é|e)|sou (?:o|a)?)?\s*"
+            r"([^,.;\n]{2,60})"
+        )
     ]
 
     for padrao in padroes:
 
         match = re.search(
             padrao,
-            str(texto or ""),
+            texto_base,
             flags=re.IGNORECASE
         )
 
         if match:
 
-            nome = limpar_nome_participante(
-                match.group(1)
+            nome = nome_participante_confiavel(
+                match.group(1),
+                analista_nome
             )
 
-            if nome and not nomes_iguais(nome, analista_nome):
+            if nome:
 
                 return nome
 
     return ""
 
 
+def validar_nome_cliente_ia(valor, transcricao, analista_nome=""):
+
+    nome = nome_participante_confiavel(
+        valor,
+        analista_nome
+    )
+
+    if not nome:
+
+        return ""
+
+    texto_comparacao = normalizar_para_comparacao(transcricao)
+    nome_comparacao = normalizar_para_comparacao(nome)
+
+    if nome_comparacao not in texto_comparacao:
+
+        return ""
+
+    evidencias = [
+        r"meu nome (?:e|é)\s+" + re.escape(nome_comparacao),
+        r"me chamo\s+" + re.escape(nome_comparacao),
+        r"nome do cliente (?:e|é)\s+" + re.escape(nome_comparacao),
+        r"cliente se chama\s+" + re.escape(nome_comparacao)
+    ]
+
+    return nome if any(
+        re.search(padrao, texto_comparacao)
+        for padrao in evidencias
+    ) else ""
+
+
 def extrair_empresa_transcricao(texto):
 
     padroes = [
+        r"\bqual (?:é|e) o nome da empresa\s*[?!.:,;-]*\s*(?:é|e)?\s*([^,.;\n]{3,100})",
         r"\braz[aã]o social (?:é|e|da|do)?\s+([^,.;\n]{3,100})",
         r"\bempresa (?:é|e|da|do)?\s+([^,.;\n]{3,100})",
         r"\bloja (?:é|e|da|do)?\s+([^,.;\n]{3,100})"
@@ -1826,10 +1868,13 @@ def limpar_transcricao_para_resumo(texto):
     ).strip()
 
 
-def extrair_entidades_transcricao(texto):
+def extrair_entidades_transcricao(texto, analista_nome=""):
 
     texto_base = str(texto or "").strip()
-    analista_nome = extrair_analista_nome(texto_base)
+    analista_nome = (
+        limpar_nome_participante(analista_nome)
+        or extrair_analista_nome(texto_base)
+    )
 
     return {
         "analista_nome": analista_nome,
@@ -2197,8 +2242,10 @@ Regras:
 - Nunca coloque rotulos de campos dentro do descritivo.
 - Nunca deixe um rotulo virar valor de outro campo.
 - Se o valor de um campo seria apenas "Telefone de contato:" ou "E-mail Solicitante:", retorne string vazia.
-- Nunca use nome presente em saudacao ou apresentacao do analista como nome do cliente.
-- Frases como "meu nome e", "sou o", "fala com" e "aqui e" normalmente indicam o analista, nao o cliente.
+- O analista responsavel informado pelo backend e a fonte primaria para identificar o analista.
+- Nao presuma que a frase "meu nome e X" pertence ao analista.
+- Quando houver pergunta como "com quem eu falo?" ou "qual e seu nome?" seguida de "meu nome e X", X e o cliente.
+- Nunca use ruido de transcricao, palavras sem nexo ou nomes sem evidencia explicita como nome do cliente.
 - Se houver duvida entre analista e cliente, deixe nome_cliente vazio.
 - Se o CNPJ nao tiver exatamente 14 digitos claros, retorne vazio no JSON, exceto quando houver sequencia parecida com CNPJ.
 - Nao considerar e-mail valido sem @.
@@ -2296,7 +2343,11 @@ Entidades estruturadas extraidas pelo backend:
     )
     cliente_final = (
         entidades_extraidas.get("cliente_nome")
-        or dados.get("nome_cliente")
+        or validar_nome_cliente_ia(
+            dados.get("nome_cliente"),
+            transcricao,
+            analista_final
+        )
     )
 
     if nomes_iguais(
@@ -3074,6 +3125,92 @@ def receber_chunk():
                     "erro": "Atendimento nao encontrado"
                 }), 404
 
+            cursor.execute(
+                """
+                SELECT COALESCE(SUM(duracao_segundos), 0)
+                FROM transcricoes_chunks
+                WHERE atendimento_id = %s
+                AND usuario_id = %s
+                AND status = 'transcrito'
+                AND ordem <> %s
+                """,
+                (
+                    atendimento_id,
+                    usuario_id,
+                    ordem_int
+                )
+            )
+
+            segundos_atendimento = int(cursor.fetchone()[0] or 0)
+
+            if (
+                segundos_atendimento + duracao_chunk_segundos
+                > MAX_CALL_DURATION_MINUTES * 60
+            ):
+
+                log_evento(
+                    "limite_duracao_atendimento_chunk",
+                    usuario_id=usuario_id,
+                    atendimento_id=atendimento_id,
+                    segundos_atendimento=segundos_atendimento,
+                    duracao_chunk_segundos=duracao_chunk_segundos,
+                    limite_segundos=MAX_CALL_DURATION_MINUTES * 60
+                )
+
+                return erro_limite(
+                    "Limite de duracao por atendimento atingido.",
+                    tipo="limite_duracao_atendimento",
+                    deve_parar_gravacao=True,
+                    duracao_minutos=round(segundos_atendimento / 60, 2),
+                    limite_minutos=MAX_CALL_DURATION_MINUTES
+                )
+
+            cursor.execute(
+                """
+                SELECT COALESCE(SUM(tc.duracao_segundos), 0)
+                FROM transcricoes_chunks tc
+                INNER JOIN atendimentos a
+                    ON a.id = tc.atendimento_id
+                WHERE tc.usuario_id = %s
+                AND tc.status = 'transcrito'
+                AND COALESCE(a.inicio_em, tc.criado_em) >= CURRENT_DATE
+                AND COALESCE(a.inicio_em, tc.criado_em) < CURRENT_DATE + INTERVAL '1 day'
+                AND NOT (
+                    tc.atendimento_id = %s
+                    AND tc.ordem = %s
+                )
+                """,
+                (
+                    usuario_id,
+                    atendimento_id,
+                    ordem_int
+                )
+            )
+
+            segundos_dia_chunks = int(cursor.fetchone()[0] or 0)
+
+            if (
+                segundos_dia_chunks + duracao_chunk_segundos
+                > MAX_AUDIO_MINUTES_PER_DAY * 60
+            ):
+
+                log_evento(
+                    "limite_minutos_chunk",
+                    usuario_id=usuario_id,
+                    atendimento_id=atendimento_id,
+                    segundos_dia=segundos_dia_chunks,
+                    duracao_chunk_segundos=duracao_chunk_segundos,
+                    limite_segundos=MAX_AUDIO_MINUTES_PER_DAY * 60
+                )
+
+                return erro_limite(
+                    "Limite diario de minutos de audio atingido.",
+                    tipo="limite_minutos_dia",
+                    deve_parar_gravacao=True,
+                    minutos_hoje=round(segundos_dia_chunks / 60, 2),
+                    limite_minutos=MAX_AUDIO_MINUTES_PER_DAY
+                )
+
     arquivo = request.files["audio"]
 
     try:
@@ -3734,7 +3871,10 @@ def finalizar_atendimento():
             )
         )
     )
-    entidades_extraidas = extrair_entidades_transcricao(transcricao_original)
+    entidades_extraidas = extrair_entidades_transcricao(
+        transcricao_original,
+        session.get("usuario_nome")
+    )
 
     chunks_total = max(
         int(chunks_total_cliente or 0),
@@ -4620,7 +4760,10 @@ def reprocessar_resumo_atendimento(atendimento_id):
             )
             transcricao_original = transcricao
             transcricao = normalizar_entidades_faladas(transcricao_original)
-            entidades_extraidas = extrair_entidades_transcricao(transcricao_original)
+            entidades_extraidas = extrair_entidades_transcricao(
+                transcricao_original,
+                row[3] or session.get("usuario_nome")
+            )
 
             if not transcricao:
 
