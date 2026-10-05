@@ -287,6 +287,54 @@ def log_evento(evento, **dados):
     )
 
 
+def registrar_auditoria(
+    acao,
+    alvo_usuario_id=None,
+    atendimento_id=None,
+    detalhes=None
+):
+
+    ator_usuario_id = usuario_logado()
+
+    try:
+
+        with conectar_banco() as conn:
+
+            with conn.cursor() as cursor:
+
+                cursor.execute(
+                    """
+                    INSERT INTO auditoria_eventos (
+                        ator_usuario_id,
+                        alvo_usuario_id,
+                        atendimento_id,
+                        acao,
+                        detalhes,
+                        ip
+                    )
+                    VALUES (%s, %s, %s, %s, %s::jsonb, %s)
+                    """,
+                    (
+                        ator_usuario_id,
+                        alvo_usuario_id,
+                        atendimento_id,
+                        str(acao or "")[:120],
+                        json.dumps(
+                            detalhes or {},
+                            ensure_ascii=False,
+                            default=str
+                        ),
+                        ip_requisicao()
+                    )
+                )
+
+    except Exception:
+
+        logger.exception(
+            "FALHA AO REGISTRAR AUDITORIA"
+        )
+
+
 def limpar_texto(texto):
 
     texto = re.sub(
@@ -2804,6 +2852,14 @@ def admin_usuarios():
 
                 mensagem = "Usuario criado com sucesso."
 
+                registrar_auditoria(
+                    "usuario_criado",
+                    detalhes={
+                        "usuario": usuario,
+                        "perfil": perfil
+                    }
+                )
+
             except psycopg2.errors.UniqueViolation:
 
                 erro = "Esse usuario ja existe."
@@ -2877,6 +2933,14 @@ def admin_alterar_status(usuario_id):
                 )
             )
 
+    registrar_auditoria(
+        "usuario_status_alterado",
+        alvo_usuario_id=usuario_id,
+        detalhes={
+            "ativo": ativo
+        }
+    )
+
     return redirect("/admin")
 
 
@@ -2921,6 +2985,11 @@ def admin_alterar_senha(usuario_id):
                         usuario_id
                     )
                 )
+
+        registrar_auditoria(
+            "usuario_senha_redefinida",
+            alvo_usuario_id=usuario_id
+        )
 
     return redirect("/admin")
 
@@ -2968,6 +3037,14 @@ def admin_alterar_nome(usuario_id):
         if usuario_id == usuario_logado():
 
             session["usuario_nome"] = novo_usuario
+
+        registrar_auditoria(
+            "usuario_nome_alterado",
+            alvo_usuario_id=usuario_id,
+            detalhes={
+                "novo_usuario": novo_usuario
+            }
+        )
 
     except psycopg2.errors.UniqueViolation:
 
@@ -3026,6 +3103,14 @@ def admin_alterar_perfil(usuario_id):
 
         session["perfil"] = perfil
         session["is_admin"] = is_admin
+
+    registrar_auditoria(
+        "usuario_perfil_alterado",
+        alvo_usuario_id=usuario_id,
+        detalhes={
+            "perfil": perfil
+        }
+    )
 
     return redirect("/admin")
 
@@ -3087,6 +3172,14 @@ def admin_excluir_usuario(usuario_id):
                     atendimentos_vinculados=atendimentos_vinculados
                 )
 
+                registrar_auditoria(
+                    "usuario_desativado_preservando_historico",
+                    alvo_usuario_id=usuario_id,
+                    detalhes={
+                        "atendimentos_vinculados": atendimentos_vinculados
+                    }
+                )
+
                 return redirect(
                     "/admin?mensagem=usuario_desativado_historico_preservado"
                 )
@@ -3105,6 +3198,11 @@ def admin_excluir_usuario(usuario_id):
         "usuario_excluido_sem_historico",
         usuario_id_alvo=usuario_id,
         usuario_id_admin=usuario_logado()
+    )
+
+    registrar_auditoria(
+        "usuario_excluido_sem_historico",
+        alvo_usuario_id=usuario_id
     )
 
     return redirect("/admin")
