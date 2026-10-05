@@ -893,6 +893,52 @@ class FluxosIntegracaoTest(unittest.TestCase):
 
 class FallbackTranscricaoTest(unittest.TestCase):
 
+    def test_fallback_por_baixa_qualidade(self):
+
+        chamadas = []
+
+        def fake_transcrever_bytes(provider, audio_bytes, nome, mime, modelo=None):
+
+            chamadas.append(provider)
+
+            if provider == "groq":
+
+                return (
+                    "TRISHUL DRISHUIZSORVAGENCIA "
+                    "Transcreva somente as palavras audiveis"
+                )
+
+            return "Cliente informou que a nota fiscal esta cancelada."
+
+        arquivo = io.BytesIO(b"audio")
+        arquivo.filename = "chunk.webm"
+        arquivo.mimetype = "audio/webm"
+
+        with patch("services.ai.TRANSCRIBE_PROVIDER", "groq"), \
+                patch("services.ai.TRANSCRIBE_FALLBACK_PROVIDER", "openai"), \
+                patch("services.ai.transcrever_bytes", fake_transcrever_bytes), \
+                patch("services.ai.preprocessar_audio_transcricao", return_value={
+                    "audio_bytes": b"audio",
+                    "nome": "chunk.webm",
+                    "mime": "audio/webm",
+                    "audio_processado": False,
+                    "audio_original_path": "",
+                    "audio_processado_path": "",
+                    "tamanho_audio_original": 5,
+                    "tamanho_audio_processado": 5,
+                    "tempo_preprocessamento_segundos": 0,
+                    "erro_preprocessamento": ""
+                }):
+
+            resultado = ai.transcrever_chunk(arquivo)
+
+        self.assertEqual(chamadas, ["groq", "openai"])
+        self.assertEqual(resultado["provider_usado"], "openai")
+        self.assertTrue(resultado["fallback_usado"])
+        self.assertEqual(resultado["motivo_fallback"], "baixa_qualidade")
+        self.assertIn("nota fiscal", resultado["texto"].lower())
+
+
     def test_fallback_groq_para_openai(self):
 
         chamadas = []
