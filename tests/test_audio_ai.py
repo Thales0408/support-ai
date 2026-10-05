@@ -63,6 +63,14 @@ class AudioAiTest(unittest.TestCase):
             )
         )
 
+    def test_ruido_detecta_repeticao_e_ai(self):
+
+        self.assertTrue(
+            ai.transcricao_parece_baixa_qualidade(
+                "E ai E ai E ai E ai o cliente continuou falando."
+            )
+        )
+
     def test_audio_temporario_e_removido_por_padrao(self):
 
         with tempfile.TemporaryDirectory() as pasta:
