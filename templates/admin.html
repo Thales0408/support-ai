@@ -16,7 +16,10 @@
     <div class="admin-shell">
         <div class="topo">
             <a class="botao voltar" href="/"><i data-lucide="arrow-left"></i> Voltar ao painel</a>
-            <a class="botao voltar" href="/logout"><i data-lucide="log-out"></i> Sair</a>
+            <form method="POST" action="/logout" class="top-action-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="botao voltar" type="submit"><i data-lucide="log-out"></i> Sair</button>
+            </form>
             <button type="button" class="theme-toggle" data-theme-toggle aria-label="Alternar modo de cor">
                 <i data-lucide="moon" class="theme-icon-moon" aria-hidden="true"></i>
                 <i data-lucide="sun" class="theme-icon-sun" aria-hidden="true"></i>
