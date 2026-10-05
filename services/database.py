@@ -37,7 +37,7 @@ def senha_banco():
 
 _pool = None
 _pool_lock = Lock()
-_pool_slots = BoundedSemaphore(max(1, DB_POOL_MAX))
+_pool_slots = BoundedSemaphore(max(1, DB_POOL_MIN, DB_POOL_MAX))
 
 
 def parametros_banco():
@@ -112,10 +112,11 @@ def conectar_banco():
 
     _pool_slots.acquire()
     conn = None
-    pool = obter_pool()
+    pool = None
 
     try:
 
+        pool = obter_pool()
         conn = pool.getconn()
 
         if conn.closed:
@@ -136,7 +137,7 @@ def conectar_banco():
 
     finally:
 
-        if conn:
+        if conn and pool:
 
             pool.putconn(
                 conn,
