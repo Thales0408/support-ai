@@ -268,6 +268,84 @@ def preparar_observabilidade():
 
 
 @app.before_request
+def validar_sessao_ativa():
+
+    usuario_id = session.get("usuario_id")
+
+    if (
+        not usuario_id
+        or request.path.startswith("/static/")
+        or request.path in {"/login", "/health"}
+    ):
+
+        return None
+
+    with conectar_banco() as conn:
+
+        with conn.cursor() as cursor:
+
+            cursor.execute(
+                """
+                SELECT
+                    usuario,
+                    ativo,
+                    perfil,
+                    is_admin,
+                    COALESCE(session_version, 1)
+                FROM usuarios
+                WHERE id = %s
+                """,
+                (
+                    usuario_id,
+                )
+            )
+
+            row = cursor.fetchone()
+
+    versao_sessao = int(
+        session.get("session_version") or 1
+    )
+
+    if (
+        not row
+        or not bool(row[1])
+        or int(row[4] or 1) != versao_sessao
+    ):
+
+        session.clear()
+
+        if request.path.startswith((
+            "/atendimentos",
+            "/resultados",
+            "/conta",
+            "/transcrever",
+            "/exportar"
+        )):
+
+            return jsonify({
+                "erro": "Sessao expirada ou acesso revogado"
+            }), 401
+
+        return redirect("/login")
+
+    session["usuario_nome"] = row[0]
+    session["perfil"] = (
+        row[2]
+        if perfil_valido(row[2])
+        else (
+            "admin_tecnico"
+            if bool(row[3])
+            else "analista"
+        )
+    )
+    session["is_admin"] = (
+        session["perfil"] == "admin_tecnico"
+    )
+
+    return None
+
+
+@app.before_request
 def proteger_csrf():
 
     if request.method != "POST":
@@ -2820,6 +2898,9 @@ def login():
                         perfil == "admin_tecnico"
                     )
                     session["usuario_nome"] = usuario
+                    session["session_version"] = int(
+                        user[5] or 1
+                    )
 
                     limpar_tentativas_login(usuario, ip)
 
@@ -3049,7 +3130,9 @@ def admin_alterar_status(usuario_id):
             cursor.execute(
                 """
                 UPDATE usuarios
-                SET ativo = %s
+                SET
+                    ativo = %s,
+                    session_version = COALESCE(session_version, 1) + 1
                 WHERE id = %s
                 """,
                 (
@@ -3101,7 +3184,9 @@ def admin_alterar_senha(usuario_id):
                 cursor.execute(
                     """
                     UPDATE usuarios
-                    SET senha = %s
+                    SET
+                        senha = %s,
+                        session_version = COALESCE(session_version, 1) + 1
                     WHERE id = %s
                     """,
                     (
@@ -3226,7 +3311,8 @@ def admin_alterar_perfil(usuario_id):
                 UPDATE usuarios
                 SET
                     perfil = %s,
-                    is_admin = %s
+                    is_admin = %s,
+                    session_version = COALESCE(session_version, 1) + 1
                 WHERE id = %s
                 """,
                 (
@@ -5659,14 +5745,22 @@ def alterar_minha_senha():
             cursor.execute(
                 """
                 UPDATE usuarios
-                SET senha = %s
+                SET
+                    senha = %s,
+                    session_version = COALESCE(session_version, 1) + 1
                 WHERE id = %s
+                RETURNING session_version
                 """,
                 (
                     generate_password_hash(nova_senha),
                     usuario_id
                 )
             )
+
+            nova_versao_sessao = int(
+                cursor.fetchone()[0]
+            )
+            session["session_version"] = nova_versao_sessao
 
             registrar_auditoria(
                 cursor,
