@@ -516,10 +516,9 @@ class FakeCursor:
 
             self.result = [
                 self._linha_exportacao(atendimento)
-                for atendimento in sorted(
-                    self.state["atendimentos"].values(),
-                    key=lambda item: item["id"],
-                    reverse=True
+                for atendimento in self._atendimentos_escopo(
+                    sql_lower,
+                    params
                 )
             ]
             return
@@ -832,6 +831,81 @@ class FluxosIntegracaoTest(unittest.TestCase):
         )
         self.assertEqual(logout.status_code, 302)
         self.assertIn("/login", logout.headers["Location"])
+
+    def test_headers_seguranca_e_senha_minima(self):
+
+        response = self.client.get("/login")
+
+        self.assertEqual(
+            response.headers.get("X-Content-Type-Options"),
+            "nosniff"
+        )
+        self.assertEqual(
+            response.headers.get("X-Frame-Options"),
+            "DENY"
+        )
+        self.assertIn(
+            "frame-ancestors 'none'",
+            response.headers.get(
+                "Content-Security-Policy",
+                ""
+            )
+        )
+        self.assertEqual(
+            response.headers.get("Cache-Control"),
+            "no-store"
+        )
+
+        self.set_session()
+
+        senha_curta = self.post_json(
+            "/conta/senha",
+            {
+                "senha_atual": "senha",
+                "nova_senha": "123456"
+            }
+        )
+
+        self.assertEqual(
+            senha_curta.status_code,
+            400
+        )
+        self.assertIn(
+            str(app.PASSWORD_MIN_LENGTH),
+            senha_curta.get_json()["erro"]
+        )
+
+    def test_resultados_sao_paginados_e_sem_transcricao_completa(self):
+
+        self.set_session(
+            usuario_id=2,
+            perfil="supervisor",
+            nome="supervisor"
+        )
+
+        response = self.client.get(
+            "/resultados?periodo=todos&status=todos"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        dados = response.get_json()
+
+        self.assertEqual(
+            dados["paginacao"]["pagina"],
+            1
+        )
+        self.assertEqual(
+            dados["metricas"]["total"],
+            1
+        )
+        self.assertNotIn(
+            "transcricao_completa",
+            dados["resultados"][0]
+        )
+        self.assertIn(
+            "volume_por_dia",
+            dados
+        )
 
     def test_csrf_exigido_e_aceita_header_sem_hifen(self):
 
