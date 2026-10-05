@@ -1070,9 +1070,21 @@ body.login-page {
     text-align: left;
 }
 
+.login-page .login-kicker,
+.admin-page .admin-kicker {
+    color: var(--green);
+    display: block;
+    font-size: 10px;
+    font-weight: 850;
+    letter-spacing: 0.1em;
+    margin-bottom: 5px;
+    text-transform: uppercase;
+}
+
 .login-page .login-subtitle {
     color: var(--muted);
     font-size: 13px;
+    line-height: 1.5;
     margin: 0 0 26px;
 }
 
@@ -1181,6 +1193,45 @@ body.admin-page {
     min-height: 36px;
     padding: 7px 10px;
     text-decoration: none;
+}
+
+.admin-page .admin-heading {
+    align-items: center;
+    display: flex;
+    gap: 13px;
+    margin: 0 auto 20px;
+    max-width: 1420px;
+}
+
+.admin-page .admin-heading-icon {
+    align-items: center;
+    background: var(--green);
+    border-radius: 10px;
+    color: #fff;
+    display: inline-flex;
+    flex: 0 0 42px;
+    height: 42px;
+    justify-content: center;
+    width: 42px;
+}
+
+.admin-page .admin-heading-icon svg {
+    height: 20px;
+    width: 20px;
+}
+
+.admin-page .admin-heading h1 {
+    font-size: 24px;
+    letter-spacing: -0.03em;
+    margin: 0;
+}
+
+.admin-page .admin-heading p,
+.admin-page .section-copy {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.45;
+    margin: 4px 0 0;
 }
 
 .admin-page h1 {
