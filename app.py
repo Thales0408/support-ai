@@ -368,6 +368,27 @@ def tamanho_arquivo_upload(arquivo):
     return tamanho
 
 
+def tamanho_maximo_bytes(megabytes):
+
+    return max(1, int(megabytes or 1)) * 1024 * 1024
+
+
+def validar_tamanho_upload(arquivo, limite_mb):
+
+    tamanho = tamanho_arquivo_upload(arquivo)
+
+    if tamanho > tamanho_maximo_bytes(limite_mb):
+
+        return tamanho, jsonify({
+            "erro": (
+                "Arquivo de audio excede o limite de "
+                f"{limite_mb} MB."
+            )
+        }), 413
+
+    return tamanho, None
+
+
 def ip_requisicao():
 
     return request.remote_addr or "desconhecido"
@@ -3341,6 +3362,50 @@ def receber_chunk():
 
             cursor.execute(
                 """
+                SELECT
+                    status,
+                    texto,
+                    provider_usado,
+                    modelo_usado,
+                    fallback_usado,
+                    motivo_fallback,
+                    audio_processado
+                FROM transcricoes_chunks
+                WHERE atendimento_id = %s
+                AND usuario_id = %s
+                AND ordem = %s
+                """,
+                (
+                    atendimento_id,
+                    usuario_id,
+                    ordem_int
+                )
+            )
+
+            chunk_existente = cursor.fetchone()
+
+            if chunk_existente and chunk_existente[0] == "transcrito":
+
+                log_evento(
+                    "chunk_reutilizado_idempotencia",
+                    usuario_id=usuario_id,
+                    atendimento_id=atendimento_id,
+                    ordem=ordem_int
+                )
+
+                return jsonify({
+                    "status": "chunk_transcrito",
+                    "texto": chunk_existente[1] or "",
+                    "provider_usado": chunk_existente[2] or "",
+                    "modelo_usado": chunk_existente[3] or "",
+                    "fallback_usado": bool(chunk_existente[4]),
+                    "motivo_fallback": chunk_existente[5] or "",
+                    "audio_processado": bool(chunk_existente[6]),
+                    "reutilizado": True
+                })
+
+            cursor.execute(
+                """
                 SELECT COALESCE(SUM(duracao_segundos), 0)
                 FROM transcricoes_chunks
                 WHERE atendimento_id = %s
@@ -3429,9 +3494,23 @@ def receber_chunk():
 
     try:
 
-        tamanho_audio = (
-            tamanho_arquivo_upload(arquivo)
+        tamanho_audio, erro_tamanho = validar_tamanho_upload(
+            arquivo,
+            MAX_CHUNK_UPLOAD_MB
         )
+
+        if erro_tamanho:
+
+            log_evento(
+                "chunk_rejeitado_tamanho",
+                usuario_id=usuario_id,
+                atendimento_id=atendimento_id,
+                ordem=ordem_int,
+                tamanho_audio=tamanho_audio,
+                limite_mb=MAX_CHUNK_UPLOAD_MB
+            )
+
+            return erro_tamanho
 
         if (
             tamanho_audio < 1024
@@ -4431,6 +4510,22 @@ def transcrever_arquivo_unico():
     )
 
     arquivo = request.files["audio"]
+    tamanho_audio, erro_tamanho = validar_tamanho_upload(
+        arquivo,
+        MAX_SINGLE_UPLOAD_MB
+    )
+
+    if erro_tamanho:
+
+        log_evento(
+            "upload_unico_rejeitado_tamanho",
+            usuario_id=usuario_id,
+            tamanho_audio=tamanho_audio,
+            limite_mb=MAX_SINGLE_UPLOAD_MB
+        )
+
+        return erro_tamanho
+
     custo_estimado = estimar_custo_atendimento(
         30,
         True
