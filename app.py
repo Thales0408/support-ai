@@ -2807,7 +2807,10 @@ def login():
     )
 
 
-@app.route("/logout")
+@app.route(
+    "/logout",
+    methods=["POST"]
+)
 def logout():
 
     session.clear()
