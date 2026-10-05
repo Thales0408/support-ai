@@ -167,6 +167,10 @@ AUDIO_PREPROCESS_ENABLED = (
     ler_env("AUDIO_PREPROCESS_ENABLED", "true").lower()
     in ["1", "true", "sim", "yes", "on"]
 )
+AUDIO_DIAGNOSTICS_KEEP = (
+    ler_env("AUDIO_DIAGNOSTICS_KEEP", "false").lower()
+    in ["1", "true", "sim", "yes", "on"]
+)
 AUDIO_DIAGNOSTICS_DIR = ler_env(
     "AUDIO_DIAGNOSTICS_DIR",
     "uploads/audio_diagnostics"
