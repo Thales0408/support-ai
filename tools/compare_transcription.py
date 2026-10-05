@@ -1,5 +1,7 @@
 import argparse
 import difflib
+import mimetypes
+import re
 import sys
 import time
 from pathlib import Path
@@ -22,6 +24,15 @@ MODELOS = [
 ]
 
 
+def similaridade(a, b):
+
+    return difflib.SequenceMatcher(
+        None,
+        str(a or "").split(),
+        str(b or "").split()
+    ).ratio()
+
+
 def diferenca_resumida(textos):
 
     nomes = list(textos.keys())
@@ -30,22 +41,36 @@ def diferenca_resumida(textos):
 
         return "Sem comparacao suficiente."
 
-    base = textos[nomes[0]].split()
     linhas = []
 
-    for nome in nomes[1:]:
+    for indice, nome in enumerate(nomes):
 
-        comparado = textos[nome].split()
-        similaridade = difflib.SequenceMatcher(
-            None,
-            base,
-            comparado
-        ).ratio()
-        linhas.append(
-            f"{nomes[0]} vs {nome}: similaridade {similaridade:.2%}"
-        )
+        for outro in nomes[indice + 1:]:
+
+            linhas.append(
+                f"{nome} vs {outro}: similaridade "
+                f"{similaridade(textos[nome], textos[outro]):.2%}"
+            )
 
     return "\n".join(linhas)
+
+
+def sinais_ruido(texto):
+
+    texto = str(texto or "")
+    palavras = re.findall(r"[A-Za-zÀ-ÿ0-9]+", texto.lower())
+    repeticoes = sum(
+        1
+        for a, b in zip(palavras, palavras[1:])
+        if a == b
+    )
+    tokens_suspeitos = sum(
+        1
+        for palavra in palavras
+        if palavra.startswith(("trisk", "trish", "trist", "drishu"))
+    )
+
+    return repeticoes + tokens_suspeitos * 3
 
 
 def melhor_aparente(resultados):
@@ -62,87 +87,154 @@ def melhor_aparente(resultados):
 
     def pontuar(item):
 
-        texto = item["texto"]
-        palavras = texto.split()
-        numeros = sum(1 for char in texto if char.isdigit())
-        repeticoes = sum(
+        outros = [
+            outro
+            for outro in validos
+            if outro is not item
+            and outro["variante"] == item["variante"]
+        ]
+
+        consenso = (
+            sum(
+                similaridade(item["texto"], outro["texto"])
+                for outro in outros
+            ) / len(outros)
+            if outros
+            else 0
+        )
+        numeros = sum(
             1
-            for a, b in zip(palavras, palavras[1:])
-            if a.lower() == b.lower()
+            for char in item["texto"]
+            if char.isdigit()
         )
 
         return (
-            len(palavras)
-            + numeros * 0.3
-            - repeticoes * 2
+            consenso * 100
+            + min(numeros, 30) * 0.15
+            - sinais_ruido(item["texto"]) * 4
         )
 
     melhor = max(validos, key=pontuar)
 
-    return f"{melhor['provider']} {melhor['modelo']}"
+    return (
+        f"{melhor['variante']} / "
+        f"{melhor['provider']} {melhor['modelo']}"
+    )
 
 
 def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("audio")
+    parser.add_argument(
+        "--duracao-segundos",
+        type=float,
+        default=60,
+        help="Duracao real do audio usada apenas para estimativa de custo."
+    )
     args = parser.parse_args()
 
     caminho = Path(args.audio)
-    audio_bytes = caminho.read_bytes()
+    audio_original = caminho.read_bytes()
+    mime_original = (
+        mimetypes.guess_type(caminho.name)[0]
+        or "audio/webm"
+    )
     preprocessado = preprocessar_audio_transcricao(
-        audio_bytes,
+        audio_original,
         caminho.name
     )
-    audio_transcricao = preprocessado["audio_bytes"]
+
+    variantes = [
+        (
+            "original",
+            audio_original,
+            caminho.name,
+            mime_original
+        )
+    ]
+
+    if preprocessado.get("audio_processado"):
+
+        variantes.append(
+            (
+                "processado",
+                preprocessado["audio_bytes"],
+                preprocessado["nome"],
+                preprocessado["mime"]
+            )
+        )
+
     resultados = []
 
-    for provider, modelo in MODELOS:
+    for variante, audio_bytes, nome, mime in variantes:
 
-        inicio = time.perf_counter()
+        for provider, modelo in MODELOS:
 
-        try:
+            inicio = time.perf_counter()
 
-            texto = transcrever_bytes(
-                provider,
-                audio_transcricao,
-                preprocessado["nome"],
-                preprocessado["mime"],
-                modelo=modelo
+            try:
+
+                texto = transcrever_bytes(
+                    provider,
+                    audio_bytes,
+                    nome,
+                    mime,
+                    modelo=modelo
+                )
+                erro = ""
+
+            except Exception as exc:
+
+                texto = ""
+                erro = str(exc)
+
+            segundos_execucao = round(
+                time.perf_counter() - inicio,
+                2
             )
-            erro = ""
+            custo = estimar_custo_transcricao(
+                max(1, int(args.duracao_segundos)),
+                provider
+            )
 
-        except Exception as exc:
-
-            texto = ""
-            erro = str(exc)
-
-        segundos = round(time.perf_counter() - inicio, 2)
-        custo = estimar_custo_transcricao(
-            60,
-            provider
-        )
-        resultados.append({
-            "provider": provider,
-            "modelo": modelo,
-            "texto": texto,
-            "tempo": segundos,
-            "custo": custo,
-            "erro": erro
-        })
+            resultados.append({
+                "variante": variante,
+                "provider": provider,
+                "modelo": modelo,
+                "texto": texto,
+                "tempo": segundos_execucao,
+                "custo": custo,
+                "erro": erro
+            })
 
     print("Audio original:", caminho)
-    print("Audio processado:", preprocessado.get("audio_processado_path") or "nao processado")
+    print(
+        "Audio processado:",
+        preprocessado.get("audio_processado_path")
+        or "nao processado"
+    )
+    print(
+        "Duracao usada no custo:",
+        f"{args.duracao_segundos:.1f}s"
+    )
     print()
 
     for item in resultados:
 
-        titulo = f"{item['provider']} {item['modelo']}"
+        titulo = (
+            f"{item['variante']} | "
+            f"{item['provider']} {item['modelo']}"
+        )
         print("=" * len(titulo))
         print(titulo)
         print("=" * len(titulo))
         print("Tempo:", item["tempo"], "s")
-        print("Custo estimado:", "US$", f"{item['custo']:.4f}")
+        print(
+            "Custo estimado:",
+            "US$",
+            f"{item['custo']:.4f}"
+        )
 
         if item["erro"]:
 
@@ -155,7 +247,10 @@ def main():
         print()
 
     textos = {
-        f"{item['provider']} {item['modelo']}": item["texto"]
+        (
+            f"{item['variante']} | "
+            f"{item['provider']} {item['modelo']}"
+        ): item["texto"]
         for item in resultados
         if item["texto"]
     }
@@ -164,7 +259,10 @@ def main():
     print("---------------------")
     print(diferenca_resumida(textos))
     print()
-    print("Melhor resultado aparente:", melhor_aparente(resultados))
+    print(
+        "Melhor resultado aparente (heuristica):",
+        melhor_aparente(resultados)
+    )
 
 
 if __name__ == "__main__":
