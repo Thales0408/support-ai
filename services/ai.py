@@ -14,6 +14,8 @@ import re
 import unicodedata
 
 from config import (
+    AI_MAX_RETRIES,
+    AI_TIMEOUT_SECONDS,
     GROQ_API_KEY,
     GROQ_BASE_URL,
     OPENAI_API_KEY,
@@ -40,7 +42,11 @@ class LimiteCustoFallbackTranscricao(Exception):
 
 
 summary_client = (
-    OpenAI(api_key=OPENAI_API_KEY)
+    OpenAI(
+        api_key=OPENAI_API_KEY,
+        timeout=float(AI_TIMEOUT_SECONDS),
+        max_retries=AI_MAX_RETRIES
+    )
     if OPENAI_API_KEY
     else None
 )
@@ -157,7 +163,9 @@ def cliente_transcricao(provider):
 
         return OpenAI(
             api_key=GROQ_API_KEY,
-            base_url=GROQ_BASE_URL
+            base_url=GROQ_BASE_URL,
+            timeout=float(AI_TIMEOUT_SECONDS),
+            max_retries=AI_MAX_RETRIES
         )
 
     if provider == "openai":
