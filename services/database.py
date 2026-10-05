@@ -61,7 +61,8 @@ def conectar_banco():
             dbname=DB_NAME,
             user=DB_USER,
             password=db_password,
-            sslmode="require"
+            sslmode="require",
+            connect_timeout=DB_CONNECT_TIMEOUT_SECONDS
         )
 
         return configurar_conexao(conn)
@@ -71,7 +72,10 @@ def conectar_banco():
         raise RuntimeError("DATABASE_URL ou DB_PASSWORD nao configurada")
 
     return configurar_conexao(
-        psycopg2.connect(DATABASE_URL)
+        psycopg2.connect(
+            DATABASE_URL,
+            connect_timeout=DB_CONNECT_TIMEOUT_SECONDS
+        )
     )
 
 
