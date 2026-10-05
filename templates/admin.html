@@ -1,236 +1,206 @@
 <!DOCTYPE html>
-
 <html lang="pt-br">
-
 <head>
-
     <meta charset="UTF-8">
-
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin - 55PBX AI</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
     <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.svg') }}">
     <meta name="theme-color" content="#087847">
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
-
     <link rel="stylesheet" href="{{ url_for('static', filename='theme.css') }}">
-
 </head>
 
 <body class="admin-page">
-
-    <div class="topo">
-        <button type="button" class="theme-toggle" data-theme-toggle aria-label="Alternar modo de cor"><i data-lucide="moon" class="theme-icon-moon" aria-hidden="true"></i><i data-lucide="sun" class="theme-icon-sun" aria-hidden="true"></i><span data-theme-label>Noite</span></button>
-        <a class="botao voltar" href="/"><i data-lucide="arrow-left"></i> Voltar ao painel</a>
-        <a class="botao voltar" href="/logout"><i data-lucide="log-out"></i> Sair</a>
-    </div>
-
-    <div class="admin-heading">
-        <span class="admin-heading-icon"><i data-lucide="users-round"></i></span>
-        <div>
-            <span class="admin-kicker">Configurações</span>
-            <h1>Administração de usuários</h1>
-            <p>Gerencie acessos, perfis e credenciais da equipe.</p>
+    <div class="admin-shell">
+        <div class="topo">
+            <a class="botao voltar" href="/"><i data-lucide="arrow-left"></i> Voltar ao painel</a>
+            <a class="botao voltar" href="/logout"><i data-lucide="log-out"></i> Sair</a>
+            <button type="button" class="theme-toggle" data-theme-toggle aria-label="Alternar modo de cor">
+                <i data-lucide="moon" class="theme-icon-moon" aria-hidden="true"></i>
+                <i data-lucide="sun" class="theme-icon-sun" aria-hidden="true"></i>
+                <span data-theme-label>Noite</span>
+            </button>
         </div>
-    </div>
 
-    {% if mensagem %}
-        <div class="mensagem">{{ mensagem }}</div>
-    {% endif %}
+        <div class="admin-heading">
+            <span class="admin-heading-icon"><i data-lucide="users-round"></i></span>
+            <div>
+                <span class="admin-kicker">Configurações</span>
+                <h1>Equipe e acessos</h1>
+                <p>Gerencie usuários sem poluir a operação principal.</p>
+            </div>
+        </div>
 
-    {% if erro %}
-        <div class="erro">{{ erro }}</div>
-    {% endif %}
+        {% if mensagem %}
+            <div class="mensagem">{{ mensagem }}</div>
+        {% endif %}
 
-    <section class="box">
-        <span class="admin-kicker">Acesso</span>
-        <h2>Novo usuário</h2>
-        <p class="section-copy">Crie um acesso e defina o nível de permissão inicial.</p>
+        {% if erro %}
+            <div class="erro">{{ erro }}</div>
+        {% endif %}
 
-        <form method="POST">
-            <div class="grid">
+        <section class="box admin-create-card">
+            <div class="section-heading-row">
                 <div>
-                    <label for="usuario">Usuário</label>
-                    <input
-                        id="usuario"
-                        name="usuario"
-                        required
-                    >
+                    <span class="admin-kicker">Novo acesso</span>
+                    <h2>Criar usuário</h2>
+                    <p class="section-copy">Informe os dados básicos. O restante pode ser ajustado depois.</p>
                 </div>
-
-                <div>
-                    <label for="senha">Senha inicial</label>
-                    <input
-                        id="senha"
-                        name="senha"
-                        type="password"
-                        required
-                    >
-                </div>
-
-                <div>
-                    <label for="perfil">Perfil</label>
-                    <select
-                        id="perfil"
-                        name="perfil"
-                    >
-                        <option value="analista">Analista</option>
-                        <option value="supervisor">Supervisor</option>
-                        <option value="admin_tecnico">Admin tecnico</option>
-                    </select>
-                </div>
+                <span class="section-icon"><i data-lucide="user-plus"></i></span>
             </div>
 
-            <button
-                class="principal"
-                type="submit"
-                style="margin-top:16px"
-            >Criar usuário</button>
-        </form>
-    </section>
+            <form method="POST" class="create-user-form">
+                <div class="grid">
+                    <div>
+                        <label for="usuario">Usuário</label>
+                        <input id="usuario" name="usuario" placeholder="Nome ou login" required>
+                    </div>
 
-    <section class="box">
-        <span class="admin-kicker">Equipe</span>
-        <h2>Usuários cadastrados</h2>
+                    <div>
+                        <label for="senha">Senha inicial</label>
+                        <input id="senha" name="senha" type="password" placeholder="Senha temporária" required>
+                    </div>
 
-        <p class="hint">
-            Excluir um usuario tambem remove os atendimentos vinculados a ele.
-        </p>
+                    <div>
+                        <label for="perfil">Perfil</label>
+                        <select id="perfil" name="perfil">
+                            <option value="analista">Analista</option>
+                            <option value="supervisor">Supervisor</option>
+                            <option value="admin_tecnico">Admin técnico</option>
+                        </select>
+                    </div>
+                </div>
 
-        <table>
-            <thead>
-                <tr>
-                    <th>Usuário</th>
-                    <th>Perfil</th>
-                    <th>Status</th>
-                    <th>Criado em</th>
-                    <th>Ações</th>
-                </tr>
-            </thead>
-            <tbody>
+                <div class="create-user-actions">
+                    <button class="principal" type="submit"><i data-lucide="plus"></i> Criar usuário</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="box team-box">
+            <div class="section-heading-row team-heading">
+                <div>
+                    <span class="admin-kicker">Equipe</span>
+                    <h2>Usuários cadastrados</h2>
+                    <p class="section-copy">{{ usuarios|length }} usuário(s) cadastrado(s).</p>
+                </div>
+                <span class="admin-hint-chip"><i data-lucide="info"></i> Abra um usuário para editar</span>
+            </div>
+
+            <div class="user-list">
                 {% for item in usuarios %}
-                    <tr>
-                        <td>
-                            <form
-                                class="inline-form"
-                                method="POST"
-                                action="/admin/usuarios/{{ item[0] }}/nome"
-                            >
-                                <input
-                                    name="usuario"
-                                    value="{{ item[1] }}"
-                                    required
-                                >
-                                <button
-                                    class="principal"
-                                    type="submit"
-                                >Salvar</button>
-                            </form>
-                        </td>
-                        <td>
-                            <form
-                                class="inline-form"
-                                method="POST"
-                                action="/admin/usuarios/{{ item[0] }}/perfil"
-                            >
-                                <select name="perfil">
-                                    <option
-                                        value="analista"
-                                        {% if item[3] == "analista" %}selected{% endif %}
-                                    >Analista</option>
-                                    <option
-                                        value="supervisor"
-                                        {% if item[3] == "supervisor" %}selected{% endif %}
-                                    >Supervisor</option>
-                                    <option
-                                        value="admin_tecnico"
-                                        {% if item[3] == "admin_tecnico" %}selected{% endif %}
-                                    >Admin tecnico</option>
-                                </select>
-                                <button
-                                    class="principal"
-                                    type="submit"
-                                >Salvar</button>
-                            </form>
-                        </td>
-                        <td>
-                            {% if item[4] %}
-                                Ativo
-                            {% else %}
-                                Inativo
-                            {% endif %}
-                        </td>
-                        <td>{{ item[5] }}</td>
-                        <td>
-                            <div class="acoes">
-                                <form
-                                    method="POST"
-                                    action="/admin/usuarios/{{ item[0] }}/status"
-                                >
-                                    {% if item[4] %}
-                                        <input
-                                            type="hidden"
-                                            name="ativo"
-                                            value="false"
-                                        >
-                                        <button
-                                            class="perigo"
-                                            type="submit"
-                                            {% if item[0] == usuario_id %}disabled{% endif %}
-                                        >Desativar</button>
+                    <details class="user-card">
+                        <summary class="user-summary">
+                            <span class="user-avatar">{{ (item[1] or "?")[0]|upper }}</span>
+
+                            <span class="user-primary">
+                                <strong>{{ item[1] }}</strong>
+                                <span class="user-meta">
+                                    {% if item[3] == "admin_tecnico" %}
+                                        Admin técnico
+                                    {% elif item[3] == "supervisor" %}
+                                        Supervisor
                                     {% else %}
-                                        <input
-                                            type="hidden"
-                                            name="ativo"
-                                            value="true"
-                                        >
-                                        <button
-                                            class="sucesso"
-                                            type="submit"
-                                        >Ativar</button>
+                                        Analista
                                     {% endif %}
-                                </form>
+                                    · criado em
+                                    <time class="user-created" datetime="{{ item[5] }}">{{ item[5] }}</time>
+                                </span>
+                            </span>
 
-                                <form
-                                    class="inline-form"
-                                    method="POST"
-                                    action="/admin/usuarios/{{ item[0] }}/senha"
-                                >
-                                    <input
-                                        name="senha"
-                                        type="password"
-                                        placeholder="Nova senha"
-                                        required
-                                    >
-                                    <button
-                                        class="principal"
-                                        type="submit"
-                                    >Redefinir</button>
-                                </form>
+                            <span class="status-pill {% if item[4] %}status-active{% else %}status-inactive{% endif %}">
+                                <span class="status-dot-small"></span>
+                                {% if item[4] %}Ativo{% else %}Inativo{% endif %}
+                            </span>
 
-                                <form
-                                    method="POST"
-                                    action="/admin/usuarios/{{ item[0] }}/excluir"
-                                    onsubmit="return confirm('Excluir este usuario e todos os atendimentos vinculados?')"
-                                >
-                                    <button
-                                        class="perigo"
-                                        type="submit"
-                                        {% if item[0] == usuario_id %}disabled{% endif %}
-                                    >Excluir</button>
+                            <span class="user-expand"><i data-lucide="chevron-down"></i></span>
+                        </summary>
+
+                        <div class="user-editor">
+                            <div class="user-setting-card">
+                                <div class="setting-title">
+                                    <span><i data-lucide="badge-check"></i></span>
+                                    <div>
+                                        <strong>Identificação</strong>
+                                        <small>Altere o nome/login exibido.</small>
+                                    </div>
+                                </div>
+                                <form method="POST" action="/admin/usuarios/{{ item[0] }}/nome" class="setting-form">
+                                    <input name="usuario" value="{{ item[1] }}" required>
+                                    <button class="principal" type="submit">Salvar nome</button>
                                 </form>
                             </div>
-                        </td>
-                    </tr>
+
+                            <div class="user-setting-card">
+                                <div class="setting-title">
+                                    <span><i data-lucide="shield-check"></i></span>
+                                    <div>
+                                        <strong>Perfil de acesso</strong>
+                                        <small>Define o nível de permissão.</small>
+                                    </div>
+                                </div>
+                                <form method="POST" action="/admin/usuarios/{{ item[0] }}/perfil" class="setting-form">
+                                    <select name="perfil">
+                                        <option value="analista" {% if item[3] == "analista" %}selected{% endif %}>Analista</option>
+                                        <option value="supervisor" {% if item[3] == "supervisor" %}selected{% endif %}>Supervisor</option>
+                                        <option value="admin_tecnico" {% if item[3] == "admin_tecnico" %}selected{% endif %}>Admin técnico</option>
+                                    </select>
+                                    <button class="principal" type="submit">Salvar perfil</button>
+                                </form>
+                            </div>
+
+                            <div class="user-setting-card">
+                                <div class="setting-title">
+                                    <span><i data-lucide="key-round"></i></span>
+                                    <div>
+                                        <strong>Redefinir senha</strong>
+                                        <small>Use somente quando necessário.</small>
+                                    </div>
+                                </div>
+                                <form method="POST" action="/admin/usuarios/{{ item[0] }}/senha" class="setting-form">
+                                    <input name="senha" type="password" placeholder="Nova senha" required>
+                                    <button class="principal" type="submit">Redefinir</button>
+                                </form>
+                            </div>
+
+                            <div class="user-setting-card user-danger-card">
+                                <div class="setting-title">
+                                    <span><i data-lucide="user-cog"></i></span>
+                                    <div>
+                                        <strong>Conta</strong>
+                                        <small>Desative temporariamente ou exclua.</small>
+                                    </div>
+                                </div>
+
+                                <div class="account-actions">
+                                    <form method="POST" action="/admin/usuarios/{{ item[0] }}/status">
+                                        {% if item[4] %}
+                                            <input type="hidden" name="ativo" value="false">
+                                            <button class="perigo-soft" type="submit" {% if item[0] == usuario_id %}disabled{% endif %}>Desativar</button>
+                                        {% else %}
+                                            <input type="hidden" name="ativo" value="true">
+                                            <button class="sucesso" type="submit">Ativar</button>
+                                        {% endif %}
+                                    </form>
+
+                                    <form method="POST" action="/admin/usuarios/{{ item[0] }}/excluir" onsubmit="return confirm('Excluir este usuário e todos os atendimentos vinculados?')">
+                                        <button class="perigo" type="submit" {% if item[0] == usuario_id %}disabled{% endif %}><i data-lucide="trash-2"></i> Excluir</button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                {% else %}
+                    <div class="admin-empty">
+                        <i data-lucide="users"></i>
+                        <strong>Nenhum usuário cadastrado.</strong>
+                    </div>
                 {% endfor %}
-            </tbody>
-        </table>
-    </section>
+            </div>
+        </section>
+    </div>
 
     <script>
         const csrfToken = "{{ csrf_token() }}"
@@ -248,9 +218,25 @@
                 input.value = csrfToken
                 form.appendChild(input)
             })
+
+        document
+            .querySelectorAll(".user-created")
+            .forEach(element => {
+                const value = element.getAttribute("datetime")
+                const date = value ? new Date(value) : null
+
+                if (date && !Number.isNaN(date.getTime())) {
+                    element.textContent = date.toLocaleString("pt-BR", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit"
+                    })
+                }
+            })
+
+        document.addEventListener("DOMContentLoaded", () => window.lucide?.createIcons())
     </script>
-
-    <script>document.addEventListener("DOMContentLoaded", () => window.lucide?.createIcons())</script>
 </body>
-
 </html>
