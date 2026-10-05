@@ -63,7 +63,7 @@
 
                     <div>
                         <label for="senha">Senha inicial</label>
-                        <input id="senha" name="senha" type="password" placeholder="Senha temporária" required>
+                        <input id="senha" name="senha" type="password" placeholder="Senha temporária (mín. 12 caracteres)" required>
                     </div>
 
                     <div>
@@ -163,7 +163,7 @@
                                     </div>
                                 </div>
                                 <form method="POST" action="/admin/usuarios/{{ item[0] }}/senha" class="setting-form">
-                                    <input name="senha" type="password" placeholder="Nova senha" required>
+                                    <input name="senha" type="password" placeholder="Nova senha (mín. 12)" required>
                                     <button class="principal" type="submit">Redefinir</button>
                                 </form>
                             </div>
