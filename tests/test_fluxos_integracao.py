@@ -577,6 +577,28 @@ class FluxosIntegracaoTest(unittest.TestCase):
             headers={token_header: "csrf-teste"}
         )
 
+    def test_health_mostra_banco_e_ffmpeg(self):
+
+        with patch(
+            "app.shutil.which",
+            return_value="/usr/bin/ffmpeg"
+        ):
+
+            response = self.client.get("/health")
+
+        self.assertEqual(response.status_code, 200)
+        dados = response.get_json()
+        self.assertEqual(dados["status"], "ok")
+        self.assertEqual(dados["database"], "ok")
+
+        if app.AUDIO_PREPROCESS_ENABLED:
+
+            self.assertEqual(dados["ffmpeg"], "ok")
+
+        else:
+
+            self.assertEqual(dados["ffmpeg"], "desativado")
+
     def test_login_logout_dashboard(self):
 
         with self.client.session_transaction() as sess:
