@@ -34,6 +34,10 @@ class LayoutTests(unittest.TestCase):
         self.assertIn('/static/favicon.svg', html)
         self.assertIn('class="analyst-table"', html)
         self.assertIn('class="main-table"', html)
+        self.assertIn('id="pagina-anterior"', html)
+        self.assertIn('id="pagina-proxima"', html)
+        self.assertIn('action="/logout"', html)
+        self.assertNotIn('href="/logout"', html)
         self.assertIn('data-theme-toggle', html)
 
     def test_custo_so_para_admin_tecnico(self):
