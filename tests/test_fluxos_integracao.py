@@ -30,6 +30,32 @@ class FakeCursor:
         sql_lower = " ".join(str(sql).lower().split())
         self.state["queries"].append((sql_lower, params))
 
+        if (
+            "select usuario, ativo, perfil, is_admin"
+            in sql_lower
+            and "from usuarios" in sql_lower
+            and "where id = %s" in sql_lower
+        ):
+
+            usuario_id = int(params[0])
+            user = next(
+                (
+                    item
+                    for item in self.state["users_by_name"].values()
+                    if item["id"] == usuario_id
+                ),
+                None
+            )
+            self.result = [
+                (
+                    user["usuario"],
+                    user["ativo"],
+                    user["perfil"],
+                    user["is_admin"]
+                )
+            ] if user else []
+            return
+
         if "from usuarios" in sql_lower and "where usuario = %s" in sql_lower:
 
             usuario = params[0]
@@ -646,6 +672,45 @@ class FluxosIntegracaoTest(unittest.TestCase):
         logout = self.client.get("/logout", follow_redirects=False)
         self.assertEqual(logout.status_code, 302)
         self.assertIn("/login", logout.headers["Location"])
+
+    def test_usuario_desativado_perde_sessao_imediatamente(self):
+
+        self.set_session()
+        self.state["users_by_name"]["analista"]["ativo"] = False
+
+        response = self.client.get(
+            "/resultados"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            401
+        )
+        self.assertIn(
+            "desativado",
+            response.get_json()["erro"].lower()
+        )
+
+    def test_perfil_alterado_atualiza_sessao(self):
+
+        self.set_session(
+            usuario_id=1,
+            perfil="analista",
+            nome="analista"
+        )
+        self.state["users_by_name"]["analista"]["perfil"] = "supervisor"
+
+        response = self.client.get(
+            "/resultados"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            200
+        )
+        self.assertTrue(
+            response.get_json()["is_supervisor"]
+        )
 
     def test_csrf_exigido_e_aceita_header_sem_hifen(self):
 
