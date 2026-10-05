@@ -4,6 +4,7 @@ import psycopg2
 
 from config import (
     ADMIN_SENHA,
+    APP_TIMEZONE,
     ADMIN_USUARIO,
     DATABASE_URL,
     DB_HOST,
@@ -28,6 +29,20 @@ def senha_banco():
     return DB_PASSWORD
 
 
+def configurar_conexao(conn):
+
+    with conn.cursor() as cursor:
+
+        cursor.execute(
+            "SET TIME ZONE %s",
+            (
+                APP_TIMEZONE,
+            )
+        )
+
+    return conn
+
+
 def conectar_banco():
 
     db_password = senha_banco()
@@ -40,7 +55,7 @@ def conectar_banco():
                 "DB_HOST, DB_PORT, DB_NAME e DB_USER precisam estar configuradas"
             )
 
-        return psycopg2.connect(
+        conn = psycopg2.connect(
             host=DB_HOST,
             port=DB_PORT,
             dbname=DB_NAME,
@@ -49,11 +64,15 @@ def conectar_banco():
             sslmode="require"
         )
 
+        return configurar_conexao(conn)
+
     if not DATABASE_URL:
 
         raise RuntimeError("DATABASE_URL ou DB_PASSWORD nao configurada")
 
-    return psycopg2.connect(DATABASE_URL)
+    return configurar_conexao(
+        psycopg2.connect(DATABASE_URL)
+    )
 
 
 def diagnostico_banco():
@@ -451,35 +470,59 @@ def inicializar_banco():
 
             cursor.execute(
                 """
-                ALTER TABLE atendimentos
-                DROP CONSTRAINT IF EXISTS atendimentos_usuario_id_fkey
+                DO $
+                BEGIN
+                    IF EXISTS (
+                        SELECT 1
+                        FROM pg_constraint
+                        WHERE conname = 'atendimentos_usuario_id_fkey'
+                        AND confdeltype <> 'r'
+                    ) THEN
+                        ALTER TABLE atendimentos
+                        DROP CONSTRAINT atendimentos_usuario_id_fkey;
+                    END IF;
+
+                    IF NOT EXISTS (
+                        SELECT 1
+                        FROM pg_constraint
+                        WHERE conname = 'atendimentos_usuario_id_fkey'
+                    ) THEN
+                        ALTER TABLE atendimentos
+                        ADD CONSTRAINT atendimentos_usuario_id_fkey
+                        FOREIGN KEY (usuario_id)
+                        REFERENCES usuarios(id)
+                        ON DELETE RESTRICT;
+                    END IF;
+                END $;
                 """
             )
 
             cursor.execute(
                 """
-                ALTER TABLE atendimentos
-                ADD CONSTRAINT atendimentos_usuario_id_fkey
-                FOREIGN KEY (usuario_id)
-                REFERENCES usuarios(id)
-                ON DELETE RESTRICT
-                """
-            )
+                DO $
+                BEGIN
+                    IF EXISTS (
+                        SELECT 1
+                        FROM pg_constraint
+                        WHERE conname = 'transcricoes_chunks_usuario_id_fkey'
+                        AND confdeltype <> 'r'
+                    ) THEN
+                        ALTER TABLE transcricoes_chunks
+                        DROP CONSTRAINT transcricoes_chunks_usuario_id_fkey;
+                    END IF;
 
-            cursor.execute(
-                """
-                ALTER TABLE transcricoes_chunks
-                DROP CONSTRAINT IF EXISTS transcricoes_chunks_usuario_id_fkey
-                """
-            )
-
-            cursor.execute(
-                """
-                ALTER TABLE transcricoes_chunks
-                ADD CONSTRAINT transcricoes_chunks_usuario_id_fkey
-                FOREIGN KEY (usuario_id)
-                REFERENCES usuarios(id)
-                ON DELETE RESTRICT
+                    IF NOT EXISTS (
+                        SELECT 1
+                        FROM pg_constraint
+                        WHERE conname = 'transcricoes_chunks_usuario_id_fkey'
+                    ) THEN
+                        ALTER TABLE transcricoes_chunks
+                        ADD CONSTRAINT transcricoes_chunks_usuario_id_fkey
+                        FOREIGN KEY (usuario_id)
+                        REFERENCES usuarios(id)
+                        ON DELETE RESTRICT;
+                    END IF;
+                END $;
                 """
             )
 
