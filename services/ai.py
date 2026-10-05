@@ -23,7 +23,9 @@ from config import (
     TRANSCRIBE_PROVIDER,
     TRANSCRIBE_USD_HORA,
     TRANSCRIBE_USD_HORA_GROQ,
-    TRANSCRIBE_USD_MINUTO_OPENAI
+    TRANSCRIBE_USD_HORA_GROQ_LARGE_V3,
+    TRANSCRIBE_USD_MINUTO_OPENAI,
+    TRANSCRIBE_USD_MINUTO_OPENAI_MINI
 )
 from services.audio import preprocessar_audio_transcricao
 
@@ -338,21 +340,40 @@ def transcrever_chunk(arquivo, validar_fallback=None):
         }
 
 
-def estimar_custo_transcricao(segundos_transcritos, provider="groq"):
+def estimar_custo_transcricao(
+    segundos_transcritos,
+    provider="groq",
+    modelo=None
+):
 
     segundos = max(0, int(segundos_transcritos or 0))
+    provider = str(provider or "").lower()
 
     if provider == "openai":
 
+        modelo_efetivo = modelo or OPENAI_TRANSCRIBE_MODEL
+        taxa_minuto = (
+            TRANSCRIBE_USD_MINUTO_OPENAI_MINI
+            if modelo_efetivo == "gpt-4o-mini-transcribe"
+            else TRANSCRIBE_USD_MINUTO_OPENAI
+        )
+
         return round(
-            (segundos / 60) * TRANSCRIBE_USD_MINUTO_OPENAI,
+            (segundos / 60) * taxa_minuto,
             4
         )
 
     if provider == "groq":
 
+        modelo_efetivo = modelo or TRANSCRIBE_MODEL
+        taxa_hora = (
+            TRANSCRIBE_USD_HORA_GROQ_LARGE_V3
+            if modelo_efetivo == "whisper-large-v3"
+            else TRANSCRIBE_USD_HORA_GROQ
+        )
+
         return round(
-            (segundos / 3600) * TRANSCRIBE_USD_HORA_GROQ,
+            (segundos / 3600) * taxa_hora,
             4
         )
 
