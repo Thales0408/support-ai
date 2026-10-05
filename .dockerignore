@@ -1,0 +1,12 @@
+.git
+.gitignore
+__pycache__
+*.py[cod]
+*.log
+.env
+.venv
+venv
+uploads/audio_diagnostics/*
+.pytest_cache
+.coverage
+htmlcov
