@@ -3874,27 +3874,44 @@ def receber_chunk():
                     )
                 )
 
-                fallback_openai_ja_registrado = (
+                chunk_ja_contabilizado = (
                     chunk_anterior
                     and chunk_anterior[0] == "transcrito"
-                    and chunk_anterior[1] == "openai"
-                    and chunk_anterior[2]
                 )
 
-                if (
-                    fallback_usado
-                    and provider_usado == "openai"
-                    and not fallback_openai_ja_registrado
-                ):
+                if not chunk_ja_contabilizado:
+
+                    if (
+                        fallback_usado
+                        and provider_tentado == "groq"
+                        and provider_usado == "openai"
+                        and motivo_fallback == "baixa_qualidade"
+                    ):
+
+                        registrar_uso_evento(
+                            cursor,
+                            usuario_id,
+                            atendimento_id,
+                            "transcricao_groq_qualidade",
+                            estimar_custo_transcricao(
+                                duracao_chunk_segundos,
+                                "groq"
+                            )
+                        )
 
                     registrar_uso_evento(
                         cursor,
                         usuario_id,
                         atendimento_id,
-                        "transcricao_fallback",
+                        (
+                            "transcricao_fallback"
+                            if fallback_usado
+                            else "transcricao"
+                        ),
                         estimar_custo_transcricao(
                             duracao_chunk_segundos,
-                            "openai"
+                            provider_usado,
+                            modelo=modelo_usado
                         )
                     )
 
@@ -4452,18 +4469,19 @@ def finalizar_atendimento():
         segundos_groq_fallback_qualidade,
         "groq"
     )
-    custo_transcricao_openai = estimar_custo_transcricao(
-        segundos_por_provider.get("openai", 0),
-        "openai"
+    custo_resumo = (
+        estimar_custo_atendimento(0, True)
+        if bool(transcricao)
+        else 0
     )
 
     if bool(transcricao):
 
-        custo_estimado += estimar_custo_atendimento(0, True)
+        custo_estimado += custo_resumo
         custo_estimado = round(custo_estimado, 4)
 
     custo_evento_final = round(
-        max(0, custo_estimado - custo_transcricao_openai),
+        custo_resumo,
         4
     )
 
@@ -4723,7 +4741,7 @@ def transcrever_arquivo_unico():
                 cursor,
                 usuario_id,
                 None,
-                custo_estimado
+                custo_resumo_reprocessamento
             )
 
             if limite_resposta:
@@ -4854,9 +4872,10 @@ def transcrever_arquivo_unico():
                     urgencia,
                     categoria,
                     problema_principal,
-                    tags
+                    tags,
+                    custo_estimado_usd
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
@@ -4872,18 +4891,41 @@ def transcrever_arquivo_unico():
                     analise["urgencia"],
                     analise["categoria"],
                     analise["problema_principal"],
-                    analise["tags"]
+                    analise["tags"],
+                    custo_estimado
                 )
             )
 
             atendimento_id = cursor.fetchone()[0]
+
+            custo_resumo_upload = estimar_custo_atendimento(
+                0,
+                True
+            )
+            custo_transcricao_upload = max(
+                0,
+                round(
+                    custo_estimado - custo_resumo_upload,
+                    4
+                )
+            )
+
+            if custo_transcricao_upload:
+
+                registrar_uso_evento(
+                    cursor,
+                    usuario_id,
+                    atendimento_id,
+                    "transcricao_upload",
+                    custo_transcricao_upload
+                )
 
             registrar_uso_evento(
                 cursor,
                 usuario_id,
                 atendimento_id,
                 "resumo",
-                custo_estimado
+                custo_resumo_upload
             )
 
     log_evento(
@@ -5261,7 +5303,8 @@ def reprocessar_resumo_atendimento(atendimento_id):
                     a.transcricao_completa,
                     a.segundos_transcritos,
                     a.usuario_id,
-                    u.usuario
+                    u.usuario,
+                    a.custo_estimado_usd
                 FROM atendimentos a
                 LEFT JOIN usuarios u
                 ON u.id = a.usuario_id
@@ -5304,9 +5347,14 @@ def reprocessar_resumo_atendimento(atendimento_id):
                     "erro": "Transcricao nao disponivel"
                 }), 400
 
-            custo_estimado = estimar_custo_atendimento(
-                row[1] or 0,
+            custo_resumo_reprocessamento = estimar_custo_atendimento(
+                0,
                 True
+            )
+            custo_estimado = round(
+                float(row[4] or 0)
+                + custo_resumo_reprocessamento,
+                4
             )
             usuario_custo_id = row[2] or usuario_id
 
@@ -5366,8 +5414,8 @@ def reprocessar_resumo_atendimento(atendimento_id):
                 cursor,
                 usuario_custo_id,
                 atendimento_id,
-                "resumo",
-                custo_estimado
+                "resumo_reprocessado",
+                custo_resumo_reprocessamento
             )
 
     resposta = {
