@@ -17,494 +17,119 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
 
-    <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        body {
-            background: #0f1115;
-            color: #f4f7fb;
-            font-family: Arial, sans-serif;
-            min-height: 100vh;
-        }
-
-        button,
-        input,
-        select {
-            font: inherit;
-        }
-
-        button {
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 700;
-            min-height: 42px;
-            padding: 10px 14px;
-        }
-
-        .page {
-            margin: 0 auto;
-            max-width: 1380px;
-            padding: 22px;
-        }
-
-        .header {
-            align-items: center;
-            display: flex;
-            gap: 16px;
-            justify-content: space-between;
-            margin-bottom: 18px;
-        }
-
-        .title h1 {
-            font-size: 28px;
-            margin-bottom: 4px;
-        }
-
-        .title p {
-            color: #9aa4b2;
-            font-size: 14px;
-        }
-
-        .actions {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            justify-content: flex-end;
-        }
-
-        .quick-ticket {
-            max-width: 170px;
-        }
-
-        #start {
-            background: #00a85a;
-            color: white;
-        }
-
-        #pause {
-            background: #f5a400;
-            color: #171c25;
-            display: none;
-        }
-
-        #pause:disabled {
-            cursor: not-allowed;
-            opacity: 0.55;
-        }
-
-        .btn-blue {
-            background: #2962ff;
-            color: white;
-        }
-
-        .btn-dark {
-            background: #242a35;
-            color: white;
-        }
-
-        a.btn-dark {
-            align-items: center;
-            border-radius: 8px;
-            display: inline-flex;
-            font-weight: 700;
-            min-height: 42px;
-            padding: 10px 14px;
-            text-decoration: none;
-        }
-
-        a.btn-dark[hidden] {
-            display: none;
-        }
-
-        .btn-red {
-            background: #d50000;
-            color: white;
-        }
-
-        #status {
-            background: #171c25;
-            border: 1px solid #273142;
-            border-radius: 8px;
-            color: #d8dee9;
-            margin-bottom: 18px;
-            padding: 14px 16px;
-        }
-
-        .metrics {
-            display: grid;
-            gap: 12px;
-            grid-template-columns: repeat(6, minmax(140px, 1fr));
-            margin-bottom: 18px;
-        }
-
-        .metric {
-            background: #171c25;
-            border: 1px solid #273142;
-            border-radius: 8px;
-            padding: 16px;
-        }
-
-        .metric span {
-            color: #9aa4b2;
-            display: block;
-            font-size: 13px;
-            margin-bottom: 8px;
-        }
-
-        .metric strong {
-            display: block;
-            font-size: 28px;
-            white-space: pre-line;
-        }
-
-        .workarea {
-            display: grid;
-            gap: 16px;
-            grid-template-columns: minmax(0, 1fr) 360px;
-        }
-
-        .panel {
-            background: #171c25;
-            border: 1px solid #273142;
-            border-radius: 8px;
-            min-width: 0;
-        }
-
-        .panel-header {
-            align-items: center;
-            border-bottom: 1px solid #273142;
-            display: flex;
-            gap: 12px;
-            justify-content: space-between;
-            padding: 14px 16px;
-        }
-
-        .panel-header h2 {
-            font-size: 17px;
-        }
-
-        .filters {
-            display: grid;
-            gap: 10px;
-            grid-template-columns: 1.5fr repeat(3, minmax(130px, 1fr));
-            padding: 14px 16px;
-        }
-
-        .filter-field {
-            display: grid;
-            gap: 6px;
-        }
-
-        .filter-field label {
-            color: #9aa4b2;
-            font-size: 12px;
-            font-weight: 700;
-            text-transform: uppercase;
-        }
-
-        input,
-        select {
-            background: #242a35;
-            border: 1px solid #343d4d;
-            border-radius: 8px;
-            color: white;
-            min-height: 42px;
-            padding: 10px 12px;
-            width: 100%;
-        }
-
-        .table-wrap {
-            overflow-x: auto;
-        }
-
-        table {
-            border-collapse: collapse;
-            width: 100%;
-        }
-
-        th,
-        td {
-            border-bottom: 1px solid #273142;
-            padding: 12px 16px;
-            text-align: left;
-            vertical-align: top;
-        }
-
-        th {
-            color: #9aa4b2;
-            font-size: 12px;
-            text-transform: uppercase;
-        }
-
-        td {
-            color: #e7ebf2;
-            font-size: 14px;
-        }
-
-        .summary-cell {
-            max-width: 560px;
-        }
-
-        .summary-title {
-            font-weight: 700;
-            margin-bottom: 6px;
-        }
-
-        .summary-text {
-            color: #b9c2cf;
-            display: -webkit-box;
-            line-height: 1.4;
-            overflow: hidden;
-            -webkit-box-orient: vertical;
-            -webkit-line-clamp: 3;
-        }
-
-        .badge {
-            border-radius: 999px;
-            display: inline-flex;
-            font-size: 12px;
-            font-weight: 700;
-            padding: 5px 9px;
-            white-space: nowrap;
-        }
-
-        .badge-ok {
-            background: #103d24;
-            color: #69df9b;
-        }
-
-        .badge-work {
-            background: #3b3212;
-            color: #ffd666;
-        }
-
-        .badge-error {
-            background: #421616;
-            color: #ff8a8a;
-        }
-
-        .badge-category {
-            background: #172f46;
-            color: #7cc4ff;
-            margin-top: 8px;
-        }
-
-        .row-actions {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-
-        .row-actions button {
-            font-size: 13px;
-            min-height: 34px;
-            padding: 8px 10px;
-        }
-
-        .empty {
-            color: #9aa4b2;
-            padding: 22px 16px;
-            text-align: center;
-        }
-
-        .chart-box {
-            padding: 16px;
-        }
-
-        .insights {
-            display: grid;
-            gap: 16px;
-        }
-
-        .list {
-            display: grid;
-            gap: 10px;
-            padding: 16px;
-        }
-
-        .mini-item {
-            background: #202632;
-            border-radius: 8px;
-            padding: 12px;
-        }
-
-        .mini-item strong {
-            display: block;
-            margin-bottom: 4px;
-        }
-
-        .mini-item span {
-            color: #9aa4b2;
-            font-size: 13px;
-        }
-
-        .report-panel {
-            margin-bottom: 18px;
-        }
-
-        .modal {
-            align-items: center;
-            background: rgba(5, 8, 13, 0.78);
-            display: none;
-            inset: 0;
-            justify-content: center;
-            padding: 18px;
-            position: fixed;
-            z-index: 10;
-        }
-
-        .modal.open {
-            display: flex;
-        }
-
-        .modal-card {
-            background: #171c25;
-            border: 1px solid #343d4d;
-            border-radius: 8px;
-            max-height: 90vh;
-            max-width: 980px;
-            overflow: hidden;
-            width: 100%;
-        }
-
-        .modal-body {
-            display: grid;
-            gap: 14px;
-            max-height: 70vh;
-            overflow: auto;
-            padding: 16px;
-        }
-
-        .text-box {
-            background: #10141b;
-            border: 1px solid #273142;
-            border-radius: 8px;
-            line-height: 1.55;
-            padding: 14px;
-            white-space: pre-wrap;
-        }
-
-        textarea.text-box {
-            color: #f4f7fb;
-            min-height: 220px;
-            resize: vertical;
-            width: 100%;
-        }
-
-        .modal-fields {
-            display: grid;
-            gap: 10px;
-            grid-template-columns: 220px 1fr;
-        }
-
-        @media (max-width: 1050px) {
-            .metrics {
-                grid-template-columns: repeat(2, minmax(150px, 1fr));
-            }
-
-            .workarea {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        @media (max-width: 760px) {
-            .header,
-            .panel-header {
-                align-items: stretch;
-                flex-direction: column;
-            }
-
-            .actions {
-                justify-content: flex-start;
-            }
-
-            .filters {
-                grid-template-columns: 1fr;
-            }
-
-            th,
-            td {
-                padding: 10px;
-            }
-        }
-    </style>
     <link rel="stylesheet" href="{{ url_for('static', filename='theme.css') }}">
 </head>
 
 <body class="dashboard-page">
     <main class="page">
         <header class="header">
-            <div class="title">
-                <h1>55PBX AI</h1>
-                <p>Dashboard de atendimentos e resumos para ClickDesk</p>
+            <div class="brand">
+                <span class="brand-mark" aria-hidden="true"><i data-lucide="headphones"></i></span>
+                <div class="title">
+                    <div class="brand-line">
+                        <h1>55PBX AI</h1>
+                        <span class="product-chip">Support</span>
+                    </div>
+                    <p>Documentação inteligente de atendimentos</p>
+                </div>
             </div>
 
             <div class="actions">
-                <button type="button" class="theme-toggle" data-theme-toggle aria-label="Alternar modo de cor"><i data-lucide="moon" class="theme-icon-moon" aria-hidden="true"></i><i data-lucide="sun" class="theme-icon-sun" aria-hidden="true"></i><span data-theme-label>Noite</span></button>
-                {% if is_admin %}
-                    <a class="utility-link" href="/admin"><i data-lucide="users" aria-hidden="true"></i> Usuarios</a>
-                {% endif %}
-
                 <button
-                    class="btn-blue"
+                    class="btn-secondary header-export"
                     id="exportar-excel"
-                ><i data-lucide="download" aria-hidden="true"></i> Exportar Excel</button>
+                ><i data-lucide="download" aria-hidden="true"></i> Exportar</button>
 
-                <button
-                    class="btn-dark"
-                    id="abrir-senha"
-                ><i data-lucide="lock-keyhole" aria-hidden="true"></i> Senha</button>
-
-                <a class="utility-link" href="/logout"><i data-lucide="log-out" aria-hidden="true"></i> Sair</a>
+                <details class="account-menu">
+                    <summary aria-label="Abrir menu">
+                        <span class="account-avatar" aria-hidden="true"><i data-lucide="user-round"></i></span>
+                        <span>Conta</span>
+                        <i data-lucide="chevron-down" class="menu-chevron" aria-hidden="true"></i>
+                    </summary>
+                    <div class="account-menu-popover">
+                        <button type="button" class="menu-action theme-toggle" data-theme-toggle>
+                            <i data-lucide="moon" class="theme-icon-moon" aria-hidden="true"></i>
+                            <i data-lucide="sun" class="theme-icon-sun" aria-hidden="true"></i>
+                            <span data-theme-label>Modo escuro</span>
+                        </button>
+                        {% if is_admin %}
+                            <a class="menu-action" href="/admin"><i data-lucide="users" aria-hidden="true"></i> Usuários</a>
+                        {% endif %}
+                        <button class="menu-action" id="abrir-senha"><i data-lucide="lock-keyhole" aria-hidden="true"></i> Alterar senha</button>
+                        <a class="menu-action menu-danger" href="/logout"><i data-lucide="log-out" aria-hidden="true"></i> Sair</a>
+                    </div>
+                </details>
             </div>
         </header>
 
-        <section class="capture-bar" aria-label="Gravacao de atendimento">
-            <div class="capture-field">
-                <label for="ticket-clickdesk">Ticket ClickDesk</label>
-                <input class="quick-ticket" id="ticket-clickdesk" placeholder="Numero do ticket">
+        <section class="capture-bar" id="capture-shell" data-state="idle" aria-label="Gravação de atendimento">
+            <div class="capture-heading">
+                <div class="record-state">
+                    <span class="record-dot" aria-hidden="true"></span>
+                    <div>
+                        <span class="eyebrow">Atendimento em tempo real</span>
+                        <strong id="capture-state-label">Pronto para iniciar</strong>
+                    </div>
+                </div>
+
+                <div class="record-timer" aria-live="off">
+                    <span>Tempo do atendimento</span>
+                    <strong id="recording-timer">00:00</strong>
+                </div>
             </div>
-            <div class="capture-actions">
-                <button id="start">Iniciar Gravacao</button>
-                <button id="pause">Pausar</button>
+
+            <div class="capture-main">
+                <div class="capture-field">
+                    <label for="ticket-clickdesk">Ticket ClickDesk</label>
+                    <div class="input-with-icon">
+                        <i data-lucide="ticket" aria-hidden="true"></i>
+                        <input class="quick-ticket" id="ticket-clickdesk" placeholder="Ex.: 123456" inputmode="numeric">
+                    </div>
+                </div>
+
+                <div class="capture-actions">
+                    <button id="start">Iniciar gravação</button>
+                    <button id="pause">Pausar</button>
+                </div>
+
+                <div class="capture-status-wrap">
+                    <div class="capture-wave" aria-hidden="true">
+                        <span></span><span></span><span></span><span></span><span></span><span></span>
+                    </div>
+                    <div id="status" role="status" aria-live="polite">Sistema pronto.</div>
+                </div>
             </div>
-            <div id="status" role="status" aria-live="polite">Sistema pronto.</div>
         </section>
 
-        <section class="metrics">
-            <div class="metric">
-                <span>Total no filtro</span>
+        <section class="metrics" aria-label="Indicadores">
+            <div class="metric metric-neutral">
+                <div class="metric-head"><span class="metric-icon"><i data-lucide="layers-3"></i></span><span>Total no filtro</span></div>
                 <strong id="metric-total">0</strong>
             </div>
-            <div class="metric">
-                <span>Finalizados</span>
+            <div class="metric metric-success">
+                <div class="metric-head"><span class="metric-icon"><i data-lucide="circle-check-big"></i></span><span>Finalizados</span></div>
                 <strong id="metric-finalizados">0</strong>
             </div>
-            <div class="metric">
-                <span>Em andamento</span>
+            <div class="metric metric-progress">
+                <div class="metric-head"><span class="metric-icon"><i data-lucide="radio"></i></span><span>Em andamento</span></div>
                 <strong id="metric-andamento">0</strong>
             </div>
-            <div class="metric">
-                <span>Com falha</span>
+            <div class="metric metric-danger">
+                <div class="metric-head"><span class="metric-icon"><i data-lucide="triangle-alert"></i></span><span>Com falha</span></div>
                 <strong id="metric-falhas">0</strong>
             </div>
-            <div class="metric">
-                <span>TMA</span>
+            <div class="metric metric-time">
+                <div class="metric-head"><span class="metric-icon"><i data-lucide="clock-3"></i></span><span>TMA</span></div>
                 <strong id="metric-tma">00m 00s</strong>
             </div>
             {% if is_admin %}
-                <div class="metric">
-                    <span id="metric-custo-label">Custo estimado</span>
+                <div class="metric metric-cost">
+                    <div class="metric-head"><span class="metric-icon"><i data-lucide="wallet-cards"></i></span><span id="metric-custo-label">Custo estimado</span></div>
                     <strong id="metric-custo">US$ 0.00</strong>
                 </div>
             {% else %}
-                <div class="metric">
-                    <span id="metric-custo-label">Sem ticket</span>
+                <div class="metric metric-cost">
+                    <div class="metric-head"><span class="metric-icon"><i data-lucide="ticket-x"></i></span><span id="metric-custo-label">Sem ticket</span></div>
                     <strong id="metric-custo">0</strong>
                 </div>
             {% endif %}
@@ -538,9 +163,12 @@
 
         <section class="workarea">
             <div class="panel">
-                <div class="panel-header">
-                    <h2>Atendimentos</h2>
-                    <span id="last-update"></span>
+                <div class="panel-header panel-header-copy">
+                    <div>
+                        <span class="eyebrow">Histórico operacional</span>
+                        <h2>Atendimentos</h2>
+                    </div>
+                    <span id="last-update" class="last-update"></span>
                 </div>
 
                 <div class="filters">
@@ -609,7 +237,7 @@
             <aside class="insights">
                 <div class="panel">
                     <div class="panel-header">
-                        <h2>Volume por dia</h2>
+                        <div><span class="eyebrow">Tendência</span><h2>Volume por dia</h2></div>
                     </div>
                     <div class="chart-box">
                         <canvas id="grafico"></canvas>
@@ -618,7 +246,7 @@
 
                 <div class="panel">
                     <div class="panel-header">
-                        <h2>Pontos de atencao</h2>
+                        <div><span class="eyebrow">Monitoramento</span><h2>Pontos de atenção</h2></div>
                     </div>
                     <div
                         class="list"
@@ -634,59 +262,50 @@
         id="modal-detalhe"
     >
         <div class="modal-card">
-            <div class="panel-header">
-                <h2 id="modal-titulo">Atendimento</h2>
-                <div class="row-actions">
-                    <button
-                        class="btn-blue"
-                        id="copiar-modal"
-                    >Copiar para ClickDesk</button>
-                    <a
-                        class="btn-dark"
-                        id="abrir-ticket-clickdesk"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        hidden
-                    >Abrir ticket</a>
-                    <button
-                        class="btn-blue"
-                        id="salvar-modal"
-                    >Salvar</button>
-                    <button
-                        class="btn-dark"
-                        id="reprocessar-modal"
-                    >Reprocessar</button>
-                    <button
-                        class="btn-dark"
-                        id="fechar-modal"
-                    >Fechar</button>
+            <div class="panel-header modal-header">
+                <div>
+                    <span class="eyebrow">Detalhes do atendimento</span>
+                    <h2 id="modal-titulo">Atendimento</h2>
                 </div>
+                <button class="icon-button" id="fechar-modal" aria-label="Fechar"><i data-lucide="x"></i></button>
             </div>
             <div class="modal-body">
                 <div class="modal-fields">
-                    <input
-                        id="modal-ticket"
-                        placeholder="Numero do ticket ClickDesk"
-                    >
-                    <input
-                        id="modal-meta"
-                        disabled
-                    >
+                    <div class="field-group">
+                        <label for="modal-ticket">Ticket ClickDesk</label>
+                        <input id="modal-ticket" placeholder="Número do ticket ClickDesk">
+                    </div>
+                    <div class="field-group">
+                        <label for="modal-meta">Informações do atendimento</label>
+                        <input id="modal-meta" disabled>
+                    </div>
                 </div>
-                <div>
-                    <h3>Texto ClickDesk</h3>
-                    <textarea
-                        class="text-box"
-                        id="modal-resumo"
-                    ></textarea>
-                </div>
-                <div>
-                    <h3>Transcricao completa</h3>
-                    <div
-                        class="text-box"
-                        id="modal-transcricao"
-                    ></div>
-                </div>
+
+                <section class="detail-section detail-primary">
+                    <div class="detail-section-header">
+                        <div>
+                            <span class="eyebrow">Pronto para colar</span>
+                            <h3>Texto ClickDesk</h3>
+                        </div>
+                        <div class="row-actions modal-actions">
+                            <button class="btn-primary" id="copiar-modal"><i data-lucide="copy"></i> Copiar</button>
+                            <a class="btn-secondary" id="abrir-ticket-clickdesk" target="_blank" rel="noopener noreferrer" hidden><i data-lucide="external-link"></i> Abrir ticket</a>
+                            <button class="btn-secondary" id="salvar-modal"><i data-lucide="save"></i> Salvar</button>
+                            <button class="btn-ghost" id="reprocessar-modal"><i data-lucide="refresh-cw"></i> Reprocessar</button>
+                        </div>
+                    </div>
+                    <textarea class="text-box" id="modal-resumo"></textarea>
+                </section>
+
+                <section class="detail-section">
+                    <div class="detail-section-header">
+                        <div>
+                            <span class="eyebrow">Referência</span>
+                            <h3>Transcrição completa</h3>
+                        </div>
+                    </div>
+                    <div class="text-box transcription-box" id="modal-transcricao"></div>
+                </section>
             </div>
         </div>
     </div>
