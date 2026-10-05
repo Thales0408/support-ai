@@ -801,8 +801,8 @@ def formatar_cnpj(digitos):
 def normalizar_cnpj(valor, permitir_possivel=False):
 
     texto = str(valor or "")
-    era_possivel = texto.lower().startswith(
-        "possível cnpj informado:"
+    era_possivel = normalizar_para_comparacao(texto).startswith(
+        "possivel cnpj informado:"
     )
 
     digitos = re.sub(
@@ -1734,10 +1734,40 @@ def validar_nome_cliente_ia(valor, transcricao, analista_nome=""):
     ) else ""
 
 
+def validar_valor_ia_na_transcricao(valor, transcricao, limite=160):
+
+    valor_limpo = limpar_valor_estruturado(
+        valor,
+        limite=limite
+    )
+
+    if not valor_limpo:
+
+        return ""
+
+    valor_comparacao = normalizar_para_comparacao(
+        valor_limpo
+    )
+    texto_comparacao = normalizar_para_comparacao(
+        transcricao
+    )
+
+    if (
+        not valor_comparacao
+        or valor_comparacao not in texto_comparacao
+    ):
+
+        return ""
+
+    return valor_limpo
+
+
 def extrair_empresa_transcricao(texto):
 
     padroes = [
         r"\bqual(?: que)? (?:é|e) o nome da empresa\s*[?!.:,;-]*\s*(?:é|e)?\s*([^,.;\n]{3,100})",
+        r"\ba empresa chama\s+([^,.;\n?]{3,100})",
+        r"\bempresa se chama\s+([^,.;\n?]{3,100})",
         r"\braz[aã]o social (?:é|e|da|do)?\s+([^,.;\n]{3,100})",
         r"\bempresa (?:é|e|da|do)?\s+([^,.;\n]{3,100})",
         r"\bloja (?:é|e|da|do)?\s+([^,.;\n]{3,100})"
@@ -2361,28 +2391,22 @@ Entidades estruturadas extraidas pelo backend:
     resumo = resumo_zendesk_exato(
         nome_empresa=(
             entidades_extraidas.get("empresa")
-            or dados.get("nome_empresa")
+            or validar_valor_ia_na_transcricao(
+                dados.get("nome_empresa"),
+                transcricao,
+                limite=120
+            )
         ),
-        empresa_loja=dados.get("empresa_loja"),
-        cnpj=(
-            entidades_extraidas.get("cnpj")
-            or dados.get("cnpj")
+        empresa_loja=validar_valor_ia_na_transcricao(
+            dados.get("empresa_loja"),
+            transcricao,
+            limite=120
         ),
-        cnpj_contexto=(
-            entidades_extraidas.get("cnpj")
-            or transcricao
-        ),
+        cnpj=entidades_extraidas.get("cnpj"),
+        cnpj_contexto=transcricao,
         cliente=cliente_final,
-        telefone=(
-            entidades_extraidas.get("telefone")
-            or dados.get("telefone")
-            or dados.get("telefone_contato")
-        ),
-        email=(
-            entidades_extraidas.get("email")
-            or dados.get("email")
-            or dados.get("email_solicitante")
-        ),
+        telefone=entidades_extraidas.get("telefone"),
+        email=entidades_extraidas.get("email"),
         analista=(
             analista_final
         ),
