@@ -923,6 +923,41 @@ html[data-theme="dark"] .theme-icon-sun {
     position: relative;
 }
 
+.dashboard-page .table-pagination {
+    align-items: center;
+    background: var(--surface-soft);
+    border-top: 1px solid var(--line);
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    min-height: 54px;
+    padding: 8px 14px;
+}
+
+.dashboard-page .table-pagination span {
+    color: var(--muted);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    margin-right: auto;
+}
+
+.dashboard-page .table-pagination button {
+    min-width: 96px;
+}
+
+.dashboard-page .menu-form,
+.admin-page .topo-logout {
+    margin: 0;
+}
+
+.dashboard-page .menu-form .menu-action {
+    width: 100%;
+}
+
+.dashboard-page .menu-action-tail {
+    margin-left: auto;
+}
+
 .dashboard-page .insights {
     align-self: start;
     display: grid;
@@ -1822,6 +1857,21 @@ body.admin-page {
 
     .dashboard-page .filters {
         grid-template-columns: 1fr;
+    }
+
+    .dashboard-page .table-pagination {
+        align-items: stretch;
+        flex-wrap: wrap;
+    }
+
+    .dashboard-page .table-pagination span {
+        flex: 1 0 100%;
+        margin: 0;
+        text-align: center;
+    }
+
+    .dashboard-page .table-pagination button {
+        flex: 1;
     }
 
     .dashboard-page .insights {
