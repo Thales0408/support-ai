@@ -14,6 +14,7 @@
     >
     <title>55PBX AI</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
 
     <style>
         * {
@@ -431,9 +432,10 @@
             }
         }
     </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='theme.css') }}">
 </head>
 
-<body>
+<body class="dashboard-page">
     <main class="page">
         <header class="header">
             <div class="title">
@@ -442,37 +444,35 @@
             </div>
 
             <div class="actions">
-                <input
-                    class="quick-ticket"
-                    id="ticket-clickdesk"
-                    placeholder="Numero do ticket ClickDesk"
-                >
-                <button id="start">Iniciar Gravacao</button>
-                <button id="pause">Pausar</button>
-
                 {% if is_admin %}
-                    <a href="/admin">
-                        <button class="btn-dark">Usuarios</button>
-                    </a>
+                    <a class="utility-link" href="/admin"><i data-lucide="users" aria-hidden="true"></i> Usuarios</a>
                 {% endif %}
 
                 <button
                     class="btn-blue"
                     id="exportar-excel"
-                >Exportar Excel</button>
+                ><i data-lucide="download" aria-hidden="true"></i> Exportar Excel</button>
 
                 <button
                     class="btn-dark"
                     id="abrir-senha"
-                >Senha</button>
+                ><i data-lucide="lock-keyhole" aria-hidden="true"></i> Senha</button>
 
-                <a href="/logout">
-                    <button class="btn-red">Logout</button>
-                </a>
+                <a class="utility-link" href="/logout"><i data-lucide="log-out" aria-hidden="true"></i> Sair</a>
             </div>
         </header>
 
-        <div id="status">Sistema pronto.</div>
+        <section class="capture-bar" aria-label="Gravacao de atendimento">
+            <div class="capture-field">
+                <label for="ticket-clickdesk">Ticket ClickDesk</label>
+                <input class="quick-ticket" id="ticket-clickdesk" placeholder="Numero do ticket">
+            </div>
+            <div class="capture-actions">
+                <button id="start">Iniciar Gravacao</button>
+                <button id="pause">Pausar</button>
+            </div>
+            <div id="status" role="status" aria-live="polite">Sistema pronto.</div>
+        </section>
 
         <section class="metrics">
             <div class="metric">
@@ -724,6 +724,7 @@
         window.SUPPORT_AI_CHUNK_SECONDS = {{ chunk_seconds | int }}
     </script>
     <script src="/static/popup.js"></script>
+    <script>document.addEventListener("DOMContentLoaded", () => window.lucide?.createIcons())</script>
 
     <script>
         let atendimentos = []
@@ -1175,6 +1176,10 @@
             const ctx =
                 document.getElementById("grafico")
 
+            if (typeof Chart === "undefined") {
+                return
+            }
+
             if (chart) {
                 chart.destroy()
             }
@@ -1187,8 +1192,8 @@
                         datasets: [{
                             label: "Atendimentos",
                             data: valores,
-                            borderColor: "#4f8cff",
-                            backgroundColor: "rgba(79, 140, 255, 0.18)",
+                            borderColor: "#087847",
+                            backgroundColor: "rgba(8, 120, 71, 0.12)",
                             fill: true,
                             tension: 0.35
                         }]
@@ -1710,10 +1715,17 @@
 
         carregarResultados()
 
-        setInterval(
-            carregarResultados,
-            8000
-        )
+        setInterval(() => {
+            if (document.visibilityState === "visible") {
+                carregarResultados()
+            }
+        }, 30000)
+
+        document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "visible") {
+                carregarResultados()
+            }
+        })
     </script>
 </body>
 

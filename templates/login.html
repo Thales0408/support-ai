@@ -108,10 +108,11 @@
         }
 
     </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='theme.css') }}">
 
 </head>
 
-<body>
+<body class="login-page">
 
     <form
         method="POST"
@@ -128,6 +129,7 @@
             55PBX AI
 
         </h1>
+        <p class="login-subtitle">Acesse seus atendimentos</p>
 
         {% if erro %}
             <div class="erro">
@@ -135,14 +137,18 @@
             </div>
         {% endif %}
 
+        <label for="login-usuario">Usuário</label>
         <input
+            id="login-usuario"
             type="text"
             name="usuario"
             placeholder="Usuário"
             required
         >
 
+        <label for="login-senha">Senha</label>
         <input
+            id="login-senha"
             type="password"
             name="senha"
             placeholder="Senha"

@@ -27,6 +27,8 @@ let pausado = false
 let finalizando = false
 let limiteAtingido = false
 let pararSegmentoAtual = null
+let analisadoresAudio = []
+let monitorAtividade = null
 
 const TAMANHO_CHUNK_MS =
     Math.max(
@@ -39,6 +41,30 @@ const GANHO_ABA =
 
 const GANHO_MICROFONE =
     Number(window.SUPPORT_AI_MIC_GAIN || 0.85)
+
+const LIMIAR_ATIVIDADE_AUDIO = 0.006
+
+function adicionarAnalisador(noAudio) {
+    const node = audioContext.createAnalyser()
+    node.fftSize = 2048
+    noAudio.connect(node)
+    analisadoresAudio.push({
+        node,
+        amostras: new Float32Array(node.fftSize)
+    })
+    return node
+}
+
+function nivelAudio(analisador) {
+    analisador.node.getFloatTimeDomainData(analisador.amostras)
+
+    let soma = 0
+    for (const amostra of analisador.amostras) {
+        soma += amostra * amostra
+    }
+
+    return Math.sqrt(soma / analisador.amostras.length)
+}
 
 function csrfToken() {
 
@@ -123,6 +149,13 @@ function limparTimerChunk() {
 }
 
 function pararStreams() {
+
+    if (monitorAtividade) {
+        clearInterval(monitorAtividade)
+        monitorAtividade = null
+    }
+
+    analisadoresAudio = []
 
     if (
         screenStream
@@ -329,14 +362,20 @@ async function finalizarAtendimento(duracao) {
     return data
 }
 
-function registrarUpload(blob, duracaoMs) {
+function registrarUpload(blob, duracaoMs, temAtividade = true) {
 
     if (
         !blob ||
         blob.size < 512 ||
-        !atendimentoId
+        !atendimentoId ||
+        limiteAtingido
     ) {
 
+        return
+    }
+
+    if (analisadoresAudio.length && !temAtividade) {
+        chunksIgnorados++
         return
     }
 
@@ -358,7 +397,8 @@ function registrarUpload(blob, duracaoMs) {
                 resultado.ignorado
             ) {
 
-                return resultado
+                chunksIgnorados++
+                return {ok: true, ordem: ordemAtual, ignorado: true}
             }
 
             if (
@@ -446,6 +486,26 @@ function iniciarNovoSegmento() {
     const inicioSegmento =
         Date.now()
 
+    let amostrasAtivas = 0
+    let maiorNivel = 0
+    let amostrasLidas = 0
+
+    if (analisadoresAudio.length) {
+        monitorAtividade = setInterval(() => {
+            if (audioContext.state !== 'running') {
+                return
+            }
+            const nivel = Math.max(
+                ...analisadoresAudio.map(nivelAudio)
+            )
+            amostrasLidas++
+            maiorNivel = Math.max(maiorNivel, nivel)
+            if (nivel >= LIMIAR_ATIVIDADE_AUDIO) {
+                amostrasAtivas++
+            }
+        }, 100)
+    }
+
     recorder =
         new MediaRecorder(
             finalStream,
@@ -470,6 +530,11 @@ function iniciarNovoSegmento() {
 
                 limparTimerChunk()
 
+                if (monitorAtividade) {
+                    clearInterval(monitorAtividade)
+                    monitorAtividade = null
+                }
+
                 if (
                     partes.length
                 ) {
@@ -484,7 +549,11 @@ function iniciarNovoSegmento() {
 
                     registrarUpload(
                         blob,
-                        Date.now() - inicioSegmento
+                        Date.now() - inicioSegmento,
+                        amostrasLidas < 2 ||
+                        audioContext.state !== 'running' ||
+                        amostrasAtivas >= 2 ||
+                        maiorNivel >= 0.03
                     )
                 }
 
@@ -816,7 +885,7 @@ startBtn.onclick = async () => {
                 Number.isFinite(GANHO_ABA) ? GANHO_ABA : 1
 
             systemSource.connect(systemGain)
-            systemGain.connect(channelMerger, 0, 0)
+            adicionarAnalisador(systemGain).connect(channelMerger, 0, 0)
             conectouCanal = true
         }
 
@@ -842,7 +911,7 @@ startBtn.onclick = async () => {
                 Number.isFinite(GANHO_MICROFONE) ? GANHO_MICROFONE : 0.85
 
             micSource.connect(micGain)
-            micGain.connect(channelMerger, 0, 1)
+            adicionarAnalisador(micGain).connect(channelMerger, 0, 1)
             conectouCanal = true
         }
 

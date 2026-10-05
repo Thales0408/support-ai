@@ -118,6 +118,8 @@ CHUNK_SECONDS=45
 
 O `OPENAI_API_KEY` tem dois usos: gerar o resumo final e servir como fallback de transcricao quando `TRANSCRIBE_FALLBACK_PROVIDER=openai`. A transcricao principal e a Groq quando `TRANSCRIBE_PROVIDER=groq`; se a Groq retornar limite, indisponibilidade, timeout ou erro 5xx, o backend tenta OpenAI Whisper como fallback, respeitando os limites diarios de custo antes de enviar o audio.
 
+Para evitar requisicoes pagas sem fala, o navegador mede atividade nos canais da aba e do microfone e nao envia trechos silenciosos. Se a medicao falhar ou o AudioContext estiver suspenso, o trecho e enviado normalmente para nao perder uma fala. Ajuste o limiar apenas apos comparar com gravacoes reais, especialmente vozes baixas. O dashboard atualiza os dados a cada 30 segundos enquanto a aba esta visivel e imediatamente quando ela volta ao primeiro plano.
+
 Para comparar modelos em um audio real:
 
 ```text
