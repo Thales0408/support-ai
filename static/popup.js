@@ -7,6 +7,15 @@ const pauseBtn =
 const statusDiv =
     document.getElementById('status')
 
+const captureShell =
+    document.getElementById('capture-shell')
+
+const captureStateLabel =
+    document.getElementById('capture-state-label')
+
+const recordingTimer =
+    document.getElementById('recording-timer')
+
 let recorder = null
 let screenStream = null
 let micStream = null
@@ -126,6 +135,134 @@ function formatarTempo(ms) {
     return `${String(minutos).padStart(2, '0')}m ${String(segundos).padStart(2, '0')}s`
 }
 
+function formatarCronometro(ms) {
+
+    const totalSegundos =
+        Math.max(0, Math.floor((ms || 0) / 1000))
+
+    const horas =
+        Math.floor(totalSegundos / 3600)
+
+    const minutos =
+        Math.floor((totalSegundos % 3600) / 60)
+
+    const segundos =
+        totalSegundos % 60
+
+    return horas > 0
+        ? `${String(horas).padStart(2, '0')}:${String(minutos).padStart(2, '0')}:${String(segundos).padStart(2, '0')}`
+        : `${String(minutos).padStart(2, '0')}:${String(segundos).padStart(2, '0')}`
+}
+
+function duracaoVisualAtual() {
+
+    if (!inicioLigacao) {
+
+        return 0
+    }
+
+    if (duracaoFinalizacaoMs !== null) {
+
+        return duracaoFinalizacaoMs
+    }
+
+    const agora =
+        Date.now()
+
+    const pausaAtual =
+        pausaIniciadaEm
+            ? agora - pausaIniciadaEm
+            : 0
+
+    return Math.max(
+        0,
+        agora - inicioLigacao - tempoPausadoMs - pausaAtual
+    )
+}
+
+function atualizarPainelGravacao() {
+
+    if (!captureShell) {
+
+        return
+    }
+
+    let estado =
+        'idle'
+
+    let rotulo =
+        'Pronto para iniciar'
+
+    if (finalizando) {
+
+        estado =
+            'finalizing'
+
+        rotulo =
+            'Finalizando atendimento'
+
+    } else if (limiteAtingido && atendimentoId) {
+
+        estado =
+            'paused'
+
+        rotulo =
+            'Limite atingido — finalize o atendimento'
+
+    } else if (gravacaoAtiva && pausado) {
+
+        estado =
+            'paused'
+
+        rotulo =
+            'Gravação pausada'
+
+    } else if (gravacaoAtiva) {
+
+        estado =
+            'recording'
+
+        rotulo =
+            'Gravando atendimento'
+
+    } else if (atendimentoId) {
+
+        estado =
+            'paused'
+
+        rotulo =
+            'Aguardando finalização'
+    }
+
+    captureShell.dataset.state =
+        estado
+
+    if (captureStateLabel) {
+
+        captureStateLabel.innerText =
+            rotulo
+    }
+
+    if (recordingTimer) {
+
+        recordingTimer.innerText =
+            (
+                gravacaoAtiva ||
+                atendimentoId ||
+                finalizando
+            )
+                ? formatarCronometro(duracaoVisualAtual())
+                : '00:00'
+    }
+}
+
+setInterval(
+    atualizarPainelGravacao,
+    1000
+)
+
+atualizarPainelGravacao()
+
 function atualizarBotaoPausa(visivel, estaPausado = false) {
 
     pauseBtn.style.display =
@@ -136,6 +273,8 @@ function atualizarBotaoPausa(visivel, estaPausado = false) {
 
     pauseBtn.innerText =
         estaPausado ? 'Continuar' : 'Pausar'
+
+    atualizarPainelGravacao()
 }
 
 function limparTimerChunk() {
@@ -304,6 +443,8 @@ async function pararGravacaoPorLimite(mensagem) {
     pausado =
         true
 
+    atualizarPainelGravacao()
+
     limparTimerChunk()
 
     atualizarBotaoPausa(false)
@@ -313,7 +454,7 @@ async function pararGravacaoPorLimite(mensagem) {
         'Limite diario de minutos atingido. A gravacao foi pausada automaticamente. Finalize o atendimento para gerar o resumo com o conteudo ja capturado.'
 
     startBtn.innerText =
-        'Finalizar Atendimento'
+        'Finalizar atendimento'
 
     startBtn.disabled =
         false
@@ -636,6 +777,8 @@ async function finalizarGravacao() {
     finalizando =
         true
 
+    atualizarPainelGravacao()
+
     if (
         pausaIniciadaEm
     ) {
@@ -713,12 +856,14 @@ async function finalizarGravacao() {
 
         startBtn.innerText = atendimentoId
             ? 'Tentar finalizar'
-            : 'Iniciar Gravacao'
+            : 'Iniciar gravação'
 
         atualizarBotaoPausa(false)
 
         recorder = null
         finalizando = false
+
+        atualizarPainelGravacao()
     }
 }
 
@@ -752,12 +897,12 @@ pauseBtn.onclick = async () => {
         )
 
         statusDiv.innerText =
-            'Pausando transcricao e fechando o trecho atual...'
+            'Pausando transcrição e fechando o trecho atual...'
 
         await pararSegmentoSeNecessario()
 
         statusDiv.innerText =
-            'Transcricao pausada. Nenhum audio sera enviado ate continuar.'
+            'Transcrição pausada. Nenhum áudio será enviado até continuar.'
 
         return
     }
@@ -782,7 +927,7 @@ pauseBtn.onclick = async () => {
     )
 
     statusDiv.innerText =
-        'Gravacao retomada. Transcrevendo novos trechos...'
+        'Gravação retomada. Transcrevendo novos trechos...'
 
     iniciarNovoSegmento()
 }
@@ -810,7 +955,7 @@ startBtn.onclick = async () => {
     try {
 
         statusDiv.innerText =
-            'Escolha a aba do 55PBX'
+            'Selecione a aba do 55PBX para capturar o áudio'
 
         inicioLigacao =
             Date.now()
@@ -860,7 +1005,7 @@ startBtn.onclick = async () => {
                 })
 
         statusDiv.innerText =
-            'Criando atendimento...'
+            'Preparando atendimento...'
 
         atendimentoId =
             await iniciarAtendimento()
@@ -947,15 +1092,17 @@ startBtn.onclick = async () => {
         gravacaoAtiva =
             true
 
+        atualizarPainelGravacao()
+
         iniciarNovoSegmento()
 
         startBtn.innerText =
-            'Parar Gravacao'
+            'Finalizar atendimento'
 
         atualizarBotaoPausa(true)
 
         statusDiv.innerText =
-            'Gravando e transcrevendo em trechos...'
+            'Gravando e transcrevendo em tempo real...'
 
     } catch (err) {
 
@@ -966,7 +1113,7 @@ startBtn.onclick = async () => {
 
         startBtn.disabled = false
         startBtn.innerText =
-            'Iniciar Gravacao'
+            'Iniciar gravação'
 
         atualizarBotaoPausa(false)
         limparTimerChunk()
@@ -977,5 +1124,7 @@ startBtn.onclick = async () => {
         gravacaoAtiva = false
         pausado = false
         finalizando = false
+
+        atualizarPainelGravacao()
     }
 }
