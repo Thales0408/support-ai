@@ -82,6 +82,16 @@ class EntidadesFaladasTest(unittest.TestCase):
                     self.POSSIVEL + f"09.114.915/000{numero}-00" + self.CONFIRMAR
                 )
 
+    def test_cnpj_possivel_invalido_tambem_e_rejeitado(self):
+
+        self.assertEqual(
+            app.normalizar_cnpj(
+                "Possível CNPJ informado: 3, 486, 1000 — confirmar com cliente",
+                permitir_possivel=True
+            ),
+            ""
+        )
+
     def test_cnpj_deformado_curto_nao_vai_para_documentacao(self):
 
         self.assertEqual(
