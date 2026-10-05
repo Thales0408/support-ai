@@ -4741,7 +4741,7 @@ def transcrever_arquivo_unico():
                 cursor,
                 usuario_id,
                 None,
-                custo_resumo_reprocessamento
+                custo_estimado
             )
 
             if limite_resposta:
@@ -5362,7 +5362,7 @@ def reprocessar_resumo_atendimento(atendimento_id):
                 cursor,
                 usuario_custo_id,
                 atendimento_id,
-                custo_estimado
+                custo_resumo_reprocessamento
             )
 
             if limite_resposta:
