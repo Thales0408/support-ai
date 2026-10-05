@@ -302,20 +302,6 @@ def proteger_csrf():
 
 
 # =========================================
-# STARTUP
-# =========================================
-
-try:
-
-    inicializar_banco()
-
-except Exception:
-
-    logger.exception("ERRO AO INICIALIZAR BANCO")
-    raise
-
-
-# =========================================
 # HELPERS
 # =========================================
 
@@ -5858,6 +5844,17 @@ def exportar():
 # =========================================
 
 if __name__ == "__main__":
+
+    try:
+
+        inicializar_banco()
+
+    except Exception:
+
+        logger.exception(
+            "ERRO AO INICIALIZAR BANCO"
+        )
+        raise
 
     serve(
         app,
