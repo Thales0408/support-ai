@@ -53,16 +53,12 @@ def cliente_resumo():
 
 
 PROMPT_TRANSCRICAO = (
-    "Transcreva em portugues do Brasil. "
-    "Contexto: atendimento de suporte tecnico para ERP, emissao de "
-    "nota fiscal, NFS-e, NF-e, NFC-e, ISSQN, Simples Nacional, "
-    "retencao de ISS, CNPJ, loja, cliente, certificado digital, XML, "
-    "Zendesk, AnyDesk, TeamViewer, caixa, venda, cadastro, produto, "
-    "financeiro, estoque, PDV, SAT e boleto. "
-    "Preserve numeros, CNPJ, nomes de empresa e termos fiscais. "
-    "Nao invente palavras quando houver silencio, ruido, musica, "
-    "eco ou fala inaudivel. Se um trecho estiver confuso, transcreva "
-    "somente as palavras audiveis."
+    "Atendimento de suporte tecnico ERP em portugues do Brasil. "
+    "Vocabulario frequente: GestaoClick, ClickDesk, CNPJ, CPF, NCM, "
+    "NF-e, NFC-e, NFS-e, nota fiscal, ISSQN, ICMS, PIS, COFINS, IBS, CBS, "
+    "Simples Nacional, certificado digital, XML, Banco Inter, integracao, "
+    "financeiro, estoque, venda, orcamento, produto, PDV, SAT, boleto, "
+    "AnyDesk, TeamViewer, Chrome, Edge."
 )
 
 
