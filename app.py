@@ -3218,6 +3218,8 @@ def admin_excluir_usuario(usuario_id):
 
         return redirect("/admin")
 
+    atendimentos_vinculados = 0
+
     with conectar_banco() as conn:
 
         with conn.cursor() as cursor:
@@ -3250,34 +3252,38 @@ def admin_excluir_usuario(usuario_id):
                     )
                 )
 
-                log_evento(
-                    "usuario_desativado_preservando_historico",
-                    usuario_id_alvo=usuario_id,
-                    usuario_id_admin=usuario_logado(),
-                    atendimentos_vinculados=atendimentos_vinculados
+            else:
+
+                cursor.execute(
+                    """
+                    DELETE FROM usuarios
+                    WHERE id = %s
+                    """,
+                    (
+                        usuario_id,
+                    )
                 )
 
-                registrar_auditoria(
-                    "usuario_desativado_preservando_historico",
-                    alvo_usuario_id=usuario_id,
-                    detalhes={
-                        "atendimentos_vinculados": atendimentos_vinculados
-                    }
-                )
+    if atendimentos_vinculados:
 
-                return redirect(
-                    "/admin?mensagem=usuario_desativado_historico_preservado"
-                )
+        log_evento(
+            "usuario_desativado_preservando_historico",
+            usuario_id_alvo=usuario_id,
+            usuario_id_admin=usuario_logado(),
+            atendimentos_vinculados=atendimentos_vinculados
+        )
 
-            cursor.execute(
-                """
-                DELETE FROM usuarios
-                WHERE id = %s
-                """,
-                (
-                    usuario_id,
-                )
-            )
+        registrar_auditoria(
+            "usuario_desativado_preservando_historico",
+            alvo_usuario_id=usuario_id,
+            detalhes={
+                "atendimentos_vinculados": atendimentos_vinculados
+            }
+        )
+
+        return redirect(
+            "/admin?mensagem=usuario_desativado_historico_preservado"
+        )
 
     log_evento(
         "usuario_excluido_sem_historico",
