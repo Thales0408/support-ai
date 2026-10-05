@@ -336,6 +336,15 @@ body.admin-page {
     z-index: 30;
 }
 
+.dashboard-page .menu-form,
+.admin-page .top-action-form {
+    margin: 0;
+}
+
+.dashboard-page .menu-form {
+    width: 100%;
+}
+
 .dashboard-page .menu-action,
 .dashboard-page .theme-toggle.menu-action {
     align-items: center;
