@@ -13,6 +13,7 @@ from flask_cors import CORS
 from openai import RateLimitError
 from waitress import serve
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from werkzeug.middleware.proxy_fix import ProxyFix
 from openpyxl import Workbook
 from werkzeug.security import generate_password_hash
@@ -40,6 +41,7 @@ from auth import (
     usuario_supervisor
 )
 from config import (
+    APP_TIMEZONE,
     AUDIO_PREPROCESS_ENABLED,
     CHUNK_SECONDS,
     CORS_ORIGINS,
@@ -248,16 +250,23 @@ def proteger_csrf():
 # STARTUP
 # =========================================
 
-try:
+if os.getenv("SKIP_DB_INIT", "").lower() not in {
+    "1",
+    "true",
+    "yes",
+    "on"
+}:
 
-    inicializar_banco()
+    try:
 
-except Exception:
+        inicializar_banco()
 
-    logger.exception(
-        "ERRO CRITICO AO INICIALIZAR BANCO"
-    )
-    raise
+    except Exception:
+
+        logger.exception(
+            "ERRO CRITICO AO INICIALIZAR BANCO"
+        )
+        raise
 
 
 # =========================================
@@ -3133,16 +3142,18 @@ def health():
         )
     )
 
+    saudavel = (
+        banco == "ok"
+        and (
+            not AUDIO_PREPROCESS_ENABLED
+            or ffmpeg == "ok"
+        )
+    )
+
     return jsonify({
         "status": (
             "ok"
-            if (
-                banco == "ok"
-                and (
-                    not AUDIO_PREPROCESS_ENABLED
-                    or ffmpeg == "ok"
-                )
-            )
+            if saudavel
             else "degradado"
         ),
         "database": banco,
@@ -3151,8 +3162,9 @@ def health():
             if AUDIO_PREPROCESS_ENABLED
             else "desativado"
         ),
-        "ffmpeg": ffmpeg
-    })
+        "ffmpeg": ffmpeg,
+        "timezone": APP_TIMEZONE
+    }), (200 if saudavel else 503)
 
 
 # =========================================
@@ -3178,7 +3190,9 @@ def iniciar_atendimento():
         dados.get("ticket_clickdesk", dados.get("ticket_zendesk", ""))
     )[:80]
 
-    data = datetime.now().strftime(
+    data = datetime.now(
+        ZoneInfo(APP_TIMEZONE)
+    ).strftime(
         "%d/%m/%Y %H:%M"
     )
 
@@ -4505,7 +4519,9 @@ def transcrever_arquivo_unico():
                     limite_minutos=MAX_AUDIO_MINUTES_PER_DAY
                 )
 
-    data = datetime.now().strftime(
+    data = datetime.now(
+        ZoneInfo(APP_TIMEZONE)
+    ).strftime(
         "%d/%m/%Y %H:%M"
     )
 
