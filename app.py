@@ -1082,28 +1082,33 @@ def candidatos_cnpj_por_grupos(fragmento):
     grupos = grupos_numericos_cnpj(fragmento)
     candidatos = []
 
-    if len(grupos) >= 5:
+    for indice_bloco in range(1, max(1, len(grupos) - 1)):
 
-        base = "".join(grupos[:3])
-        bloco = grupos[3]
-        final = grupos[4]
+        if indice_bloco + 1 >= len(grupos):
 
-        if (
-            len(base) == 8
-            and len(bloco) == 4
-            and len(final) >= 2
+            break
+
+        bloco = grupos[indice_bloco]
+        final = grupos[indice_bloco + 1]
+
+        if len(final) < 2:
+
+            continue
+
+        for inicio_base in range(
+            max(0, indice_bloco - 3),
+            indice_bloco
         ):
 
-            if re.fullmatch(r"[1-9]000", bloco):
+            base = "".join(
+                grupos[inicio_base:indice_bloco]
+            )
 
-                candidatos.append(
-                    (
-                        base + "000" + bloco[0] + final[-2:],
-                        True
-                    )
-                )
+            if len(base) != 8:
 
-            if bloco == "1000" and len(final) >= 3:
+                continue
+
+            if len(bloco) == 3 and bloco == "000":
 
                 candidatos.append(
                     (
@@ -1111,19 +1116,24 @@ def candidatos_cnpj_por_grupos(fragmento):
                         True
                     )
                 )
+
+            if len(bloco) == 4:
+
+                if re.fullmatch(r"[1-9]000", bloco):
+
+                    candidatos.append(
+                        (
+                            base + "000" + bloco[0] + final[-2:],
+                            True
+                        )
+                    )
+
                 candidatos.append(
                     (
-                        base + bloco + final[:2],
-                        True
+                        base + bloco + final[-2:],
+                        inferido_contexto
                     )
                 )
-
-            candidatos.append(
-                (
-                    base + bloco + final[-2:],
-                    inferido_contexto
-                )
-            )
 
     return [
         candidato
@@ -1672,7 +1682,8 @@ def extrair_cliente_nome(texto, analista_nome=""):
         r"\bnome do cliente (?:é|e)\s+([^,.;\n]{2,60})",
         r"\bcliente se chama\s+([^,.;\n]{2,60})",
         (
-            r"\bcom quem eu falo\s*[?!.:,;-]*\s*"
+            r"\b(?:com quem eu falo|eu falo com quem)\s*[?!.:,;-]*\s*"
+            r"(?:(?:oi|ol[aá])\s*[,.;:-]*\s*)?"
             r"(?:boa\s+(?:tarde|noite)|bom\s+dia)?\s*[,.;:-]*\s*"
             r"(?:meu nome (?:é|e)|me chamo|aqui (?:é|e)|sou (?:o|a)?)\s+"
             r"([^,.;\n]{2,60})"
@@ -1818,6 +1829,13 @@ def limpar_transcricao_para_resumo(texto):
     )
     texto = re.sub(
         r"\b(nis[, ]+){2,}nis\b",
+        "",
+        texto,
+        flags=re.IGNORECASE
+    )
+    texto = re.sub(
+        r"\b(?:tristanius|trist[aã]o|tristra|tristares|trishul|trisk|"
+        r"trisonso|trisha|drishuizsorvagencia)\b",
         "",
         texto,
         flags=re.IGNORECASE
