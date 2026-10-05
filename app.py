@@ -4083,7 +4083,9 @@ def liberar_finalizacao_atendimento(usuario_id, atendimento_id):
             cursor.execute(
                 """
                 UPDATE atendimentos
-                SET status = 'transcrevendo'
+                SET
+                    status = 'transcrevendo',
+                    finalizacao_iniciada_em = NULL
                 WHERE id = %s
                 AND usuario_id = %s
                 AND status = 'finalizando'
@@ -4137,7 +4139,11 @@ def finalizar_atendimento():
                     chunks_falhos,
                     chunks_ignorados,
                     segundos_transcritos,
-                    custo_estimado_usd
+                    custo_estimado_usd,
+                    (
+                        finalizacao_iniciada_em IS NOT NULL
+                        AND finalizacao_iniciada_em > NOW() - INTERVAL '2 minutes'
+                    ) AS finalizacao_recente
                 FROM atendimentos
                 WHERE id = %s
                 AND usuario_id = %s
@@ -4169,7 +4175,10 @@ def finalizar_atendimento():
                     resposta_finalizacao_salva(atendimento_atual)
                 )
 
-            if atendimento_atual[0] == "finalizando":
+            if (
+                atendimento_atual[0] == "finalizando"
+                and bool(atendimento_atual[7])
+            ):
 
                 log_evento(
                     "finalizacao_duplicada_ignorada",
@@ -4182,10 +4191,20 @@ def finalizar_atendimento():
                     "mensagem": "Resumo final ja esta sendo gerado."
                 }), 202
 
+            if atendimento_atual[0] == "finalizando":
+
+                log_evento(
+                    "finalizacao_abandonada_retomada",
+                    usuario_id=usuario_id,
+                    atendimento_id=atendimento_id
+                )
+
             cursor.execute(
                 """
                 UPDATE atendimentos
-                SET status = 'finalizando'
+                SET
+                    status = 'finalizando',
+                    finalizacao_iniciada_em = NOW()
                 WHERE id = %s
                 AND usuario_id = %s
                 """,
@@ -4484,6 +4503,7 @@ def finalizar_atendimento():
                     conteudo = %s,
                     transcricao_completa = %s,
                     status = 'finalizado',
+                    finalizacao_iniciada_em = NULL,
                     fim_em = NOW(),
                     duracao_segundos = %s,
                     chunks_total = %s,
