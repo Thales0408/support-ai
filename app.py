@@ -210,6 +210,8 @@ def limpar_vazamento_prompt_transcricao(texto):
     frases_prompt = [
         "Transcreva em português do Brasil",
         "Transcreva em portugues do Brasil",
+        "Transcreva em português",
+        "Transcreva em portugues",
         "Texto e atendimento de suporte",
         "Atendimento de suporte ERP",
         "Atendimento de suporte tecnico ERP em portugues do Brasil",
@@ -236,6 +238,19 @@ def limpar_vazamento_prompt_transcricao(texto):
             texto_limpo,
             flags=re.IGNORECASE
         )
+
+    texto_limpo = re.sub(
+        r"\bTranscreva\b[^.!?]{0,140}[.!?]?",
+        "",
+        texto_limpo,
+        flags=re.IGNORECASE
+    )
+    texto_limpo = re.sub(
+        r"\bContexto\s*[:,]\s*(?:atendimento|cumprimento)[^.!?]{0,160}[.!?]?",
+        "",
+        texto_limpo,
+        flags=re.IGNORECASE
+    )
 
     texto_limpo = re.sub(
         r"\s+",
