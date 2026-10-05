@@ -49,7 +49,7 @@ O sistema captura audio da aba do 55PBX e do microfone, envia trechos de audio p
 - Analistas veem apenas seus proprios atendimentos.
 - Supervisor e admin tecnico podem ver "Meus atendimentos" ou "Todos os analistas".
 - Gravacao de audio da aba + microfone.
-- Envio de chunks configuraveis, com padrao de 60 segundos.
+- Envio de chunks configuraveis, com padrao de 45 segundos.
 - Transcricao por chunk.
 - Finalizacao com texto pronto para colar no ticket ClickDesk.
 - Registro de falhas de chunks sem derrubar o atendimento inteiro.
@@ -123,10 +123,10 @@ Para evitar requisicoes pagas sem fala, o navegador mede atividade nos canais da
 Para comparar modelos em um audio real:
 
 ```text
-python tools/compare_transcription.py caminho/audio.webm
+python tools/compare_transcription.py caminho/audio.webm --duracao-segundos 45
 ```
 
-A ferramenta testa Groq `whisper-large-v3-turbo`, Groq `whisper-large-v3` e OpenAI `whisper-1`, exibindo tempo, custo estimado e diferencas principais.
+A ferramenta compara o audio original e, quando disponivel, a versao preprocessada nos modelos Groq `whisper-large-v3-turbo`, Groq `whisper-large-v3` e OpenAI `whisper-1`, exibindo tempo, custo estimado, similaridade e uma heuristica de qualidade.
 
 O backend prioriza `DB_*` quando `DB_PASSWORD` esta configurada. `DATABASE_URL` pode existir no Railway, mas nao deve ser a fonte principal enquanto o pooler do Supabase estiver configurado via `DB_*`.
 
