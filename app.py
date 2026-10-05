@@ -12,7 +12,8 @@ from flask import (
 from flask_cors import CORS
 from openai import RateLimitError
 from waitress import serve
-from datetime import datetime
+from datetime import datetime, timedelta
+from werkzeug.middleware.proxy_fix import ProxyFix
 from openpyxl import Workbook
 from werkzeug.security import generate_password_hash
 
@@ -48,8 +49,13 @@ from config import (
     MAX_AUDIO_MINUTES_PER_DAY,
     MAX_CALL_DURATION_MINUTES,
     MAX_CALLS_PER_DAY,
+    MAX_CHUNK_UPLOAD_MB,
     MAX_CHUNKS_PER_CALL,
+    MAX_REQUEST_MB,
+    MAX_SINGLE_UPLOAD_MB,
+    PASSWORD_MIN_LENGTH,
     SECRET_KEY,
+    SESSION_LIFETIME_HOURS,
     SUMMARY_MODEL,
     TRANSCRIBE_FALLBACK_PROVIDER,
     TRANSCRIBE_PROVIDER,
@@ -91,13 +97,28 @@ app = Flask(__name__)
 
 app.secret_key = SECRET_KEY
 app.config.update(
+    MAX_CONTENT_LENGTH=MAX_REQUEST_MB * 1024 * 1024,
+    PERMANENT_SESSION_LIFETIME=timedelta(
+        hours=SESSION_LIFETIME_HOURS
+    ),
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=bool(
         os.getenv("RAILWAY_ENVIRONMENT")
         or os.getenv("RAILWAY_PUBLIC_DOMAIN")
-    )
+    ),
+    SESSION_COOKIE_NAME="support_ai_session",
+    SESSION_REFRESH_EACH_REQUEST=True
 )
+
+if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PUBLIC_DOMAIN"):
+
+    app.wsgi_app = ProxyFix(
+        app.wsgi_app,
+        x_for=1,
+        x_proto=1,
+        x_host=1
+    )
 
 if CORS_ORIGINS:
 
@@ -106,6 +127,67 @@ if CORS_ORIGINS:
         origins=CORS_ORIGINS,
         supports_credentials=True
     )
+
+
+@app.after_request
+def aplicar_cabecalhos_seguranca(resposta):
+
+    resposta.headers.setdefault(
+        "X-Content-Type-Options",
+        "nosniff"
+    )
+    resposta.headers.setdefault(
+        "X-Frame-Options",
+        "DENY"
+    )
+    resposta.headers.setdefault(
+        "Referrer-Policy",
+        "strict-origin-when-cross-origin"
+    )
+    resposta.headers.setdefault(
+        "Permissions-Policy",
+        (
+            "camera=(), microphone=(self), "
+            "display-capture=(self), geolocation=()"
+        )
+    )
+    resposta.headers.setdefault(
+        "Content-Security-Policy",
+        (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self'"
+        )
+    )
+
+    if app.config.get("SESSION_COOKIE_SECURE"):
+
+        resposta.headers.setdefault(
+            "Strict-Transport-Security",
+            "max-age=31536000; includeSubDomains"
+        )
+
+    return resposta
+
+
+@app.errorhandler(413)
+def upload_grande_demais(_erro):
+
+    if request.path.startswith((
+        "/atendimentos",
+        "/transcrever"
+    )):
+
+        return jsonify({
+            "erro": "Arquivo de audio excede o limite permitido."
+        }), 413
+
+    return "Arquivo excede o limite permitido.", 413
 
 
 def obter_csrf_token():
@@ -170,9 +252,12 @@ try:
 
     inicializar_banco()
 
-except Exception as e:
+except Exception:
 
-    print("ERRO AO INICIALIZAR BANCO:", e)
+    logger.exception(
+        "ERRO CRITICO AO INICIALIZAR BANCO"
+    )
+    raise
 
 
 # =========================================
@@ -284,12 +369,6 @@ def tamanho_arquivo_upload(arquivo):
 
 
 def ip_requisicao():
-
-    encaminhado = request.headers.get("X-Forwarded-For", "")
-
-    if encaminhado:
-
-        return encaminhado.split(",")[0].strip()
 
     return request.remote_addr or "desconhecido"
 
