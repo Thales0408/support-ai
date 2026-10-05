@@ -3202,7 +3202,9 @@ def admin_excluir_usuario(usuario_id):
 
     registrar_auditoria(
         "usuario_excluido_sem_historico",
-        alvo_usuario_id=usuario_id
+        detalhes={
+            "usuario_id_excluido": usuario_id
+        }
     )
 
     return redirect("/admin")
