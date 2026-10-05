@@ -7,6 +7,7 @@ from config import (
     APP_TIMEZONE,
     ADMIN_USUARIO,
     DATABASE_URL,
+    DB_CONNECT_TIMEOUT_SECONDS,
     DB_HOST,
     DB_NAME,
     DB_PASSWORD,
