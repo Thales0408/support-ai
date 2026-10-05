@@ -3712,6 +3712,28 @@ def receber_chunk():
                 "motivo": "audio_muito_curto"
             })
 
+        custo_primario_chunk = estimar_custo_transcricao(
+            duracao_chunk_segundos,
+            TRANSCRIBE_PROVIDER
+        )
+
+        with conectar_banco() as conn:
+
+            with conn.cursor() as cursor:
+
+                limite_resposta = (
+                    validar_limite_custo_fallback_transcricao(
+                        cursor,
+                        usuario_id,
+                        atendimento_id,
+                        custo_primario_chunk
+                    )
+                )
+
+                if limite_resposta:
+
+                    return limite_resposta
+
         def validar_fallback_openai():
 
             custo_fallback = estimar_custo_transcricao(
@@ -3728,7 +3750,7 @@ def receber_chunk():
                             cursor,
                             usuario_id,
                             atendimento_id,
-                            custo_fallback
+                            custo_primario_chunk + custo_fallback
                         )
                     )
 
