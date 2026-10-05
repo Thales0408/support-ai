@@ -114,6 +114,14 @@ def pontuacao_ruido_transcricao(texto):
 
         pontos += 3
 
+    if re.search(
+        r"(?:\be ai\b[\s,.;:-]*){4,}",
+        comparacao,
+        flags=re.IGNORECASE
+    ):
+
+        pontos += 4
+
     palavras = re.findall(
         r"[a-z0-9]+",
         comparacao
