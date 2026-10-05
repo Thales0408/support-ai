@@ -24,6 +24,27 @@ class FakeCursor:
 
         return False
 
+    def _atendimentos_escopo(self, sql_lower, params):
+
+        itens = list(
+            self.state["atendimentos"].values()
+        )
+
+        if "a.usuario_id = %s" in sql_lower and params:
+
+            usuario_id = int(params[0])
+            itens = [
+                item
+                for item in itens
+                if item["usuario_id"] == usuario_id
+            ]
+
+        return sorted(
+            itens,
+            key=lambda item: item["id"],
+            reverse=True
+        )
+
     def execute(self, sql, params=None):
 
         params = params or ()
@@ -307,16 +328,164 @@ class FakeCursor:
             self.result = []
             return
 
-        if "from atendimentos a left join usuarios u" in sql_lower and "limit 300" in sql_lower:
+        if (
+            "count(*) filter" in sql_lower
+            and "avg(" in sql_lower
+            and "from atendimentos a" in sql_lower
+            and "group by" not in sql_lower
+        ):
 
-            rows = []
-            for atendimento in sorted(
-                self.state["atendimentos"].values(),
-                key=lambda item: item["id"],
-                reverse=True
-            ):
-                rows.append(self._linha_resultado(atendimento))
-            self.result = rows
+            itens = self._atendimentos_escopo(
+                sql_lower,
+                params
+            )
+            duracoes = [
+                int(item.get("duracao_segundos") or 0)
+                for item in itens
+                if int(item.get("duracao_segundos") or 0) > 0
+            ]
+            media = (
+                sum(duracoes) / len(duracoes)
+                if duracoes
+                else 0
+            )
+            self.result = [(
+                len(itens),
+                len([
+                    item for item in itens
+                    if item["status"] == "finalizado"
+                ]),
+                len([
+                    item for item in itens
+                    if item["status"] != "finalizado"
+                ]),
+                len([
+                    item for item in itens
+                    if int(item.get("chunks_falhos") or 0) > 0
+                ]),
+                media,
+                sum(
+                    float(item.get("custo_estimado_usd") or 0)
+                    for item in itens
+                ),
+                len([
+                    item for item in itens
+                    if not str(item.get("ticket_zendesk") or "").strip()
+                ])
+            )]
+            return
+
+        if (
+            "a.id, a.conteudo, a.data, a.status" in sql_lower
+            and "limit %s offset %s" in sql_lower
+        ):
+
+            itens = self._atendimentos_escopo(
+                sql_lower,
+                params
+            )
+            limite = int(params[-2])
+            offset = int(params[-1])
+            self.result = [
+                self._linha_resultado_leve(item)
+                for item in itens[offset:offset + limite]
+            ]
+            return
+
+        if (
+            "to_char(" in sql_lower
+            and "group by date(" in sql_lower
+        ):
+
+            itens = self._atendimentos_escopo(
+                sql_lower,
+                params
+            )
+            grupos = {}
+
+            for item in itens:
+
+                data = str(
+                    item.get("data") or ""
+                ).split(" ")[0]
+
+                if data:
+
+                    grupos[data] = grupos.get(data, 0) + 1
+
+            self.result = list(
+                reversed(
+                    list(grupos.items())
+                )
+            )
+            return
+
+        if (
+            "group by a.usuario_id, u.usuario" in sql_lower
+            and "count(*) filter" in sql_lower
+        ):
+
+            itens = self._atendimentos_escopo(
+                sql_lower,
+                params
+            )
+            grupos = {}
+
+            for item in itens:
+
+                nome = self._usuario_nome(
+                    item["usuario_id"]
+                ) or "Sem analista"
+                grupo = grupos.setdefault(
+                    nome,
+                    []
+                )
+                grupo.append(item)
+
+            self.result = []
+
+            for nome, grupo in grupos.items():
+
+                duracoes = [
+                    int(item.get("duracao_segundos") or 0)
+                    for item in grupo
+                    if int(item.get("duracao_segundos") or 0) > 0
+                ]
+                media = (
+                    sum(duracoes) / len(duracoes)
+                    if duracoes
+                    else 0
+                )
+                self.result.append((
+                    nome,
+                    len(grupo),
+                    len([
+                        item for item in grupo
+                        if item["status"] == "finalizado"
+                    ]),
+                    len([
+                        item for item in grupo
+                        if item["status"] != "finalizado"
+                    ]),
+                    len([
+                        item for item in grupo
+                        if int(item.get("chunks_falhos") or 0) > 0
+                    ]),
+                    media
+                ))
+
+            return
+
+        if (
+            "select count(*) from atendimentos a" in sql_lower
+            and "count(*) filter" not in sql_lower
+        ):
+
+            itens = self._atendimentos_escopo(
+                sql_lower,
+                params
+            )
+            self.result = [(len(itens),)]
             return
 
         if "select id, usuario from usuarios" in sql_lower:
@@ -363,6 +532,30 @@ class FakeCursor:
             if user["id"] == usuario_id:
                 return user["usuario"]
         return ""
+
+    def _linha_resultado_leve(self, atendimento):
+
+        return (
+            atendimento["id"],
+            atendimento["conteudo"],
+            atendimento["data"],
+            atendimento["status"],
+            atendimento["chunks_total"],
+            atendimento["chunks_falhos"],
+            atendimento["duracao_segundos"],
+            atendimento["ticket_zendesk"],
+            atendimento["chunks_ignorados"],
+            atendimento["segundos_transcritos"],
+            atendimento["custo_estimado_usd"],
+            atendimento["resumo_editado"],
+            atendimento["sentimento_cliente"],
+            atendimento["urgencia"],
+            atendimento["categoria"],
+            atendimento["problema_principal"],
+            atendimento["tags"],
+            self._usuario_nome(atendimento["usuario_id"]),
+            atendimento["usuario_id"]
+        )
 
     def _linha_resultado(self, atendimento):
 
@@ -621,7 +814,22 @@ class FluxosIntegracaoTest(unittest.TestCase):
         self.assertEqual(dashboard.status_code, 200)
         self.assertIn(b"55PBX AI", dashboard.data)
 
-        logout = self.client.get("/logout", follow_redirects=False)
+        logout_get = self.client.get(
+            "/logout",
+            follow_redirects=False
+        )
+        self.assertEqual(logout_get.status_code, 405)
+
+        with self.client.session_transaction() as sess:
+            csrf_logout = sess.get("csrf_token")
+
+        logout = self.client.post(
+            "/logout",
+            data={
+                "csrf_token": csrf_logout
+            },
+            follow_redirects=False
+        )
         self.assertEqual(logout.status_code, 302)
         self.assertIn("/login", logout.headers["Location"])
 
@@ -846,6 +1054,15 @@ class FluxosIntegracaoTest(unittest.TestCase):
         dados_supervisor = resultados_supervisor.get_json()
         self.assertTrue(dados_supervisor["is_supervisor"])
         self.assertFalse(dados_supervisor["mostrar_custo"])
+        self.assertEqual(dados_supervisor["metricas"]["total"], 1)
+        self.assertEqual(
+            dados_supervisor["paginacao"]["total"],
+            1
+        )
+        self.assertNotIn(
+            "transcricao_completa",
+            dados_supervisor["resultados"][0]
+        )
         self.assertNotIn("usd_brl_rate", dados_supervisor)
         self.assertNotIn("custo_estimado_usd", dados_supervisor["resultados"][0])
 
@@ -867,7 +1084,9 @@ class FluxosIntegracaoTest(unittest.TestCase):
         workbook_supervisor.close()
 
         self.set_session(usuario_id=3, perfil="admin_tecnico", nome="admin")
-        resultados_admin = self.client.get("/resultados")
+        resultados_admin = self.client.get(
+            "/resultados?analista_id=todos"
+        )
         self.assertEqual(resultados_admin.status_code, 200)
         dados_admin = resultados_admin.get_json()
         self.assertTrue(dados_admin["mostrar_custo"])
@@ -878,7 +1097,9 @@ class FluxosIntegracaoTest(unittest.TestCase):
         self.assertEqual(detalhe_admin.status_code, 200)
         self.assertIn("custo_estimado_usd", detalhe_admin.get_json())
 
-        export_admin = self.client.get("/exportar")
+        export_admin = self.client.get(
+            "/exportar?analista_id=todos"
+        )
         self.assertEqual(export_admin.status_code, 200)
         workbook_admin = load_workbook(
             io.BytesIO(export_admin.data)
