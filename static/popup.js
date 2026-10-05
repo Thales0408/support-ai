@@ -958,7 +958,7 @@ startBtn.onclick = async () => {
             'Selecione a aba do 55PBX para capturar o áudio'
 
         inicioLigacao =
-            Date.now()
+            null
 
         duracaoFinalizacaoMs = null
 
@@ -1088,6 +1088,9 @@ startBtn.onclick = async () => {
 
         finalStream =
             destination.stream
+
+        inicioLigacao =
+            Date.now()
 
         gravacaoAtiva =
             true
