@@ -2402,6 +2402,13 @@ def empresa_transcricao_confiavel(valor):
         flags=re.IGNORECASE
     ).strip(" ,;:-")
 
+    empresa = re.sub(
+        r"\s+(?:ltda\.?|i?limitad[oa])\s*$",
+        " LTDA",
+        empresa,
+        flags=re.IGNORECASE
+    ).strip(" ,;:-")
+
     comparacao = normalizar_para_comparacao(empresa)
 
     rejeitar_inicio = (
