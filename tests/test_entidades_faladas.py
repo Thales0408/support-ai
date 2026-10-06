@@ -287,6 +287,33 @@ class EntidadesFaladasTest(unittest.TestCase):
             ""
         )
 
+    def test_cliente_nome_confirmado_em_ordem_invertida(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            (
+                "Alo? Qual o teu nome? "
+                "Vanusa, ne seu nome? E claro."
+            ),
+            analista_nome="Sergio Junior"
+        )
+
+        self.assertEqual(
+            entidades["cliente_nome"],
+            "Vanusa"
+        )
+
+    def test_confirmacao_invertida_nao_confunde_analista(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            "Thales, ne seu nome? Sim.",
+            analista_nome="Thales"
+        )
+
+        self.assertEqual(
+            entidades["cliente_nome"],
+            ""
+        )
+
     def test_cliente_thiago_com_voce_acentuado(self):
 
         entidades = app.extrair_entidades_transcricao(
