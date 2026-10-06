@@ -629,7 +629,35 @@ class EntidadesFaladasTest(unittest.TestCase):
             app.normalizar_para_comparacao(
                 entidades["empresa"]
             ),
-            "rers reparos"
+            "rers reparos reformas e solucoes"
+        )
+
+    def test_empresa_rotulo_repetido_e_limpo(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            (
+                "Nome da empresa, nome da empresa FAN Esportes LTDA. "
+                "Nome do cliente Carlos."
+            ),
+            analista_nome="Sergio Junior"
+        )
+
+        self.assertEqual(
+            app.normalizar_para_comparacao(
+                entidades["empresa"]
+            ),
+            "fan esportes ltda"
+        )
+
+    def test_ne_isolado_nao_e_empresa(self):
+
+        self.assertEqual(
+            app.empresa_transcricao_confiavel("ne"),
+            ""
+        )
+        self.assertEqual(
+            app.empresa_transcricao_confiavel("né"),
+            ""
         )
 
     def test_empresa_confirmada_com_isso(self):

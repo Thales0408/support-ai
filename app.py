@@ -2305,6 +2305,13 @@ def empresa_transcricao_confiavel(valor):
 
         return ""
 
+    empresa = re.sub(
+        r"^(?:nome\s+da\s+empresa|empresa)\s*[,;:-]?\s*",
+        "",
+        empresa,
+        flags=re.IGNORECASE
+    ).strip(" ,;:-")
+
     comparacao = normalizar_para_comparacao(empresa)
 
     rejeitar_inicio = (
@@ -2336,6 +2343,8 @@ def empresa_transcricao_confiavel(valor):
         "certo",
         "beleza",
         "ok",
+        "ne",
+        "né",
     }:
 
         return ""
@@ -2359,7 +2368,9 @@ def extrair_empresa_transcricao(texto):
         ),
         (
             r"\bnome\s+da\s+empresa\s*[,;:-]?\s*"
-            r"(?:(?:é|e)\s+)?([^,.;?\n]{3,100})"
+            r"(?:(?:é|e)\s+)?(.{3,120}?)"
+            r"(?=\s*,\s*(?:cnpj|nome\s+do\s+cliente|telefone|e-?mail)\b|"
+            r"[.;?\n]|$)"
         ),
         r"\bqual(?: que)? (?:é|e) o nome da empresa\s*[?!.:,;-]*\s*(?:(?:é|e)\s+)?([^,.;?\n]{3,100})",
         r"\ba empresa chama\s+([^,.;?\n]{3,100})",
