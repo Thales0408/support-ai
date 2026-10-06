@@ -289,6 +289,20 @@ def auditar(limit=None, case_limit=80):
                 atuais.get("empresa", "")
             )
 
+        contexto_novos = {}
+        for campo in [
+            "cliente_nome",
+            "empresa",
+            "telefone",
+            "email",
+        ]:
+            valor_novo = novos.get(campo, "")
+            if valor_novo:
+                contexto_novos[campo] = contexto_curto(
+                    transcricao_original,
+                    valor_novo
+                )
+
         if comparacoes or score_ruido or suspeitas:
             casos.append({
                 "id": atendimento_id,
@@ -303,6 +317,7 @@ def auditar(limit=None, case_limit=80):
                 "evidencia_antiga": evidencia_antiga,
                 "contexto_cliente_antigo": contexto_cliente_antigo,
                 "contexto_empresa_antiga": contexto_empresa_antiga,
+                "contexto_novos": contexto_novos,
                 "campos_salvos": {
                     campo: atuais.get(campo, "")
                     for campo in [
