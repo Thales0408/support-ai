@@ -1964,8 +1964,9 @@ def extrair_cliente_nome(texto, analista_nome=""):
 
     apresentacao_inicial = re.search(
         (
-            r"^\s*(?:bom\s+dia|boa\s+tarde|boa\s+noite)?\s*[,.;:-]*\s*"
-            r"(?:meu nome (?:é|e)|me chamo)\s+([^,.;\n]{2,60})"
+            r"^\s*(?:(?:oi|ol[aá])\s*[,.;:-]*\s*)?"
+            r"(?:bom\s+dia|boa\s+tarde|boa\s+noite)?\s*[,.;:-]*\s*"
+            r"(?:meu nome (?:é|e)|me chamo|aqui (?:é|e))\s+([^,.;\n]{2,60})"
         ),
         inicio,
         flags=re.IGNORECASE
@@ -2021,6 +2022,17 @@ def extrair_cliente_nome(texto, analista_nome=""):
 
         nome = nome_participante_confiavel(
             apresentacao_solicitante.group(1),
+            analista_nome
+        )
+
+        if nome:
+
+            return nome
+
+    if apresentacao_inicial and contexto_solicitante:
+
+        nome = nome_participante_confiavel(
+            apresentacao_inicial.group(1),
             analista_nome
         )
 
