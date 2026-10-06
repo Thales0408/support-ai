@@ -2367,11 +2367,13 @@ def extrair_empresa_transcricao(texto):
         r"\braz[aã]o social (?:é|e)\s+([^,.;?\n]{3,100})",
         (
             r"\b(?:a\s+sua\s+|a\s+)?empresa\s+(?:é|e)\s+"
-            r"(?:o|a)?\s*([^,.;?\n]{3,100})\s*[?.]\s*"
+            r"(?:o|a)?\s*([^,.;?\n]{3,100})"
+            r"(?:\s*[?.]\s*|\s*,\s*n[eé]\s*[?]\s*)"
             r"(?:isso|sim|correto)\b"
         ),
         (
-            r"\bempresa\s+([^,.;?\n]{3,100})\s*,?\s*n[eé]\s*[?]"
+            r"\bempresa\s+(?:(?:é|e)\s+)?(?:o|a)?\s*"
+            r"([^,.;?\n]{3,100})\s*,?\s*n[eé]\s*[?]"
         ),
         (
             r"\b(?:acessei|consegui\s+acessar)[^,.;?\n]{0,50}"
