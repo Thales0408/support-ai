@@ -533,6 +533,158 @@ class EntidadesFaladasTest(unittest.TestCase):
                     ""
                 )
 
+    def test_cliente_denilson_apos_com_quem_e_saudacao(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            (
+                "Suporte tecnico, boa tarde, com quem eu falo? "
+                "Suporte tecnico, boa tarde, com quem eu falo? "
+                "Boa tarde, Denilson. Tudo bem? "
+                "Eu queria ajuda com uma nota de servico."
+            ),
+            analista_nome="admin"
+        )
+
+        self.assertEqual(
+            app.normalizar_para_comparacao(
+                entidades["cliente_nome"]
+            ),
+            "denilson"
+        )
+
+    def test_cliente_thallis_apos_pergunta_de_nome_e_ajuda(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            (
+                "Como que e o seu nome? Tudo bem, Thialli. "
+                "Thallis, como posso te ajudar? "
+                "Eu estava falando com outro rapaz."
+            ),
+            analista_nome="admin"
+        )
+
+        self.assertEqual(
+            app.normalizar_para_comparacao(
+                entidades["cliente_nome"]
+            ),
+            "thallis"
+        )
+
+    def test_com_quem_eu_falo_nunca_e_nome(self):
+
+        self.assertEqual(
+            app.nome_participante_confiavel(
+                "Com Quem Eu Falo",
+                analista_nome="admin"
+            ),
+            ""
+        )
+
+    def test_empresa_sou_da_empresa(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            (
+                "Ola, bom dia, sou Joao da empresa "
+                "Joao Emprestimos e Comercio. "
+                "Meu CNPJ e 13.123.345/0001-59."
+            ),
+            analista_nome="admin"
+        )
+
+        self.assertEqual(
+            app.normalizar_para_comparacao(
+                entidades["empresa"]
+            ),
+            "joao emprestimos e comercio"
+        )
+
+    def test_empresa_sou_da_empresa_sem_nome_do_cliente(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            (
+                "Ola, bom dia, sou da empresa Suporte Equipamentos, "
+                "meu CNPJ e 13.172.438/1000-75."
+            ),
+            analista_nome="admin"
+        )
+
+        self.assertEqual(
+            app.normalizar_para_comparacao(
+                entidades["empresa"]
+            ),
+            "suporte equipamentos"
+        )
+
+    def test_empresa_nome_da_empresa_sem_verbo(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            (
+                "Nome da empresa RERS Reparos, Reformas e Solucoes, "
+                "CNPJ 31.451.200/0001-00."
+            ),
+            analista_nome="Mario Diniz"
+        )
+
+        self.assertEqual(
+            app.normalizar_para_comparacao(
+                entidades["empresa"]
+            ),
+            "rers reparos"
+        )
+
+    def test_empresa_confirmada_com_isso(self):
+
+        for texto, esperado in [
+            (
+                "A empresa e Mundo das Tintas? Isso.",
+                "mundo das tintas"
+            ),
+            (
+                "A empresa e o Pneu Souza. Isso.",
+                "pneu souza"
+            ),
+            (
+                "A sua empresa e Excel Chaveiro, ne? Isso.",
+                "excel chaveiro"
+            ),
+            (
+                "Empresa Medical Sul, ne? Seu nome e Ana, ne?",
+                "medical sul"
+            ),
+        ]:
+
+            with self.subTest(texto=texto):
+
+                entidades = app.extrair_entidades_transcricao(
+                    texto,
+                    analista_nome="admin"
+                )
+
+                self.assertEqual(
+                    app.normalizar_para_comparacao(
+                        entidades["empresa"]
+                    ),
+                    esperado
+                )
+
+    def test_empresa_sou_daqui_da_empresa(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            (
+                "Bom dia, fala com o Luiz. "
+                "Eu sou daqui da InfoCell, "
+                "estou com um pequeno problema no sistema."
+            ),
+            analista_nome="Mario Diniz"
+        )
+
+        self.assertEqual(
+            app.normalizar_para_comparacao(
+                entidades["empresa"]
+            ),
+            "infocell"
+        )
+
     def test_nao_confunde_pessoas_citadas_com_cliente(self):
 
         for texto in [
