@@ -649,6 +649,25 @@ class EntidadesFaladasTest(unittest.TestCase):
             "fan esportes ltda"
         )
 
+    def test_empresa_remove_ne_terminal_sem_perder_virgula_interna(self):
+
+        self.assertEqual(
+            app.empresa_transcricao_confiavel("Base Gruas, né"),
+            "Base Gruas"
+        )
+        self.assertEqual(
+            app.empresa_transcricao_confiavel("Centerfix, ne"),
+            "Centerfix"
+        )
+        self.assertEqual(
+            app.normalizar_para_comparacao(
+                app.empresa_transcricao_confiavel(
+                    "RERS Reparos, Reformas e Solucoes"
+                )
+            ),
+            "rers reparos, reformas e solucoes"
+        )
+
     def test_ne_isolado_nao_e_empresa(self):
 
         self.assertEqual(

@@ -2312,6 +2312,20 @@ def empresa_transcricao_confiavel(valor):
         flags=re.IGNORECASE
     ).strip(" ,;:-")
 
+    empresa = re.sub(
+        (
+            r"\s*[,;:-]?\s*(?:"
+            r"n[eé]|"
+            r"isso|isso\s+mesmo|"
+            r"essa\s+mesma|esse\s+mesmo|"
+            r"correto|certo"
+            r")\s*$"
+        ),
+        "",
+        empresa,
+        flags=re.IGNORECASE
+    ).strip(" ,;:-")
+
     comparacao = normalizar_para_comparacao(empresa)
 
     rejeitar_inicio = (
