@@ -980,6 +980,57 @@ class EntidadesFaladasTest(unittest.TestCase):
             self.POSSIVEL + "43.405.954/0001-97" + self.CONFIRMAR
         )
 
+    def test_empresa_normaliza_limitado_falado_para_ltda(self):
+
+        casos = [
+            (
+                "Qual que e o nome da empresa? Solucoes e servico ilimitado.",
+                "solucoes e servico ltda"
+            ),
+            (
+                "Qual que e o nome da empresa? Oficina limitada.",
+                "oficina ltda"
+            ),
+            (
+                "Nome da empresa e Comercio do Vale limitado.",
+                "comercio do vale ltda"
+            ),
+            (
+                "Qual que e o nome da empresa? Horizonte LTDA.",
+                "horizonte ltda"
+            ),
+        ]
+
+        for texto, esperado in casos:
+
+            with self.subTest(texto=texto):
+
+                entidades = app.extrair_entidades_transcricao(
+                    texto,
+                    analista_nome="admin"
+                )
+
+                self.assertEqual(
+                    app.normalizar_para_comparacao(
+                        entidades["empresa"]
+                    ),
+                    esperado
+                )
+
+    def test_empresa_nao_normaliza_limitado_no_meio_do_nome(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            "Qual que e o nome da empresa? Mundo Ilimitado Tecnologia.",
+            analista_nome="admin"
+        )
+
+        self.assertEqual(
+            app.normalizar_para_comparacao(
+                entidades["empresa"]
+            ),
+            "mundo ilimitado tecnologia"
+        )
+
     def test_empresa_remove_confirmacao_apos_interrogacao(self):
 
         casos = [
