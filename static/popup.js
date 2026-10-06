@@ -35,6 +35,7 @@ let uploadsPendentes = []
 let gravacaoAtiva = false
 let pausado = false
 let finalizando = false
+const finalizacoesPendentes = new Map()
 let limiteAtingido = false
 let pararSegmentoAtual = null
 let analisadoresAudio = []
@@ -232,6 +233,13 @@ function atualizarPainelGravacao() {
 
         rotulo =
             'Aguardando finalização'
+
+    } else if (finalizacoesPendentes.size > 0) {
+
+        rotulo =
+            finalizacoesPendentes.size === 1
+                ? 'Pronto — 1 atendimento finalizando em segundo plano'
+                : `Pronto — ${finalizacoesPendentes.size} atendimentos finalizando em segundo plano`
     }
 
     captureShell.dataset.state =
@@ -268,7 +276,8 @@ function atendimentoEmAberto() {
     return Boolean(
         gravacaoAtiva ||
         finalizando ||
-        atendimentoId
+        atendimentoId ||
+        finalizacoesPendentes.size > 0
     )
 }
 
@@ -384,14 +393,14 @@ async function iniciarAtendimento() {
     return data.atendimento_id
 }
 
-async function enviarChunk(blob, ordem, duracaoMs) {
+async function enviarChunk(blob, ordem, duracaoMs, atendimentoIdDoUpload) {
 
     const formData =
         new FormData()
 
     formData.append(
         'atendimento_id',
-        atendimentoId
+        atendimentoIdDoUpload
     )
 
     formData.append(
@@ -490,7 +499,7 @@ async function pararGravacaoPorLimite(mensagem) {
     pararStreams()
 }
 
-async function finalizarAtendimento(duracao) {
+async function finalizarAtendimento(contexto) {
 
     const response =
         await fetch('/atendimentos/finalizar', {
@@ -499,12 +508,12 @@ async function finalizarAtendimento(duracao) {
                 'Content-Type': 'application/json',
             }),
             body: JSON.stringify({
-                atendimento_id: atendimentoId,
-                duracao_segundos: Math.floor(duracao / 1000),
-                chunks_total: ordemChunk,
-                chunks_falhos: chunksFalhos,
-                chunks_ignorados: chunksIgnorados,
-                segundos_transcritos: Math.floor(audioEnviadoMs / 1000)
+                atendimento_id: contexto.atendimentoId,
+                duracao_segundos: Math.floor(contexto.duracao / 1000),
+                chunks_total: contexto.chunksTotal,
+                chunks_falhos: contexto.chunksFalhos,
+                chunks_ignorados: contexto.chunksIgnorados,
+                segundos_transcritos: Math.floor(contexto.audioEnviadoMs / 1000)
             })
         })
 
@@ -519,10 +528,6 @@ async function finalizarAtendimento(duracao) {
         throw new Error(
             data.mensagem || data.erro || 'Erro finalizando atendimento'
         )
-    }
-
-    if (data.status === 'finalizando') {
-        throw new Error(data.mensagem || 'Resumo ainda esta sendo gerado. Tente novamente.')
     }
 
     return data
@@ -545,6 +550,9 @@ function registrarUpload(blob, duracaoMs, temAtividade = true) {
         return
     }
 
+    const atendimentoIdDoUpload =
+        atendimentoId
+
     const ordemAtual =
         ordemChunk++
 
@@ -555,7 +563,8 @@ function registrarUpload(blob, duracaoMs, temAtividade = true) {
         enviarChunk(
             blob,
             ordemAtual,
-            duracaoMs
+            duracaoMs,
+            atendimentoIdDoUpload
         ).then(resultado => {
 
             if (
@@ -563,11 +572,11 @@ function registrarUpload(blob, duracaoMs, temAtividade = true) {
                 resultado.ignorado
             ) {
 
-                chunksIgnorados++
                 return {ok: true, ordem: ordemAtual, ignorado: true}
             }
 
             if (
+                atendimentoId === atendimentoIdDoUpload &&
                 gravacaoAtiva &&
                 !pausado
             ) {
@@ -585,10 +594,16 @@ function registrarUpload(blob, duracaoMs, temAtividade = true) {
 
             console.error(err)
 
-            chunksFalhos++
+            if (
+                atendimentoId === atendimentoIdDoUpload
+            ) {
+
+                chunksFalhos++
+            }
 
             if (
-                err.devePararGravacao
+                err.devePararGravacao &&
+                atendimentoId === atendimentoIdDoUpload
             ) {
 
                 pararGravacaoPorLimite(
@@ -604,8 +619,13 @@ function registrarUpload(blob, duracaoMs, temAtividade = true) {
                 }
             }
 
-            statusDiv.innerText =
-                `Um trecho falhou, mas a gravacao continua (${chunksFalhos} falha(s))`
+            if (
+                atendimentoId === atendimentoIdDoUpload
+            ) {
+
+                statusDiv.innerText =
+                    `Um trecho falhou, mas a gravacao continua (${chunksFalhos} falha(s))`
+            }
 
             return {
                 ok: false,
@@ -780,11 +800,153 @@ async function pararSegmentoSeNecessario() {
     }
 }
 
+function esperar(ms) {
+
+    return new Promise(resolve => {
+        setTimeout(resolve, ms)
+    })
+}
+
+function resetarEstadoCaptura() {
+
+    inicioLigacao = null
+    duracaoFinalizacaoMs = null
+    pausaIniciadaEm = null
+    tempoPausadoMs = 0
+    atendimentoId = null
+    ordemChunk = 0
+    chunksFalhos = 0
+    chunksIgnorados = 0
+    audioEnviadoMs = 0
+    uploadsPendentes = []
+    gravacaoAtiva = false
+    pausado = false
+    limiteAtingido = false
+    recorder = null
+    pararSegmentoAtual = null
+}
+
+async function concluirFinalizacaoEmSegundoPlano(contexto) {
+
+    finalizacoesPendentes.set(
+        contexto.atendimentoId,
+        contexto
+    )
+
+    atualizarPainelGravacao()
+
+    try {
+
+        const resultadosUploads =
+            await Promise.all(
+                contexto.uploadsPendentes
+            )
+
+        contexto.chunksFalhos =
+            resultadosUploads.filter(
+                item => !item.ok
+            ).length
+
+        contexto.chunksIgnorados +=
+            resultadosUploads.filter(
+                item => item.ignorado
+            ).length
+
+        let resultadoFinal = null
+
+        for (
+            let tentativa = 0;
+            tentativa < 20;
+            tentativa++
+        ) {
+
+            resultadoFinal =
+                await finalizarAtendimento(
+                    contexto
+                )
+
+            if (
+                resultadoFinal.status !== 'finalizando'
+            ) {
+
+                break
+            }
+
+            await esperar(2000)
+        }
+
+        if (
+            !resultadoFinal ||
+            resultadoFinal.status === 'finalizando'
+        ) {
+
+            throw new Error(
+                'O resumo continua sendo gerado no servidor.'
+            )
+        }
+
+        finalizacoesPendentes.delete(
+            contexto.atendimentoId
+        )
+
+        window.dispatchEvent(
+            new CustomEvent(
+                'support-ai-atendimento-finalizado',
+                {
+                    detail: {
+                        atendimentoId: contexto.atendimentoId,
+                        chunksFalhos: contexto.chunksFalhos
+                    }
+                }
+            )
+        )
+
+        if (
+            !gravacaoAtiva &&
+            !atendimentoId &&
+            !finalizando
+        ) {
+
+            statusDiv.innerText =
+                contexto.chunksFalhos > 0
+                    ? 'Atendimento anterior finalizado com aviso - TMA: ' +
+                        formatarTempo(contexto.duracao)
+                    : 'Atendimento anterior finalizado - TMA: ' +
+                        formatarTempo(contexto.duracao)
+        }
+
+    } catch (err) {
+
+        console.error(err)
+
+        finalizacoesPendentes.delete(
+            contexto.atendimentoId
+        )
+
+        if (
+            !gravacaoAtiva &&
+            !atendimentoId &&
+            !finalizando
+        ) {
+
+            statusDiv.innerText =
+                `Atendimento ${contexto.atendimentoId} não finalizou: ${err.message}. Ele permanece no histórico para reprocessamento.`
+        }
+
+    } finally {
+
+        atualizarPainelGravacao()
+    }
+}
+
 async function finalizarGravacao() {
 
     if (finalizando || !atendimentoId) {
         return
     }
+
+    const atendimentoEncerrado =
+        atendimentoId
 
     startBtn.disabled =
         true
@@ -792,7 +954,7 @@ async function finalizarGravacao() {
     atualizarBotaoPausa(false)
 
     statusDiv.innerText =
-        'Finalizando e aguardando ultimos trechos...'
+        'Encerrando captura e preparando finalização...'
 
     finalizando =
         true
@@ -829,43 +991,33 @@ async function finalizarGravacao() {
             )
         }
 
-        const duracao = duracaoFinalizacaoMs
+        const contexto = {
+            atendimentoId: atendimentoEncerrado,
+            duracao: duracaoFinalizacaoMs,
+            chunksTotal: ordemChunk,
+            chunksFalhos: 0,
+            chunksIgnorados: chunksIgnorados,
+            audioEnviadoMs,
+            uploadsPendentes: [
+                ...uploadsPendentes
+            ]
+        }
 
-        const resultadosUploads =
-            await Promise.all(
-                uploadsPendentes
-            )
-
-        chunksFalhos =
-            resultadosUploads.filter(
-                item => !item.ok
-            ).length
-
-        statusDiv.innerText =
-            chunksFalhos > 0
-                ? `Gerando resumo final com ${chunksFalhos} trecho(s) com falha...`
-                : 'Gerando resumo final...'
-
-        await finalizarAtendimento(
-            duracao
+        concluirFinalizacaoEmSegundoPlano(
+            contexto
         )
 
-        atendimentoId = null
-        duracaoFinalizacaoMs = null
+        resetarEstadoCaptura()
 
         statusDiv.innerText =
-            chunksFalhos > 0
-                ? 'Ligacao finalizada com aviso - TMA: ' +
-                    formatarTempo(duracao)
-                : 'Ligacao finalizada - TMA: ' +
-                    formatarTempo(duracao)
+            'Atendimento encerrado. Finalizando em segundo plano — você já pode iniciar outra gravação.'
 
     } catch (err) {
 
         console.error(err)
 
         statusDiv.innerText =
-            'Erro finalizando atendimento: ' + err.message
+            'Erro encerrando atendimento: ' + err.message
 
     } finally {
 
@@ -874,9 +1026,10 @@ async function finalizarGravacao() {
         startBtn.disabled =
             false
 
-        startBtn.innerText = atendimentoId
-            ? 'Tentar finalizar'
-            : 'Iniciar gravação'
+        startBtn.innerText =
+            atendimentoId
+                ? 'Tentar finalizar'
+                : 'Iniciar gravação'
 
         atualizarBotaoPausa(false)
 
