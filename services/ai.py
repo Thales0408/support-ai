@@ -103,7 +103,7 @@ def pontuacao_ruido_transcricao(texto):
 
     if re.search(
         (
-            r"\b(?:tristanius|tristao|tristra|tristares|trishul|trisk|"
+            r"\b(?:tristanius|tristario|tristao|tristra|tristares|trishul|trisk|"
             r"trisonso|trisha|trishui|drishuizsorvagencia)\b"
         ),
         comparacao,
