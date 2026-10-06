@@ -2241,6 +2241,27 @@ def extrair_cliente_nome(texto, analista_nome=""):
 
             return nome
 
+    nome_confirmado_ordem_invertida = re.search(
+        (
+            r"(?:^|[.!?]\\s*)"
+            r"([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ' -]{1,45})\\s*[,;:-]\\s*"
+            r"n[eé]\\s+(?:o\\s+)?seu\\s+nome\\s*[?]"
+        ),
+        texto_base,
+        flags=re.IGNORECASE
+    )
+
+    if nome_confirmado_ordem_invertida:
+
+        nome = nome_participante_confiavel(
+            nome_confirmado_ordem_invertida.group(1),
+            analista_nome
+        )
+
+        if nome:
+
+            return nome
+
     fala_com_solicitante = re.search(
         (
             r"^\s*(?:oi|ol[aá])?\s*[,.;:-]*\s*"
