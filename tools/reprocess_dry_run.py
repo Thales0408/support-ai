@@ -54,42 +54,74 @@ def cortar(texto, limite=1800):
     return texto[:limite] + "..."
 
 
-def executar(ids):
-    ids = sorted(set(int(valor) for valor in ids))
+def executar(ids=None, todos=False):
+    ids = sorted(set(int(valor) for valor in (ids or [])))
 
-    if not ids:
-        raise SystemExit("Informe pelo menos um ID.")
+    if not ids and not todos:
+        raise SystemExit("Informe pelo menos um ID ou use --all.")
 
-    if len(ids) > 10:
-        raise SystemExit("Dry-run limitado a no maximo 10 atendimentos por execucao.")
+    if ids and len(ids) > 10:
+        raise SystemExit("Dry-run por IDs limitado a no maximo 10 atendimentos.")
 
     with conectar_banco() as conn:
         with conn.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT
-                    a.id,
-                    a.conteudo,
-                    a.transcricao_completa,
-                    COALESCE(u.usuario, '')
-                FROM atendimentos a
-                LEFT JOIN usuarios u
-                ON u.id = a.usuario_id
-                WHERE a.id = ANY(%s)
-                ORDER BY a.id
-                """,
-                (ids,)
-            )
+            if todos:
+                cursor.execute(
+                    """
+                    SELECT
+                        a.id,
+                        a.conteudo,
+                        a.transcricao_completa,
+                        COALESCE(u.usuario, '')
+                    FROM atendimentos a
+                    LEFT JOIN usuarios u
+                    ON u.id = a.usuario_id
+                    WHERE COALESCE(TRIM(a.transcricao_completa), '') <> ''
+                    ORDER BY a.id
+                    """
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT
+                        a.id,
+                        a.conteudo,
+                        a.transcricao_completa,
+                        COALESCE(u.usuario, '')
+                    FROM atendimentos a
+                    LEFT JOIN usuarios u
+                    ON u.id = a.usuario_id
+                    WHERE a.id = ANY(%s)
+                    ORDER BY a.id
+                    """,
+                    (ids,)
+                )
+
             rows = cursor.fetchall()
 
     encontrados = {int(row[0]) for row in rows}
-    faltantes = [valor for valor in ids if valor not in encontrados]
+    faltantes = [
+        valor for valor in ids
+        if valor not in encontrados
+    ]
 
     if faltantes:
         print(
             "DRY_REPROCESS_MISSING="
             + json.dumps(faltantes)
         )
+
+    print(
+        "DRY_REPROCESS_SUMMARY="
+        + json.dumps(
+            {
+                "selecionados": len(rows),
+                "modo": "all" if todos else "ids",
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+    )
 
     for atendimento_id, conteudo_antigo, transcricao_bruta, analista in rows:
         transcricao_original = limpar_vazamento_prompt_transcricao(
@@ -184,11 +216,24 @@ if __name__ == "__main__":
             "Nao atualiza o banco."
         )
     )
-    parser.add_argument(
+    grupo = parser.add_mutually_exclusive_group(
+        required=True
+    )
+    grupo.add_argument(
         "--ids",
         nargs="+",
         type=int,
-        required=True,
+    )
+    grupo.add_argument(
+        "--all",
+        action="store_true",
+        help=(
+            "Reprocessa em memoria todos os atendimentos "
+            "com transcricao salva. Nao altera o banco."
+        ),
     )
     args = parser.parse_args()
-    executar(args.ids)
+    executar(
+        ids=args.ids,
+        todos=args.all,
+    )
