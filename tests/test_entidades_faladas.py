@@ -202,6 +202,56 @@ class EntidadesFaladasTest(unittest.TestCase):
         self.assertEqual(entidades["analista_nome"], "Thales")
         self.assertEqual(entidades["cliente_nome"], "")
 
+    def test_cliente_thiago_com_voce_acentuado(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            (
+                "Bom dia, aqui você fala com o Thiago. "
+                "Eu faço parte da empresa que presta assessoria contábil "
+                "e eu queria tirar uma dúvida."
+            ),
+            analista_nome="teste"
+        )
+
+        self.assertEqual(
+            entidades["cliente_nome"],
+            "Thiago"
+        )
+
+    def test_extrair_secao_vazia_nao_engole_proximo_rotulo(self):
+
+        texto = (
+            "Nome da empresa: Sonho de Indústria\n\n"
+            "Empresa/Loja:\n\n"
+            "CNPJ:\n\n"
+            "Nome do Cliente: Thiago\n\n"
+            "Telefone de contato:\n\n"
+            "E-mail Solicitante:\n\n"
+            "Analista responsável: teste"
+        )
+
+        self.assertEqual(
+            app.extrair_secao_texto(
+                texto,
+                ["CNPJ"]
+            ),
+            ""
+        )
+        self.assertEqual(
+            app.extrair_secao_texto(
+                texto,
+                ["Nome do Cliente"]
+            ),
+            "Thiago"
+        )
+        self.assertEqual(
+            app.extrair_secao_texto(
+                texto,
+                ["Telefone de contato"]
+            ),
+            ""
+        )
+
     def test_cliente_thiago_em_apresentacao_de_solicitante(self):
 
         entidades = app.extrair_entidades_transcricao(

@@ -1994,7 +1994,7 @@ def extrair_cliente_nome(texto, analista_nome=""):
     apresentacao_solicitante = re.search(
         (
             r"^\s*(?:bom\s+dia|boa\s+tarde|boa\s+noite)?\s*[,.;:-]*\s*"
-            r"aqui\s+(?:voce\s+)?fala\s+com\s+(?:o|a)?\s*"
+            r"aqui\s+(?:voc[eê]\s+)?fala\s+com\s+(?:o|a)?\s*"
             r"([^,.;\n]{2,60})"
         ),
         inicio,
@@ -2344,9 +2344,9 @@ def extrair_secao_texto(texto, rotulos):
     for rotulo in rotulos:
 
         padrao = (
-            r"(?:^|\n)\s*"
+            r"(?:^|\n)[ \t]*"
             + re.escape(rotulo)
-            + r"\s*:\s*(.*?)(?=\n\s*[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ /-]{1,45}\s*:|\Z)"
+            + r"[ \t]*:[ \t]*(.*?)(?=\n[ \t]*[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ /-]{1,45}[ \t]*:|\Z)"
         )
 
         match = re.search(
