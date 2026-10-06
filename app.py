@@ -2138,7 +2138,7 @@ def extrair_empresa_transcricao(texto):
             r"\bestou falando de\s+[^,.;?\n]{2,80}\s*[,;:-]\s*"
             r"(?:da|do)\s+([^,.;?\n]{3,100})"
         ),
-        r"\bqual(?: que)? (?:é|e) o nome da empresa\s*[?!.:,;-]*\s*(?:é|e)?\s*([^,.;?\n]{3,100})",
+        r"\bqual(?: que)? (?:é|e) o nome da empresa\s*[?!.:,;-]*\s*(?:(?:é|e)\s+)?([^,.;?\n]{3,100})",
         r"\ba empresa chama\s+([^,.;?\n]{3,100})",
         r"\bempresa se chama\s+([^,.;?\n]{3,100})",
         r"\braz[aã]o social (?:é|e)\s+([^,.;?\n]{3,100})",
