@@ -629,7 +629,7 @@ class EntidadesFaladasTest(unittest.TestCase):
             app.normalizar_para_comparacao(
                 entidades["empresa"]
             ),
-            "rers reparos reformas e solucoes"
+            "rers reparos, reformas e solucoes"
         )
 
     def test_empresa_rotulo_repetido_e_limpo(self):
