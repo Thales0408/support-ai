@@ -2062,20 +2062,87 @@ def extrair_cliente_nome(texto, analista_nome=""):
     return ""
 
 
+def empresa_transcricao_confiavel(valor):
+
+    empresa = limpar_valor_estruturado(
+        valor,
+        limite=120
+    )
+
+    if not empresa:
+
+        return ""
+
+    empresa = re.split(
+        r"[?]",
+        empresa,
+        maxsplit=1
+    )[0].strip(" ,;:-")
+
+    empresa = re.split(
+        (
+            r"\b(?:tristanius|tristario|trist[aã]o|tristra|tristares|"
+            r"trishul|trisk|trisonso|trisha|drishuizsorvagencia)\b"
+        ),
+        empresa,
+        maxsplit=1,
+        flags=re.IGNORECASE
+    )[0].strip(" ,;:-")
+
+    if not campo_zendesk_informado(empresa):
+
+        return ""
+
+    comparacao = normalizar_para_comparacao(empresa)
+
+    rejeitar_inicio = (
+        "diversos",
+        "esse valor",
+        "essa valor",
+        "a gente",
+        "do simples nacional",
+        "da simples nacional",
+        "simples nacional",
+        "isso",
+        "essa mesma",
+        "esse mesmo",
+        "contexto",
+        "nao vai",
+        "não vai",
+        "o que ",
+        "qual ",
+    )
+
+    if comparacao.startswith(rejeitar_inicio):
+
+        return ""
+
+    if comparacao in {
+        "sim",
+        "nao",
+        "não",
+        "certo",
+        "beleza",
+        "ok",
+    }:
+
+        return ""
+
+    return empresa
+
+
 def extrair_empresa_transcricao(texto):
 
     padroes = [
         (
-            r"\bestou falando de\s+[^,.;\n]{2,80}\s*[,;:-]\s*"
-            r"(?:da|do)\s+([^,.;\n]{3,100})"
+            r"\bestou falando de\s+[^,.;?\n]{2,80}\s*[,;:-]\s*"
+            r"(?:da|do)\s+([^,.;?\n]{3,100})"
         ),
-        r"\bqual(?: que)? (?:é|e) o nome da empresa\s*[?!.:,;-]*\s*(?:é|e)?\s*([^,.;\n]{3,100})",
-        r"\ba empresa chama\s+([^,.;\n?]{3,100})",
-        r"\bempresa se chama\s+([^,.;\n?]{3,100})",
-        r"\braz[aã]o social (?:é|e)\s+([^,.;\n]{3,100})",
-        r"\bnome da empresa (?:é|e)\s+([^,.;\n]{3,100})",
-        r"\bempresa (?:é|e)\s+([^,.;\n]{3,100})",
-        r"\bloja (?:é|e)\s+([^,.;\n]{3,100})"
+        r"\bqual(?: que)? (?:é|e) o nome da empresa\s*[?!.:,;-]*\s*(?:é|e)?\s*([^,.;?\n]{3,100})",
+        r"\ba empresa chama\s+([^,.;?\n]{3,100})",
+        r"\bempresa se chama\s+([^,.;?\n]{3,100})",
+        r"\braz[aã]o social (?:é|e)\s+([^,.;?\n]{3,100})",
+        r"\bnome da empresa (?:é|e)\s+([^,.;?\n]{3,100})"
     ]
 
     for padrao in padroes:
@@ -2088,12 +2155,11 @@ def extrair_empresa_transcricao(texto):
 
         if match:
 
-            empresa = limpar_valor_estruturado(
-                match.group(1),
-                limite=120
+            empresa = empresa_transcricao_confiavel(
+                match.group(1)
             )
 
-            if campo_zendesk_informado(empresa):
+            if empresa:
 
                 return empresa
 
