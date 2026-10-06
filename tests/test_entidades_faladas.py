@@ -402,6 +402,77 @@ class EntidadesFaladasTest(unittest.TestCase):
             self.POSSIVEL + "43.405.954/0001-97" + self.CONFIRMAR
         )
 
+    def test_empresa_remove_confirmacao_apos_interrogacao(self):
+
+        casos = [
+            (
+                "Qual que e o nome da empresa? Mundo das Tintas? Isso.",
+                "mundo das tintas"
+            ),
+            (
+                "Qual que e o nome da empresa? Cia das Placas? Isso mesmo.",
+                "cia das placas"
+            ),
+            (
+                "Qual que e o nome da empresa? DEN Informatica? Essa mesma.",
+                "den informatica"
+            ),
+        ]
+
+        for texto, esperado in casos:
+
+            with self.subTest(texto=texto):
+
+                entidades = app.extrair_entidades_transcricao(
+                    texto,
+                    analista_nome="admin"
+                )
+
+                self.assertEqual(
+                    app.normalizar_para_comparacao(
+                        entidades["empresa"]
+                    ),
+                    esperado
+                )
+
+    def test_empresa_rejeita_resposta_conversacional(self):
+
+        for texto in [
+            "Qual que e o nome da empresa? diversos.",
+            "Qual que e o nome da empresa? esse valor que ta ai pra voce.",
+            "Qual que e o nome da empresa? a gente nao vai poder.",
+            "A empresa e do Simples Nacional.",
+        ]:
+
+            with self.subTest(texto=texto):
+
+                entidades = app.extrair_entidades_transcricao(
+                    texto,
+                    analista_nome="admin"
+                )
+
+                self.assertEqual(
+                    entidades["empresa"],
+                    ""
+                )
+
+    def test_empresa_remove_ruido_apos_nome(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            (
+                "Qual que e o nome da empresa? "
+                "MIMEG Comercio e Servicos TRISTAO PROSO PORTO."
+            ),
+            analista_nome="admin"
+        )
+
+        self.assertEqual(
+            app.normalizar_para_comparacao(
+                entidades["empresa"]
+            ),
+            "mimeg comercio e servicos"
+        )
+
     def test_empresa_chama_gigante_e_importes(self):
 
         entidades = app.extrair_entidades_transcricao(

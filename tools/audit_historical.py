@@ -159,6 +159,15 @@ def auditar(limit=None, case_limit=80):
         )
 
         comparacoes = {}
+        evidencia_antiga = {}
+
+        transcricao_normalizada = normalizar(
+            transcricao_original
+        )
+        inicio_normalizado = normalizar(
+            transcricao_original[:320]
+        )
+
         for campo in [
             "empresa",
             "cnpj",
@@ -173,6 +182,34 @@ def auditar(limit=None, case_limit=80):
             if tipo:
                 comparacoes[campo] = tipo
                 totais[f"{campo}:{tipo}"] += 1
+
+            valor_antigo = atuais.get(campo, "")
+            valor_antigo_normalizado = normalizar(
+                valor_antigo
+            )
+
+            presente = bool(
+                valor_antigo_normalizado
+                and valor_antigo_normalizado
+                in transcricao_normalizada
+            )
+            presente_inicio = bool(
+                valor_antigo_normalizado
+                and valor_antigo_normalizado
+                in inicio_normalizado
+            )
+
+            evidencia_antiga[campo] = {
+                "presente_transcricao": presente,
+                "presente_inicio": presente_inicio,
+            }
+
+            if valor_antigo:
+                totais[
+                    f"{campo}:antigo_presente_transcricao"
+                    if presente
+                    else f"{campo}:antigo_ausente_transcricao"
+                ] += 1
 
         score_ruido = pontuacao_ruido_transcricao(
             transcricao_original
@@ -210,6 +247,7 @@ def auditar(limit=None, case_limit=80):
                 "problema_principal": problema_principal,
                 "tags": tags,
                 "comparacoes": comparacoes,
+                "evidencia_antiga": evidencia_antiga,
                 "campos_salvos": {
                     campo: atuais.get(campo, "")
                     for campo in [
