@@ -2243,9 +2243,9 @@ def extrair_cliente_nome(texto, analista_nome=""):
 
     nome_confirmado_ordem_invertida = re.search(
         (
-            r"(?:^|[.!?]\\s*)"
-            r"([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ' -]{1,45})\\s*[,;:-]\\s*"
-            r"n[eé]\\s+(?:o\\s+)?seu\\s+nome\\s*[?]"
+            r"(?:^|[.!?]\s*)"
+            r"([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ' -]{1,45})\s*[,;:-]\s*"
+            r"n[eé]\s+(?:o\s+)?seu\s+nome\s*[?]"
         ),
         texto_base,
         flags=re.IGNORECASE
