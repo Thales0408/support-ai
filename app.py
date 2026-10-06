@@ -1745,6 +1745,27 @@ def normalizar_email_falado(texto):
 
         return match_formatado.group(0).lower()
 
+    match_falado_pontuado = re.search(
+        (
+            r"\b(?:meu|minha|seu|sua)?\s*e[\s-]?mail\b"
+            r"[^A-Za-z0-9@]{0,20}"
+            r"(?:(?:é|e)\s+)?"
+            r"([A-Z0-9._%+\-]{2,64})\s+"
+            r"arroba\s+"
+            r"([A-Z0-9.\-]+\.[A-Z]{2,})"
+        ),
+        texto_original,
+        flags=re.IGNORECASE
+    )
+
+    if match_falado_pontuado:
+
+        return (
+            match_falado_pontuado.group(1)
+            + "@"
+            + match_falado_pontuado.group(2)
+        ).lower()
+
     texto_normalizado = normalizar_para_comparacao(texto_original)
     tokens = re.findall(
         r"[a-z0-9]+",
@@ -1808,43 +1829,6 @@ def normalizar_email_falado(texto):
         if len(depois) >= 8:
 
             break
-
-    if (
-        "ponto" not in depois
-        and len(depois) >= 2
-    ):
-
-        sufixos = {
-            "com",
-            "net",
-            "org",
-            "gov",
-            "edu",
-            "br",
-        }
-
-        for posicao in range(1, len(depois)):
-
-            if depois[posicao] in sufixos:
-
-                reconstruido = depois[:posicao] + [
-                    "ponto",
-                    depois[posicao]
-                ]
-
-                if (
-                    posicao + 1 < len(depois)
-                    and depois[posicao + 1] == "br"
-                    and depois[posicao] != "br"
-                ):
-
-                    reconstruido.extend([
-                        "ponto",
-                        "br"
-                    ])
-
-                depois = reconstruido
-                break
 
     dominio = montar_parte_email_falado(depois)
     candidato = f"{local}@{dominio}".lower()
@@ -2427,6 +2411,30 @@ def empresa_transcricao_confiavel(valor):
 
 def extrair_empresa_transcricao(texto):
 
+    texto_base = str(texto or "")
+
+    confirmacao_corrigida = re.search(
+        (
+            r"\bnome\s+da\s+empresa\s*[,;:-]?\s*"
+            r"(?:(?:é|e)\s+)?"
+            r"([^?\n]{3,100}?)\s*,?\s*n[eé]\s*\?\s*"
+            r"([^,.;?\n]{3,100})\s*,?\s*"
+            r"(?:isso|sim|correto)\b"
+        ),
+        texto_base,
+        flags=re.IGNORECASE
+    )
+
+    if confirmacao_corrigida:
+
+        empresa_confirmada = empresa_transcricao_confiavel(
+            confirmacao_corrigida.group(2)
+        )
+
+        if empresa_confirmada:
+
+            return empresa_confirmada
+
     padroes = [
         (
             r"\bestou falando de\s+[^,.;?\n]{2,80}\s*[,;:-]\s*"
@@ -2465,8 +2473,6 @@ def extrair_empresa_transcricao(texto):
             r"([^,.;?\n]{3,100})\s*,\s*cnpj\b"
         )
     ]
-
-    texto_base = str(texto or "")
 
     for padrao in padroes:
 
