@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import sys
+from collections import Counter
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -54,7 +55,68 @@ def cortar(texto, limite=1800):
     return texto[:limite] + "..."
 
 
-def executar(ids=None, todos=False):
+def valor_normalizado(valor):
+    return " ".join(
+        str(valor or "").strip().lower().split()
+    )
+
+
+def comparar_campos(antigos, novos):
+    diferencas = {}
+
+    for chave in [
+        "empresa",
+        "empresa_loja",
+        "cnpj",
+        "cliente_nome",
+        "telefone",
+        "email",
+    ]:
+        antigo = antigos.get(chave, "")
+        novo = novos.get(chave, "")
+
+        if valor_normalizado(antigo) == valor_normalizado(novo):
+            continue
+
+        if not antigo and novo:
+            tipo = "preenchido"
+        elif antigo and not novo:
+            tipo = "removido"
+        else:
+            tipo = "alterado"
+
+        diferencas[chave] = {
+            "tipo": tipo,
+            "antes": antigo,
+            "depois": novo,
+        }
+
+    return diferencas
+
+
+MARCADORES_SUSPEITOS = [
+    "acompanhamento continuo",
+    "acompanhamento contínuo",
+    "orientado acompanhamento",
+    "cliente esta ciente",
+    "cliente está ciente",
+    "definir proximos passos",
+    "definir próximos passos",
+    "deve ser compartilhada",
+    "deve ser compartilhado",
+]
+
+
+def frases_suspeitas(texto):
+    base = valor_normalizado(texto)
+    return [
+        marcador
+        for marcador in MARCADORES_SUSPEITOS
+        if valor_normalizado(marcador) in base
+    ]
+
+
+def executar(ids=None, todos=False, compacto=False, case_limit=120):
     ids = sorted(set(int(valor) for valor in (ids or [])))
 
     if not ids and not todos:
@@ -123,6 +185,9 @@ def executar(ids=None, todos=False):
         )
     )
 
+    contagens = Counter()
+    casos = []
+
     for atendimento_id, conteudo_antigo, transcricao_bruta, analista in rows:
         transcricao_original = limpar_vazamento_prompt_transcricao(
             limpar_texto(transcricao_bruta or "")
@@ -162,51 +227,122 @@ def executar(ids=None, todos=False):
         antigos = campos(conteudo_antigo)
         novos = campos(novo_conteudo)
 
-        print(
-            "DRY_REPROCESS="
-            + json.dumps(
-                {
-                    "id": atendimento_id,
-                    "analista": analista,
-                    "entidades_deterministicas": entidades,
-                    "campos_antigos": {
-                        chave: antigos.get(chave, "")
-                        for chave in [
-                            "empresa",
-                            "empresa_loja",
-                            "cnpj",
-                            "cliente_nome",
-                            "telefone",
-                            "email",
-                        ]
-                    },
-                    "campos_novos": {
-                        chave: novos.get(chave, "")
-                        for chave in [
-                            "empresa",
-                            "empresa_loja",
-                            "cnpj",
-                            "cliente_nome",
-                            "telefone",
-                            "email",
-                        ]
-                    },
-                    "descritivo_antigo": cortar(
-                        antigos.get("descritivo", "")
-                    ),
-                    "descritivo_novo": cortar(
-                        novos.get("descritivo", "")
-                    ),
-                    "categoria_nova": analise.get("categoria", ""),
-                    "problema_principal_novo": analise.get(
-                        "problema_principal",
-                        ""
-                    ),
-                },
-                ensure_ascii=False,
-                sort_keys=True,
-            )
+        campos_antigos = {
+            chave: antigos.get(chave, "")
+            for chave in [
+                "empresa",
+                "empresa_loja",
+                "cnpj",
+                "cliente_nome",
+                "telefone",
+                "email",
+            ]
+        }
+        campos_novos = {
+            chave: novos.get(chave, "")
+            for chave in [
+                "empresa",
+                "empresa_loja",
+                "cnpj",
+                "cliente_nome",
+                "telefone",
+                "email",
+            ]
+        }
+
+        diferencas = comparar_campos(
+            campos_antigos,
+            campos_novos
         )
+        suspeitas_antigas = frases_suspeitas(
+            antigos.get("descritivo", "")
+        )
+        suspeitas_novas = frases_suspeitas(
+            novos.get("descritivo", "")
+        )
+
+        for chave, detalhe in diferencas.items():
+            contagens[
+                f"{chave}:{detalhe['tipo']}"
+            ] += 1
+
+        if suspeitas_antigas:
+            contagens["descritivo:suspeito_antigo"] += 1
+
+        if suspeitas_novas:
+            contagens["descritivo:suspeito_novo"] += 1
+
+        if diferencas or suspeitas_antigas or suspeitas_novas:
+            casos.append({
+                "id": atendimento_id,
+                "analista": analista,
+                "diferencas": diferencas,
+                "suspeitas_antigas": suspeitas_antigas,
+                "suspeitas_novas": suspeitas_novas,
+                "problema_principal_novo": analise.get(
+                    "problema_principal",
+                    ""
+                ),
+                "descritivo_antigo": cortar(
+                    antigos.get("descritivo", ""),
+                    650 if compacto else 1800
+                ),
+                "descritivo_novo": cortar(
+                    novos.get("descritivo", ""),
+                    650 if compacto else 1800
+                ),
+            })
+
+        if not compacto:
+            print(
+                "DRY_REPROCESS="
+                + json.dumps(
+                    {
+                        "id": atendimento_id,
+                        "analista": analista,
+                        "entidades_deterministicas": entidades,
+                        "campos_antigos": campos_antigos,
+                        "campos_novos": campos_novos,
+                        "descritivo_antigo": cortar(
+                            antigos.get("descritivo", "")
+                        ),
+                        "descritivo_novo": cortar(
+                            novos.get("descritivo", "")
+                        ),
+                        "categoria_nova": analise.get("categoria", ""),
+                        "problema_principal_novo": analise.get(
+                            "problema_principal",
+                            ""
+                        ),
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+            )
+
+    print(
+        "DRY_REPROCESS_FINAL="
+        + json.dumps(
+            {
+                "processados": len(rows),
+                "casos_com_mudanca": len(casos),
+                "contagens": dict(sorted(contagens.items())),
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+    )
+
+    if compacto:
+        for caso in casos[:case_limit]:
+            print(
+                "DRY_REPROCESS_CASE="
+                + json.dumps(
+                    caso,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+            )
 
 
 if __name__ == "__main__":
@@ -232,8 +368,20 @@ if __name__ == "__main__":
             "com transcricao salva. Nao altera o banco."
         ),
     )
+    parser.add_argument(
+        "--compact",
+        action="store_true",
+        help="Imprime apenas resumo e casos com mudancas.",
+    )
+    parser.add_argument(
+        "--case-limit",
+        type=int,
+        default=120,
+    )
     args = parser.parse_args()
     executar(
         ids=args.ids,
         todos=args.all,
+        compacto=args.compact,
+        case_limit=args.case_limit,
     )
