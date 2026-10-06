@@ -2028,9 +2028,107 @@ def extrair_cliente_nome(texto, analista_nome=""):
 
             return nome
 
+    sou_da_empresa = re.search(
+        (
+            r"^\s*(?:oi|ol[aá])?\s*[,.;:-]*\s*"
+            r"(?:bom\s+dia|boa\s+tarde|boa\s+noite)?\s*[,.;:-]*\s*"
+            r"sou\s+(?:o|a)?\s*([^,.;\n]{2,60})\s+"
+            r"(?:da|do)\s+empresa\b"
+        ),
+        inicio,
+        flags=re.IGNORECASE
+    )
+
+    if sou_da_empresa:
+
+        nome = nome_participante_confiavel(
+            sou_da_empresa.group(1),
+            analista_nome
+        )
+
+        if nome:
+
+            return nome
+
+    ajuda_com_nome = re.search(
+        (
+            r"\btudo\s+bem\s*[,;:-]?\s*"
+            r"([^,.;?\n]{2,60})\s*[?.,;:-]*\s*"
+            r"(?:como\s+(?:eu\s+)?(?:posso|pode)\s+te\s+ajudar|"
+            r"como\s+posso\s+ajudar)"
+        ),
+        inicio,
+        flags=re.IGNORECASE
+    )
+
+    if ajuda_com_nome:
+
+        nome = nome_participante_confiavel(
+            ajuda_com_nome.group(1),
+            analista_nome
+        )
+
+        if nome:
+
+            return nome
+
+    fala_com_solicitante = re.search(
+        (
+            r"^\s*(?:oi|ol[aá])?\s*[,.;:-]*\s*"
+            r"(?:bom\s+dia|boa\s+tarde|boa\s+noite)?\s*[,.;:-]*\s*"
+            r"(?:voc[eê]\s+)?fala\s+com\s+(?:o|a)?\s*"
+            r"([^,.;?\n]{2,60})"
+        ),
+        inicio,
+        flags=re.IGNORECASE
+    )
+
+    if fala_com_solicitante and re.search(
+        (
+            r"\b(?:eu\s+falo\s+com\s+quem|"
+            r"eu\s+queria|queria\s+tirar|"
+            r"eu\s+preciso|estou\s+com)\b"
+        ),
+        inicio,
+        flags=re.IGNORECASE
+    ):
+
+        nome = nome_participante_confiavel(
+            fala_com_solicitante.group(1),
+            analista_nome
+        )
+
+        if nome:
+
+            return nome
+
+    cnpj_com_nome = re.search(
+        (
+            r"\b(?:seu|o\s+seu)\s+cnpj\s*[,;:-]\s*"
+            r"([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ' -]{1,45})\s*[?]"
+        ),
+        texto_base,
+        flags=re.IGNORECASE
+    )
+
+    if cnpj_com_nome:
+
+        nome = nome_participante_confiavel(
+            cnpj_com_nome.group(1),
+            analista_nome
+        )
+
+        if nome:
+
+            return nome
+
     padroes = [
-        r"\bnome do cliente (?:é|e)\s+([^,.;\n]{2,60})",
+        r"\bnome do cliente\s*[,;:-]?\s*(?:(?:é|e)\s+)?([^,.;\n]{2,60})",
         r"\bcliente se chama\s+([^,.;\n]{2,60})",
+        (
+            r"\b(?:empresa|nome da empresa)\b[^\n]{0,120}?"
+            r"\bseu nome (?:é|e)\s+([^,.;?\n]{2,60})\s*[?]?"
+        ),
         (
             r"\b(?:com quem eu falo|eu falo com quem)\s*[?!.:,;-]*\s*"
             r"(?:(?:oi|ol[aá])\s*[,.;:-]*\s*)?"
