@@ -2053,7 +2053,7 @@ def extrair_cliente_nome(texto, analista_nome=""):
             r"queria\s+tirar\s+(?:uma\s+)?d[uú]vida|"
             r"eu\s+preciso\s+de|"
             r"preciso\s+de|"
-            r"estou\s+com\s+(?:uma\s+)?(?:d[uú]vida|problema)"
+            r"estou\s+com\s+(?:(?:um|uma)\s+)?(?:d[uú]vida|problema)"
             r")\b"
         ),
         inicio,
