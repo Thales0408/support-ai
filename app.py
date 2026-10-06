@@ -1809,6 +1809,43 @@ def normalizar_email_falado(texto):
 
             break
 
+    if (
+        "ponto" not in depois
+        and len(depois) >= 2
+    ):
+
+        sufixos = {
+            "com",
+            "net",
+            "org",
+            "gov",
+            "edu",
+            "br",
+        }
+
+        for posicao in range(1, len(depois)):
+
+            if depois[posicao] in sufixos:
+
+                reconstruido = depois[:posicao] + [
+                    "ponto",
+                    depois[posicao]
+                ]
+
+                if (
+                    posicao + 1 < len(depois)
+                    and depois[posicao + 1] == "br"
+                    and depois[posicao] != "br"
+                ):
+
+                    reconstruido.extend([
+                        "ponto",
+                        "br"
+                    ])
+
+                depois = reconstruido
+                break
+
     dominio = montar_parte_email_falado(depois)
     candidato = f"{local}@{dominio}".lower()
 
@@ -2042,6 +2079,28 @@ def extrair_cliente_nome(texto, analista_nome=""):
 
         nome = nome_participante_confiavel(
             apresentacao_solicitante.group(1),
+            analista_nome
+        )
+
+        if nome:
+
+            return nome
+
+    apresentacao_aqui_da_empresa = re.search(
+        (
+            r"\b(?:é|e)\s+(?:o|a)\s+"
+            r"([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ' -]{1,45})\s+"
+            r"aqui\s+(?:da|do)\s+"
+            r"[^,.;?\n]{2,100}"
+        ),
+        inicio,
+        flags=re.IGNORECASE
+    )
+
+    if apresentacao_aqui_da_empresa:
+
+        nome = nome_participante_confiavel(
+            apresentacao_aqui_da_empresa.group(1),
             analista_nome
         )
 
@@ -2407,15 +2466,39 @@ def extrair_empresa_transcricao(texto):
         )
     ]
 
+    texto_base = str(texto or "")
+
     for padrao in padroes:
 
         match = re.search(
             padrao,
-            str(texto or ""),
+            texto_base,
             flags=re.IGNORECASE
         )
 
         if match:
+
+            contexto_anterior = normalizar_para_comparacao(
+                texto_base[
+                    max(0, match.start() - 180):
+                    match.start()
+                ]
+            )
+
+            if any(
+                marcador in contexto_anterior
+                for marcador in [
+                    "por exemplo",
+                    "vamos supor",
+                    "se o cliente",
+                    "se a pessoa",
+                    "sei la",
+                    "hipotetico",
+                    "hipotetica",
+                ]
+            ):
+
+                continue
 
             empresa = empresa_transcricao_confiavel(
                 match.group(1)
