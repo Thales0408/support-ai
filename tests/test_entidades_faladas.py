@@ -162,6 +162,30 @@ class EntidadesFaladasTest(unittest.TestCase):
             "suporteequipamentos@gmail.com"
         )
 
+    def test_email_nao_inventa_local_a_partir_de_frase_ruidosa(self):
+
+        for texto in [
+            (
+                "Eu vou te falar o e-mail, ta? Segunda Via CEL com dois Ls, "
+                "dois, arroba gmail.com."
+            ),
+            (
+                "Diego Paes, P A V 716 6, 7166, isso. Arroba gmail.com."
+            ),
+        ]:
+
+            with self.subTest(texto=texto):
+
+                entidades = app.extrair_entidades_transcricao(
+                    texto,
+                    analista_nome="admin"
+                )
+
+                self.assertEqual(
+                    entidades["email"],
+                    ""
+                )
+
     def test_email_empresa_com_br_falado(self):
 
         self.assertEqual(
@@ -710,6 +734,24 @@ class EntidadesFaladasTest(unittest.TestCase):
         self.assertEqual(
             app.empresa_transcricao_confiavel("né"),
             ""
+        )
+
+    def test_empresa_confirmacao_corrige_sufixo_ruidoso(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            (
+                "O nome da empresa e Segunda Via CEL 2, ne? "
+                "Segunda Via CEL, isso. "
+                "O CNPJ e 48 677 784 1000 contra 13."
+            ),
+            analista_nome="admin"
+        )
+
+        self.assertEqual(
+            app.normalizar_para_comparacao(
+                entidades["empresa"]
+            ),
+            "segunda via cel"
         )
 
     def test_empresa_confirmada_com_isso(self):
