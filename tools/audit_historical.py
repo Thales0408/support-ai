@@ -99,6 +99,31 @@ def flags_descritivo(texto):
     ]
 
 
+def contexto_curto(texto, valor, margem=110):
+    texto = str(texto or "")
+    valor = str(valor or "").strip()
+
+    if not texto or not valor:
+        return ""
+
+    match = re.search(
+        re.escape(valor),
+        texto,
+        flags=re.IGNORECASE
+    )
+
+    if not match:
+        return ""
+
+    inicio = max(0, match.start() - margem)
+    fim = min(len(texto), match.end() + margem)
+
+    trecho = texto[inicio:fim]
+    trecho = re.sub(r"\s+", " ", trecho).strip()
+
+    return trecho
+
+
 def auditar(limit=None, case_limit=80):
     sql = """
         SELECT
@@ -236,6 +261,34 @@ def auditar(limit=None, case_limit=80):
         if not atuais.get("cnpj") and novos.get("cnpj"):
             totais["oportunidade:cnpj"] += 1
 
+        contexto_cliente_antigo = ""
+        if (
+            atuais.get("cliente_nome")
+            and not novos.get("cliente_nome")
+            and evidencia_antiga.get(
+                "cliente_nome",
+                {}
+            ).get("presente_transcricao")
+        ):
+            contexto_cliente_antigo = contexto_curto(
+                transcricao_original,
+                atuais.get("cliente_nome", "")
+            )
+
+        contexto_empresa_antiga = ""
+        if (
+            atuais.get("empresa")
+            and not novos.get("empresa")
+            and evidencia_antiga.get(
+                "empresa",
+                {}
+            ).get("presente_transcricao")
+        ):
+            contexto_empresa_antiga = contexto_curto(
+                transcricao_original,
+                atuais.get("empresa", "")
+            )
+
         if comparacoes or score_ruido or suspeitas:
             casos.append({
                 "id": atendimento_id,
@@ -248,6 +301,8 @@ def auditar(limit=None, case_limit=80):
                 "tags": tags,
                 "comparacoes": comparacoes,
                 "evidencia_antiga": evidencia_antiga,
+                "contexto_cliente_antigo": contexto_cliente_antigo,
+                "contexto_empresa_antiga": contexto_empresa_antiga,
                 "campos_salvos": {
                     campo: atuais.get(campo, "")
                     for campo in [
