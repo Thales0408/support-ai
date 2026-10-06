@@ -202,6 +202,52 @@ class EntidadesFaladasTest(unittest.TestCase):
         self.assertEqual(entidades["analista_nome"], "Thales")
         self.assertEqual(entidades["cliente_nome"], "")
 
+    def test_cliente_meu_nome_com_contexto_de_solicitante(self):
+
+        casos = [
+            (
+                "Bom dia, meu nome e Nicolas. Eu queria tirar uma duvida.",
+                "Nicolas"
+            ),
+            (
+                "Oi, meu nome e Ana Paula. Preciso de ajuda com uma nota.",
+                "Ana Paula"
+            ),
+            (
+                "Ola, aqui e Ivanete. Estou com um problema no financeiro.",
+                "Ivanete"
+            ),
+        ]
+
+        for texto, esperado in casos:
+
+            with self.subTest(texto=texto):
+
+                entidades = app.extrair_entidades_transcricao(
+                    texto,
+                    analista_nome="admin"
+                )
+
+                self.assertEqual(
+                    entidades["cliente_nome"],
+                    esperado
+                )
+
+    def test_apresentacao_inicial_de_suporte_continua_ambigua(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            (
+                "Bom dia, meu nome e Thales. "
+                "Como posso te ajudar?"
+            ),
+            analista_nome="admin"
+        )
+
+        self.assertEqual(
+            entidades["cliente_nome"],
+            ""
+        )
+
     def test_cliente_thiago_com_voce_acentuado(self):
 
         entidades = app.extrair_entidades_transcricao(
