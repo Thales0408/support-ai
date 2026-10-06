@@ -1923,6 +1923,19 @@ def nome_participante_confiavel(valor, analista_nome=""):
 
         return ""
 
+    if comparacao in {
+        "nao",
+        "não",
+        "sim",
+        "isso",
+        "certo",
+        "ok",
+        "alô",
+        "alo",
+    }:
+
+        return ""
+
     return nome
 
 
@@ -2053,7 +2066,8 @@ def extrair_cliente_nome(texto, analista_nome=""):
     ajuda_com_nome = re.search(
         (
             r"\btudo\s+bem\s*[,;:-]?\s*"
-            r"([^,.;?\n]{2,60})\s*[?.,;:-]*\s*"
+            r"([^,.;?\n]{2,60})\s*[?.,;:-]*"
+            r"(?:\s*(?:bem|sim|certo|beleza)\s*[?.,;:-]*){0,2}\s*"
             r"(?:como\s+(?:eu\s+)?(?:posso|pode)\s+te\s+ajudar|"
             r"como\s+posso\s+ajudar)"
         ),
@@ -2065,6 +2079,52 @@ def extrair_cliente_nome(texto, analista_nome=""):
 
         nome = nome_participante_confiavel(
             ajuda_com_nome.group(1),
+            analista_nome
+        )
+
+        if nome:
+
+            return nome
+
+    resposta_apos_com_quem = re.search(
+        (
+            r"\bcom\s+quem\s+eu\s+falo\s*[?!.:,;-]*"
+            r"[^\n]{0,120}?"
+            r"(?:voc[eê]\s+fala\s+com\s+(?:o|a)?\s*|"
+            r"(?:oi\s*[,.;:-]*\s*)?(?:bom\s+dia|boa\s+tarde|boa\s+noite)"
+            r"\s*[,.;:-]+\s*)"
+            r"([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ' -]{1,45})"
+        ),
+        inicio,
+        flags=re.IGNORECASE
+    )
+
+    if resposta_apos_com_quem:
+
+        nome = nome_participante_confiavel(
+            resposta_apos_com_quem.group(1),
+            analista_nome
+        )
+
+        if nome:
+
+            return nome
+
+    nome_perguntado_repetido = re.search(
+        (
+            r"\b(?:qual(?:\s+que)?|como(?:\s+que)?)\s+"
+            r"(?:é|e)\s+(?:o\s+)?seu\s+nome\s*[?!.:,;-]*\s*"
+            r"([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ' -]{1,45})\s*[.!;:-]+\s*"
+            r"\1\b"
+        ),
+        texto_base,
+        flags=re.IGNORECASE
+    )
+
+    if nome_perguntado_repetido:
+
+        nome = nome_participante_confiavel(
+            nome_perguntado_repetido.group(1),
             analista_nome
         )
 

@@ -456,6 +456,83 @@ class EntidadesFaladasTest(unittest.TestCase):
             "joao"
         )
 
+    def test_cliente_com_resposta_curta_antes_de_ajuda(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            (
+                "Suporte tecnico, bom dia, com quem eu falo? "
+                "Oi, bom dia, William. "
+                "Tudo bem, William? Bem. Como posso te ajudar?"
+            ),
+            analista_nome="admin"
+        )
+
+        self.assertEqual(
+            app.normalizar_para_comparacao(
+                entidades["cliente_nome"]
+            ),
+            "william"
+        )
+
+    def test_cliente_apos_com_quem_e_voce_fala_com(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            (
+                "Suporte tecnico, bom dia, com quem eu falo? "
+                "Alo, voce fala com o Geraldo? "
+                "Desculpa, nao entendi seu nome. "
+                "Voce fala com o Geraldo. "
+                "Tudo bom, Geraldo. Como posso te ajudar?"
+            ),
+            analista_nome="admin"
+        )
+
+        self.assertEqual(
+            app.normalizar_para_comparacao(
+                entidades["cliente_nome"]
+            ),
+            "geraldo"
+        )
+
+    def test_cliente_resposta_repetida_a_pergunta_de_nome(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            (
+                "Qual que e seu nome? Guilherme. "
+                "Guilherme da BH Materiais. "
+                "Estou com um problema no sistema."
+            ),
+            analista_nome="admin"
+        )
+
+        self.assertEqual(
+            app.normalizar_para_comparacao(
+                entidades["cliente_nome"]
+            ),
+            "guilherme"
+        )
+
+    def test_palavras_de_resposta_nao_sao_nomes(self):
+
+        for valor in [
+            "Nao",
+            "Não",
+            "Sim",
+            "Isso",
+            "Certo",
+            "Ok",
+        ]:
+
+            with self.subTest(valor=valor):
+
+                self.assertEqual(
+                    app.nome_participante_confiavel(
+                        valor,
+                        analista_nome="admin"
+                    ),
+                    ""
+                )
+
     def test_nao_confunde_pessoas_citadas_com_cliente(self):
 
         for texto in [
