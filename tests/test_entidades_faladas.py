@@ -147,6 +147,21 @@ class EntidadesFaladasTest(unittest.TestCase):
             "financeiro.loja@outlook.com"
         )
 
+    def test_email_com_ponto_real_apos_arroba(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            (
+                "Meu e-mail e suporteequipamentos arroba gmail.com "
+                "e eu preciso de ajuda."
+            ),
+            analista_nome="admin"
+        )
+
+        self.assertEqual(
+            entidades["email"],
+            "suporteequipamentos@gmail.com"
+        )
+
     def test_email_empresa_com_br_falado(self):
 
         self.assertEqual(
@@ -250,6 +265,24 @@ class EntidadesFaladasTest(unittest.TestCase):
                 ["Telefone de contato"]
             ),
             ""
+        )
+
+    def test_cliente_carla_aqui_da_empresa(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            (
+                "Suporte tecnico, boa tarde, com quem eu falo? "
+                "Boa tarde, quem fala? Thales, quem fala? "
+                "Oi Thales, e a Carla aqui da Base Gruas, tudo bem?"
+            ),
+            analista_nome="admin"
+        )
+
+        self.assertEqual(
+            app.normalizar_para_comparacao(
+                entidades["cliente_nome"]
+            ),
+            "carla"
         )
 
     def test_cliente_thiago_em_apresentacao_de_solicitante(self):
@@ -864,6 +897,22 @@ class EntidadesFaladasTest(unittest.TestCase):
                     ),
                     esperado
                 )
+
+    def test_empresa_hipotetica_em_exemplo_nao_e_extraida(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            (
+                "Se o cliente durante a ligacao fala, por exemplo, "
+                "sua empresa e, sei la, Suporte Equipamentos, "
+                "ai ele vai trazer o nome da empresa."
+            ),
+            analista_nome="admin"
+        )
+
+        self.assertEqual(
+            entidades["empresa"],
+            ""
+        )
 
     def test_empresa_rejeita_resposta_conversacional(self):
 
