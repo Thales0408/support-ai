@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 
 from flask import render_template
 
@@ -50,6 +51,18 @@ class LayoutTests(unittest.TestCase):
         self.assertIn("Usuários", html)
         self.assertIn('target="_blank"', html)
         self.assertIn('rel="noopener"', html)
+
+    def test_gravacao_desacopla_captura_da_finalizacao(self):
+        script = Path("static/popup.js").read_text(encoding="utf-8")
+
+        self.assertIn("const finalizacoesPendentes = new Map()", script)
+        self.assertIn("atendimentoIdDoUpload", script)
+        self.assertIn("concluirFinalizacaoEmSegundoPlano", script)
+        self.assertIn("resetarEstadoCaptura()", script)
+        self.assertIn(
+            "você já pode iniciar outra gravação",
+            script
+        )
 
     def test_login_e_admin_usam_tema(self):
         with app.app.test_request_context("/"):

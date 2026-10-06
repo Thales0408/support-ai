@@ -1420,6 +1420,11 @@
             }
         })
 
+        window.addEventListener(
+            "support-ai-atendimento-finalizado",
+            () => carregarResultados()
+        )
+
         document.addEventListener("themechange", renderizarGrafico)
     </script>
 </body>
