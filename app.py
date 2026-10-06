@@ -486,7 +486,7 @@ def limpar_vazamento_prompt_transcricao(texto):
         )
 
     texto_limpo = re.sub(
-        r"\bTranscreva\b[^.!?]{0,140}[.!?]?",
+        r"\b(?:c\s*)?transcreva\b[^.!?]{0,140}[.!?]?",
         "",
         texto_limpo,
         flags=re.IGNORECASE
@@ -1897,6 +1897,7 @@ RUIDOS_NOME_PARTICIPANTE = {
     "trisonso",
     "tristares",
     "tristanius",
+    "tristario",
     "tristao",
     "trishui",
     "drishuizsorvagencia"
@@ -1983,6 +1984,43 @@ def extrair_cliente_nome(texto, analista_nome=""):
 
         nome = nome_participante_confiavel(
             apresentacao_inicial.group(1),
+            analista_nome
+        )
+
+        if nome:
+
+            return nome
+
+    apresentacao_solicitante = re.search(
+        (
+            r"^\s*(?:bom\s+dia|boa\s+tarde|boa\s+noite)?\s*[,.;:-]*\s*"
+            r"aqui\s+(?:voce\s+)?fala\s+com\s+(?:o|a)?\s*"
+            r"([^,.;\n]{2,60})"
+        ),
+        inicio,
+        flags=re.IGNORECASE
+    )
+
+    contexto_solicitante = re.search(
+        (
+            r"\b(?:"
+            r"eu\s+fa[cç]o\s+parte\s+da\s+empresa|"
+            r"eu\s+queria(?:\s+s[oó])?(?:\s+estar)?\s+tirar|"
+            r"eu\s+queria(?:\s+s[oó])?(?:\s+estar)?\s+tirando|"
+            r"queria\s+tirar\s+(?:uma\s+)?d[uú]vida|"
+            r"eu\s+preciso\s+de|"
+            r"preciso\s+de|"
+            r"estou\s+com\s+(?:uma\s+)?(?:d[uú]vida|problema)"
+            r")\b"
+        ),
+        inicio,
+        flags=re.IGNORECASE
+    )
+
+    if apresentacao_solicitante and contexto_solicitante:
+
+        nome = nome_participante_confiavel(
+            apresentacao_solicitante.group(1),
             analista_nome
         )
 
@@ -2150,7 +2188,7 @@ def limpar_transcricao_para_resumo(texto):
         flags=re.IGNORECASE
     )
     texto = re.sub(
-        r"\b(?:tristanius|trist[aã]o|tristra|tristares|trishul|trisk|"
+        r"\b(?:tristanius|tristario|trist[aã]o|tristra|tristares|trishul|trisk|"
         r"trisonso|trisha|drishuizsorvagencia)\b",
         "",
         texto,
@@ -2557,6 +2595,10 @@ Regras:
 - Nao diga "foi identificado", "foi analisado", "foi orientado" ou "status final" se a transcricao nao mostrar isso claramente.
 - Se so houver pedido de acesso remoto, registre apenas que foi solicitado acesso remoto para verificacao.
 - Se nao houver conclusao explicita, finalize o descritivo com a ultima orientacao ou informacao util identificada.
+- Cada afirmacao do descritivo deve ser sustentada diretamente por uma fala da transcricao.
+- Nao acrescente acompanhamento, monitoramento, retorno futuro, proximos passos, encaminhamento ou orientacao generica se isso nao tiver sido dito explicitamente.
+- Nao adicione uma frase de encerramento apenas para dar aparencia de conclusao.
+- Quando a conversa apresentar uma hipotese, mantenha-a como hipotese; nao transforme suspeita em causa confirmada.
 - Nunca escreva frases como "O atendimento nao apresentou conclusao clara", "A transcricao esta confusa", "Nao ha informacoes suficientes", "Nao foi possivel identificar" ou "A conclusao nao ficou clara".
 
 - Corrija termos fiscais comuns quando o contexto confirmar: ISDS-QN, ISQN ou ISS QN = ISSQN; Sintes Nacional ou Sintese Nacional = Simples Nacional; nota de servico = NFS-e; retencao de IS = retencao de ISS.
@@ -5402,16 +5444,19 @@ def reprocessar_resumo_atendimento(atendimento_id):
                     "erro": "Atendimento nao encontrado"
                 }), 404
 
-            transcricao = (
+            transcricao_original = (
                 limpar_vazamento_prompt_transcricao(
                     limpar_texto(row[0] or "")
                 )
             )
-            transcricao_original = transcricao
-            transcricao = normalizar_entidades_faladas(transcricao_original)
             entidades_extraidas = extrair_entidades_transcricao(
                 transcricao_original,
                 row[3] or session.get("usuario_nome")
+            )
+            transcricao = normalizar_entidades_faladas(
+                limpar_transcricao_para_resumo(
+                    transcricao_original
+                )
             )
 
             if not transcricao:

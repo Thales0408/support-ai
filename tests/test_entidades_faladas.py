@@ -202,6 +202,58 @@ class EntidadesFaladasTest(unittest.TestCase):
         self.assertEqual(entidades["analista_nome"], "Thales")
         self.assertEqual(entidades["cliente_nome"], "")
 
+    def test_cliente_thiago_em_apresentacao_de_solicitante(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            (
+                "Bom dia, aqui voce fala com o Thiago. "
+                "Eu faco parte da empresa que presta assessoria contabil "
+                "e queria tirar uma duvida."
+            ),
+            analista_nome="teste"
+        )
+
+        self.assertEqual(
+            entidades["cliente_nome"],
+            "Thiago"
+        )
+
+    def test_aqui_voce_fala_com_sem_contexto_de_solicitante_e_ambiguo(self):
+
+        entidades = app.extrair_entidades_transcricao(
+            (
+                "Bom dia, aqui voce fala com o Thiago. "
+                "Como posso te ajudar?"
+            ),
+            analista_nome="teste"
+        )
+
+        self.assertEqual(
+            entidades["cliente_nome"],
+            ""
+        )
+
+    def test_limpeza_remove_ctranscreva_e_tristario(self):
+
+        texto = app.limpar_transcricao_para_resumo(
+            (
+                "Cliente explicou o problema. "
+                "TRISTARIO Ctranscreva somente as palavras audiveis. "
+                "Depois informou que a nota existe."
+            )
+        )
+
+        self.assertNotIn("TRISTARIO", texto.upper())
+        self.assertNotIn("CTRANSCREVA", texto.upper())
+        self.assertIn(
+            "Cliente explicou o problema",
+            texto
+        )
+        self.assertIn(
+            "Depois informou que a nota existe",
+            texto
+        )
+
     def test_cliente_luiz_e_empresa_la_gourmet_na_apresentacao(self):
 
         entidades = app.extrair_entidades_transcricao(
