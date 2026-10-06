@@ -1923,16 +1923,24 @@ def nome_participante_confiavel(valor, analista_nome=""):
 
         return ""
 
-    if comparacao in {
-        "nao",
-        "não",
-        "sim",
-        "isso",
-        "certo",
-        "ok",
-        "alô",
-        "alo",
-    }:
+    if (
+        comparacao in {
+            "nao",
+            "não",
+            "sim",
+            "isso",
+            "certo",
+            "ok",
+            "alô",
+            "alo",
+            "com quem eu falo",
+            "quem eu falo",
+        }
+        or comparacao.startswith((
+            "com quem eu falo ",
+            "quem eu falo ",
+        ))
+    ):
 
         return ""
 
@@ -2103,6 +2111,52 @@ def extrair_cliente_nome(texto, analista_nome=""):
 
         nome = nome_participante_confiavel(
             resposta_apos_com_quem.group(1),
+            analista_nome
+        )
+
+        if nome:
+
+            return nome
+
+    saudacao_apos_com_quem = re.search(
+        (
+            r"\bcom\s+quem\s+eu\s+falo\s*[?!.:,;-]*"
+            r"[^\n]{0,150}?"
+            r"\b(?:bom\s+dia|boa\s+tarde|boa\s+noite)\s*[,;:-]+\s*"
+            r"([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ' -]{1,45})\s*[.?!]\s*"
+            r"tudo\s+bem\s*[?]"
+        ),
+        inicio,
+        flags=re.IGNORECASE
+    )
+
+    if saudacao_apos_com_quem:
+
+        nome = nome_participante_confiavel(
+            saudacao_apos_com_quem.group(1),
+            analista_nome
+        )
+
+        if nome:
+
+            return nome
+
+    nome_antes_de_ajuda_apos_pergunta = re.search(
+        (
+            r"\b(?:qual(?:\s+que)?|como(?:\s+que)?)\s+"
+            r"(?:é|e)\s+(?:o\s+)?seu\s+nome\s*[?!.:,;-]*"
+            r".{0,120}?"
+            r"\b([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ' -]{1,45})\s*[,;:-]\s*"
+            r"como\s+(?:eu\s+)?(?:posso|pode)\s+te\s+ajudar"
+        ),
+        inicio,
+        flags=re.IGNORECASE | re.DOTALL
+    )
+
+    if nome_antes_de_ajuda_apos_pergunta:
+
+        nome = nome_participante_confiavel(
+            nome_antes_de_ajuda_apos_pergunta.group(1),
             analista_nome
         )
 
@@ -2296,11 +2350,34 @@ def extrair_empresa_transcricao(texto):
             r"\bestou falando de\s+[^,.;?\n]{2,80}\s*[,;:-]\s*"
             r"(?:da|do)\s+([^,.;?\n]{3,100})"
         ),
+        (
+            r"\bsou\s+(?:[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ' -]{1,45}\s+)?"
+            r"(?:da|do)\s+empresa\s+([^,.;?\n]{3,100})"
+        ),
+        (
+            r"\bsou\s+daqui\s+(?:da|do)\s+([^,.;?\n]{3,100})"
+        ),
+        (
+            r"\bnome\s+da\s+empresa\s*[,;:-]?\s*"
+            r"(?:(?:é|e)\s+)?([^,.;?\n]{3,100})"
+        ),
         r"\bqual(?: que)? (?:é|e) o nome da empresa\s*[?!.:,;-]*\s*(?:(?:é|e)\s+)?([^,.;?\n]{3,100})",
         r"\ba empresa chama\s+([^,.;?\n]{3,100})",
         r"\bempresa se chama\s+([^,.;?\n]{3,100})",
         r"\braz[aã]o social (?:é|e)\s+([^,.;?\n]{3,100})",
-        r"\bnome da empresa (?:é|e)\s+([^,.;?\n]{3,100})"
+        (
+            r"\b(?:a\s+sua\s+|a\s+)?empresa\s+(?:é|e)\s+"
+            r"(?:o|a)?\s*([^,.;?\n]{3,100})\s*[?.]\s*"
+            r"(?:isso|sim|correto)\b"
+        ),
+        (
+            r"\bempresa\s+([^,.;?\n]{3,100})\s*,?\s*n[eé]\s*[?]"
+        ),
+        (
+            r"\b(?:acessei|consegui\s+acessar)[^,.;?\n]{0,50}"
+            r"[,;:-]\s*(?:é|e)\s+(?:a|o)?\s*"
+            r"([^,.;?\n]{3,100})\s*,\s*cnpj\b"
+        )
     ]
 
     for padrao in padroes:
