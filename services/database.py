@@ -1,6 +1,9 @@
-from werkzeug.security import generate_password_hash
+from contextlib import contextmanager
+from threading import Lock
 
-import psycopg2
+from psycopg2 import InterfaceError, OperationalError
+from psycopg2.pool import ThreadedConnectionPool
+from werkzeug.security import generate_password_hash
 
 from auth import senha_esta_em_hash
 
@@ -18,6 +21,12 @@ from config import (
 )
 
 
+_POOL_MIN = 1
+_POOL_MAX = 8
+_pool = None
+_pool_lock = Lock()
+
+
 def senha_banco():
 
     if (
@@ -32,23 +41,16 @@ def senha_banco():
     return DB_PASSWORD
 
 
-def configurar_conexao(conn):
-
-    with conn.cursor() as cursor:
-
-        cursor.execute(
-            "SET TIME ZONE %s",
-            (
-                APP_TIMEZONE,
-            )
-        )
-
-    return conn
-
-
-def conectar_banco():
+def _parametros_conexao():
 
     db_password = senha_banco()
+
+    comuns = {
+        "connect_timeout": DB_CONNECT_TIMEOUT_SECONDS,
+        "sslmode": "require",
+        "options": f"-c timezone={APP_TIMEZONE}",
+        "application_name": "support_ai"
+    }
 
     if db_password:
 
@@ -58,28 +60,98 @@ def conectar_banco():
                 "DB_HOST, DB_PORT, DB_NAME e DB_USER precisam estar configuradas"
             )
 
-        conn = psycopg2.connect(
-            host=DB_HOST,
-            port=DB_PORT,
-            dbname=DB_NAME,
-            user=DB_USER,
-            password=db_password,
-            sslmode="require",
-            connect_timeout=DB_CONNECT_TIMEOUT_SECONDS
-        )
-
-        return configurar_conexao(conn)
+        return (), {
+            **comuns,
+            "host": DB_HOST,
+            "port": DB_PORT,
+            "dbname": DB_NAME,
+            "user": DB_USER,
+            "password": db_password
+        }
 
     if not DATABASE_URL:
 
         raise RuntimeError("DATABASE_URL ou DB_PASSWORD nao configurada")
 
-    return configurar_conexao(
-        psycopg2.connect(
-            DATABASE_URL,
-            connect_timeout=DB_CONNECT_TIMEOUT_SECONDS
+    return (DATABASE_URL,), comuns
+
+
+def _obter_pool():
+
+    global _pool
+
+    if _pool is None:
+
+        with _pool_lock:
+
+            if _pool is None:
+
+                args, kwargs = _parametros_conexao()
+
+                _pool = ThreadedConnectionPool(
+                    _POOL_MIN,
+                    _POOL_MAX,
+                    *args,
+                    **kwargs
+                )
+
+    return _pool
+
+
+@contextmanager
+def conectar_banco():
+
+    pool = _obter_pool()
+    conn = pool.getconn()
+    descartar = False
+
+    try:
+
+        if conn.closed:
+
+            pool.putconn(
+                conn,
+                close=True
+            )
+            conn = pool.getconn()
+
+        yield conn
+        conn.commit()
+
+    except Exception as erro:
+
+        descartar = isinstance(
+            erro,
+            (
+                InterfaceError,
+                OperationalError
+            )
         )
-    )
+
+        if not conn.closed:
+
+            try:
+
+                conn.rollback()
+
+            except (
+                InterfaceError,
+                OperationalError
+            ):
+
+                descartar = True
+
+        raise
+
+    finally:
+
+        pool.putconn(
+            conn,
+            close=(
+                descartar
+                or bool(conn.closed)
+            )
+        )
 
 
 def diagnostico_banco():
@@ -93,7 +165,9 @@ def diagnostico_banco():
             "host": DB_HOST,
             "port": DB_PORT,
             "user": DB_USER,
-            "password_configurada": True
+            "password_configurada": True,
+            "pool_min": _POOL_MIN,
+            "pool_max": _POOL_MAX
         }
 
     return {
@@ -101,9 +175,10 @@ def diagnostico_banco():
         "host": "DATABASE_URL",
         "port": "DATABASE_URL",
         "user": "DATABASE_URL",
-        "password_configurada": False
+        "password_configurada": False,
+        "pool_min": _POOL_MIN,
+        "pool_max": _POOL_MAX
     }
-
 
 def inicializar_banco():
 
