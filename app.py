@@ -12,7 +12,7 @@ from flask import (
 )
 
 from flask_cors import CORS
-from openai import RateLimitError
+from openai import AuthenticationError, RateLimitError
 from waitress import serve
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -5095,6 +5095,30 @@ def finalizar_atendimento():
                 session.get("usuario_nome"),
                 entidades_extraidas=entidades_extraidas
             )
+
+        except AuthenticationError:
+
+            liberar_finalizacao_atendimento(
+                usuario_id,
+                atendimento_id
+            )
+
+            log_evento(
+                "resumo_ia_autenticacao_falhou",
+                usuario_id=usuario_id,
+                atendimento_id=atendimento_id
+            )
+
+            return jsonify({
+                "erro": (
+                    "Nao foi possivel gerar o resumo porque a autenticacao "
+                    "com a OpenAI falhou. A transcricao foi preservada. "
+                    "Contate o administrador e tente finalizar novamente "
+                    "apos a correcao da chave da API."
+                ),
+                "tipo": "openai_auth",
+                "pode_tentar_novamente": True
+            }), 503
 
         except Exception:
 
