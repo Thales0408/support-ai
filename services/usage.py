@@ -13,19 +13,31 @@ def uso_diario_usuario(cursor, usuario_id, atendimento_id=None):
 
     if atendimento_id:
 
-        excluir_atendimento = "AND id <> %s"
+        excluir_atendimento = "AND a.id <> %s"
         params.append(atendimento_id)
 
     cursor.execute(
         f"""
         SELECT
-            COUNT(*),
-            COALESCE(SUM(segundos_transcritos), 0),
-            COALESCE(SUM(custo_estimado_usd), 0)
-        FROM atendimentos
-        WHERE usuario_id = %s
-        AND inicio_em >= CURRENT_DATE
-        AND inicio_em < CURRENT_DATE + INTERVAL '1 day'
+            COUNT(*) FILTER (
+                WHERE a.status <> 'falha_captura'
+                AND NOT (
+                    a.status = 'gravando'
+                    AND a.inicio_em < NOW() - INTERVAL '2 minutes'
+                    AND COALESCE(a.segundos_transcritos, 0) = 0
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM transcricoes_chunks tc
+                        WHERE tc.atendimento_id = a.id
+                    )
+                )
+            ),
+            COALESCE(SUM(a.segundos_transcritos), 0),
+            COALESCE(SUM(a.custo_estimado_usd), 0)
+        FROM atendimentos a
+        WHERE a.usuario_id = %s
+        AND a.inicio_em >= CURRENT_DATE
+        AND a.inicio_em < CURRENT_DATE + INTERVAL '1 day'
         {excluir_atendimento}
         """,
         tuple(params)
