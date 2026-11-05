@@ -58,6 +58,7 @@ from config import (
     MAX_REQUEST_MB,
     MAX_SINGLE_UPLOAD_MB,
     PASSWORD_MIN_LENGTH,
+    PBX55_WEBHOOK_TOKEN,
     SECRET_KEY,
     SESSION_LIFETIME_HOURS,
     SUMMARY_MODEL,
@@ -76,6 +77,12 @@ from services.ai import (
 from services.database import (
     conectar_banco,
     inicializar_banco
+)
+from services.integracao_55pbx import (
+    MAX_EVENT_BYTES,
+    normalizar_evento,
+    registrar_evento,
+    token_autorizado
 )
 from services.usage import (
     avaliar_limites_custo_transcricao,
@@ -311,6 +318,12 @@ def sincronizar_sessao_usuario():
 
 @app.before_request
 def proteger_csrf():
+
+    # Webhook servidor-a-servidor: valida token dedicado no handler,
+    # nunca cookie de sessao ou CSRF de um navegador.
+    if (request.path == "/integracoes/55pbx/webhook"
+            and request.method in {"POST", "PUT"}):
+        return None
 
     if request.method != "POST":
 
@@ -3883,6 +3896,63 @@ def health():
         "ffmpeg": ffmpeg,
         "timezone": APP_TIMEZONE
     }), (200 if saudavel else 503)
+
+
+# =========================================
+# WEBHOOK OFICIAL 55PBX - ETAPA 1
+# =========================================
+
+@app.route("/integracoes/55pbx/webhook", methods=["POST", "PUT"])
+def webhook_55pbx():
+    """Registra eventos oficiais sem acionar IA nem alterar tickets."""
+    if not PBX55_WEBHOOK_TOKEN:
+        return jsonify({
+            "erro": "Integracao 55PBX ainda nao habilitada"
+        }), 503
+
+    if not token_autorizado(
+        request.headers.get("token", ""),
+        PBX55_WEBHOOK_TOKEN
+    ):
+        return jsonify({"erro": "Nao autorizado"}), 401
+
+    if not request.is_json:
+        return jsonify({"erro": "Content-Type deve ser application/json"}), 415
+
+    if request.content_length and request.content_length > MAX_EVENT_BYTES:
+        return jsonify({"erro": "Evento excede tamanho maximo"}), 413
+
+    corpo = request.stream.read(MAX_EVENT_BYTES + 1)
+    if len(corpo) > MAX_EVENT_BYTES:
+        return jsonify({"erro": "Evento excede tamanho maximo"}), 413
+
+    try:
+        dados = json.loads(corpo)
+        evento = normalizar_evento(dados)
+    except (ValueError, TypeError, UnicodeDecodeError):
+        return jsonify({"erro": "Evento 55PBX invalido"}), 400
+
+    try:
+        with conectar_banco() as conn:
+            with conn.cursor() as cursor:
+                novo = registrar_evento(cursor, evento)
+    except Exception:
+        logger.exception("Falha ao persistir evento 55PBX")
+        return jsonify({
+            "erro": "Falha temporaria ao registrar evento"
+        }), 503
+
+    log_evento(
+        "evento_55pbx_recebido",
+        call_id=evento["call_id"],
+        duplicado=not novo,
+        audio_informado=bool(evento["url_audio"])
+    )
+
+    return jsonify({
+        "status": "recebido",
+        "duplicado": not novo
+    }), 200
 
 
 # =========================================
