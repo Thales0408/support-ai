@@ -90,6 +90,9 @@ OPENAI_API_KEY = ler_env("OPENAI_API_KEY")
 GROQ_API_KEY = ler_env("GROQ_API_KEY") or ler_env("GROQ_API_TOKEN")
 GROQ_BASE_URL = ler_env("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
 
+# Token exclusivo para os webhooks da 55PBX; vazio = rota desabilitada.
+PBX55_WEBHOOK_TOKEN = ler_env("PBX55_WEBHOOK_TOKEN")
+
 DATABASE_URL = ler_env("DATABASE_URL")
 DB_HOST = ler_env("DB_HOST")
 DB_PORT = ler_env("DB_PORT")

@@ -1,0 +1,26 @@
+name: Testes de regressao
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SKIP_DB_INIT: "1"
+      ADMIN_USUARIO: ci_admin
+      ADMIN_SENHA: "CiAdm1nStrongPass!123"
+      SECRET_KEY: "ci-test-secret-not-for-production-20261105-aaaaaaaaaaaa"
+      OPENAI_API_KEY: "ci-dummy-not-a-real-key"
+      GROQ_API_KEY: "ci-dummy-not-a-real-key"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python -m compileall -q app.py services tests
+      - run: python -m unittest discover -s tests -p "test_*.py"
