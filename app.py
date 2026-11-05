@@ -4067,6 +4067,61 @@ def iniciar_atendimento():
 
 
 @app.route(
+    "/atendimentos/cancelar-sem-audio",
+    methods=["POST"]
+)
+def cancelar_captura_sem_audio():
+    """Permite reverter apenas tentativas que nao chegaram a enviar audio."""
+    usuario_id = usuario_logado()
+
+    if not usuario_id:
+        return jsonify({"erro": "Nao autenticado"}), 401
+
+    dados = request.get_json(silent=True) or {}
+    try:
+        atendimento_id = int(dados.get("atendimento_id"))
+        if atendimento_id < 1:
+            raise ValueError()
+    except (TypeError, ValueError, OverflowError):
+        return jsonify({"erro": "Atendimento invalido"}), 400
+
+    with conectar_banco() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE atendimentos a
+                SET status = 'falha_captura',
+                    conteudo = 'Tentativa de captura sem audio; nao foi gravada.',
+                    fim_em = NOW()
+                WHERE a.id = %s
+                AND a.usuario_id = %s
+                AND a.status = 'gravando'
+                AND COALESCE(a.segundos_transcritos, 0) = 0
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM transcricoes_chunks tc
+                    WHERE tc.atendimento_id = a.id
+                )
+                RETURNING a.id
+                """,
+                (atendimento_id, usuario_id)
+            )
+            cancelado = bool(cursor.fetchone())
+
+    if not cancelado:
+        return jsonify({
+            "erro": "Atendimento possui audio ou nao pode ser cancelado"
+        }), 409
+
+    log_evento(
+        "captura_sem_audio_cancelada",
+        usuario_id=usuario_id,
+        atendimento_id=atendimento_id
+    )
+    return jsonify({"status": "falha_captura"})
+
+
+@app.route(
     "/atendimentos/chunk",
     methods=["POST"]
 )
