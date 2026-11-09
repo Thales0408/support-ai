@@ -1,5 +1,6 @@
 from io import BytesIO
 
+import os
 import time
 
 from openai import (
@@ -30,6 +31,7 @@ from config import (
     TRANSCRIBE_USD_MINUTO_OPENAI,
     TRANSCRIBE_USD_MINUTO_OPENAI_MINI
 )
+from services.privacy import mask_high_risk_secrets
 from services.audio import preprocessar_audio_transcricao
 
 
@@ -225,11 +227,20 @@ def transcrever_bytes(provider, audio_bytes, nome, mime, modelo=None):
         prompt=PROMPT_TRANSCRICAO
     )
 
-    return re.sub(
+    texto = re.sub(
         r"\s+",
         " ",
         str(getattr(resposta, "text", "") or "")
     ).strip()
+
+    # Habilitar somente apos validacao de qualidade e politica LGPD aprovada.
+    # Padrao desativado para preservar a transcricao de producao.
+    if os.getenv("LGPD_MASK_SECRETS", "false").strip().lower() in {
+        "1", "true", "yes", "sim", "on"
+    }:
+        texto = mask_high_risk_secrets(texto)
+
+    return texto
 
 
 def transcrever_bytes_diagnostico(provider, audio_bytes, nome, mime):
