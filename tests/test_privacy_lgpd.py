@@ -36,6 +36,8 @@ class PrivacyTests(unittest.TestCase):
     def test_excel_normal_and_xml_unsafe(self):
         self.assertEqual(safe_excel_value("Empresa LTDA"), "Empresa LTDA")
         self.assertEqual(safe_excel_value(12.35), 12.35)
+        self.assertEqual(safe_excel_value("+5531999876543"), "+5531999876543")
+        self.assertEqual(safe_excel_value("-10,50"), "-10,50")
         self.assertEqual(safe_excel_value("a\x00b"), "ab")
         self.assertLessEqual(
             len(safe_excel_value("=" + "a" * 40000)), 32767
