@@ -84,6 +84,7 @@ from services.integracao_55pbx import (
     registrar_evento,
     token_autorizado
 )
+from services.privacy import safe_excel_value
 from services.usage import (
     avaliar_limites_custo_transcricao,
     avaliar_limites_custo_resumo,
@@ -6350,7 +6351,7 @@ def exportar():
 
             linha.pop(9)
 
-        ws.append(linha)
+        ws.append([safe_excel_value(valor) for valor in linha])
 
     arquivo_excel = BytesIO()
     wb.save(arquivo_excel)
