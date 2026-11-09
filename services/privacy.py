@@ -60,6 +60,12 @@ def safe_excel_value(value):
     if not isinstance(value, str):
         return value
     clean = _INVALID_EXCEL_XML.sub("", value)[:32767]
+    # Telefones (+55...) e numeros negativos literais nao sao formulas.
+    stripped = clean.strip()
+    if re.fullmatch(r"\+\d[\d\s()\-]*", stripped) or re.fullmatch(
+        r"-\d+(?:[.,]\d+)?", stripped
+    ):
+        return clean
     if _EXCEL_FORMULA.match(clean):
         return "'" + clean[:32766]
     return clean
