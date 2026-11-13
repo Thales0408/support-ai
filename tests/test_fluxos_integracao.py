@@ -149,6 +149,23 @@ class FakeCursor:
             self.result = [(atendimento_id,)]
             return
 
+        if (
+            "select id, usuario_id, status" in sql_lower
+            and "from atendimentos" in sql_lower
+            and "where ticket_zendesk = %s" in sql_lower
+        ):
+            ticket = str(params[0])
+            self.result = [
+                (item["id"], item["usuario_id"], item["status"])
+                for item in sorted(
+                    self.state["atendimentos"].values(),
+                    key=lambda row: row["id"],
+                    reverse=True
+                )
+                if str(item.get("ticket_zendesk") or "") == ticket
+            ][:2]
+            return
+
         if "select 1 from atendimentos" in sql_lower:
 
             atendimento_id = int(params[0])
@@ -785,6 +802,50 @@ class FluxosIntegracaoTest(unittest.TestCase):
         self.assertTrue(
             response.get_json()["is_supervisor"]
         )
+
+    def test_backoffice_ticket_exige_unicidade_global_e_permissao(self):
+
+        self.set_session()
+        self.state["atendimentos"][10] = {
+            "id": 10,
+            "usuario_id": 1,
+            "ticket_zendesk": "1150700",
+            "status": "finalizado"
+        }
+        url = "/integracoes/backoffice/atendimento-por-ticket?ticket=1150700"
+        unico = self.client.get(url)
+        self.assertEqual(unico.status_code, 200)
+        self.assertEqual(unico.get_json(), {
+            "unico": True, "atendimento_id": 10,
+            "ticket": "1150700", "status": "finalizado"
+        })
+
+        self.state["atendimentos"][11] = {
+            "id": 11,
+            "usuario_id": 2,
+            "ticket_zendesk": "1150700",
+            "status": "gravando"
+        }
+        duplicado = self.client.get(url)
+        self.assertEqual(duplicado.status_code, 200)
+        self.assertEqual(duplicado.get_json(), {"unico": False})
+        self.state["atendimentos"].pop(11)
+
+        self.set_session(usuario_id=2, perfil="analista", nome="supervisor")
+        proibido = self.client.get(url)
+        # Supervisor possui acesso aos registros de sua equipe.
+        self.assertEqual(proibido.status_code, 200)
+        self.assertTrue(proibido.get_json()["unico"])
+
+        self.set_session(usuario_id=1, perfil="analista", nome="analista")
+        invalido = self.client.get(
+            "/integracoes/backoffice/atendimento-por-ticket?ticket=11A50700"
+        )
+        self.assertEqual(invalido.status_code, 400)
+        inexistente = self.client.get(
+            "/integracoes/backoffice/atendimento-por-ticket?ticket=9999999"
+        )
+        self.assertEqual(inexistente.get_json(), {"unico": False})
 
     def test_diagnostico_captura_somente_metadados_controlados(self):
 
