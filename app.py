@@ -5715,7 +5715,7 @@ def backoffice_atendimento_unico():
         return jsonify({"erro": "Nao autenticado"}), 401
 
     ticket = str(request.args.get("ticket") or "").strip()
-    if not re.fullmatch(r"\\d{4,15}", ticket):
+    if not re.fullmatch(r"\d{4,15}", ticket):
         return jsonify({"erro": "Ticket invalido"}), 400
 
     with conectar_banco() as conn:
