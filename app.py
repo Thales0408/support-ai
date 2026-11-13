@@ -5937,10 +5937,38 @@ def detalhe_atendimento(atendimento_id):
             "erro": "Atendimento nao encontrado"
         }), 404
 
+    transcricao_visivel = row[2] or ""
+    transcricao_recuperada = False
+    # O atendimento ja foi autorizado na consulta anterior. Recuperar apenas
+    # para exibicao, sem alterar status, contagem ou dados persistidos.
+    if row[4] != "finalizado" and not transcricao_visivel:
+        with conectar_banco() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT COALESCE(NULLIF(transcricao_normalizada, ''), texto, '')
+                    FROM transcricoes_chunks
+                    WHERE atendimento_id = %s
+                    AND status = 'transcrito'
+                    ORDER BY ordem
+                    """,
+                    (atendimento_id,)
+                )
+                trechos_salvos = [
+                    trecho[0] for trecho in cursor.fetchall()
+                    if trecho[0]
+                ]
+        if trechos_salvos:
+            transcricao_visivel = limpar_vazamento_prompt_transcricao(
+                limpar_texto(" ".join(trechos_salvos))
+            )
+            transcricao_recuperada = bool(transcricao_visivel)
+
     resposta = {
         "id": row[0],
         "conteudo": texto_zendesk_formatado(row[1]),
-        "transcricao_completa": row[2] or "",
+        "transcricao_completa": transcricao_visivel,
+        "transcricao_recuperada": transcricao_recuperada,
         "data": row[3],
         "status": row[4],
         "duracao_segundos": row[5] or 0,
