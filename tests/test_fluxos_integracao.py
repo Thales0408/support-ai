@@ -837,6 +837,18 @@ class FluxosIntegracaoTest(unittest.TestCase):
         self.assertEqual(proibido.status_code, 200)
         self.assertTrue(proibido.get_json()["unico"])
 
+        self.state["users_by_name"]["terceiro"] = {
+            "id": 4,
+            "usuario": "terceiro",
+            "senha": "senha",
+            "is_admin": False,
+            "ativo": True,
+            "perfil": "analista"
+        }
+        self.set_session(usuario_id=4, perfil="analista", nome="terceiro")
+        sem_permissao = self.client.get(url)
+        self.assertEqual(sem_permissao.status_code, 404)
+
         self.set_session(usuario_id=1, perfil="analista", nome="analista")
         invalido = self.client.get(
             "/integracoes/backoffice/atendimento-por-ticket?ticket=11A50700"
