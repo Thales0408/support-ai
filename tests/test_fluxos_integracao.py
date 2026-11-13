@@ -1290,7 +1290,15 @@ class FluxosIntegracaoTest(unittest.TestCase):
             "transcrevendo"
         )
 
-        self.set_session(usuario_id=2, perfil="analista", nome="supervisor")
+        self.state["users_by_name"]["outro_analista"] = {
+            "id": 4,
+            "usuario": "outro_analista",
+            "senha": "senha",
+            "is_admin": False,
+            "ativo": True,
+            "perfil": "analista"
+        }
+        self.set_session(usuario_id=4, perfil="analista", nome="outro_analista")
         negado = self.client.get(f"/atendimentos/{atendimento_id}")
         self.assertEqual(negado.status_code, 404)
 
