@@ -773,6 +773,46 @@ class FluxosIntegracaoTest(unittest.TestCase):
             response.get_json()["is_supervisor"]
         )
 
+    def test_diagnostico_captura_somente_metadados_controlados(self):
+
+        self.set_session()
+        with patch("app.log_evento") as log:
+            resposta = self.post_json(
+                "/atendimentos/diagnostico-captura",
+                {
+                    "etapa": "solicitar_microfone",
+                    "codigo": "NotAllowedError",
+                    "dados_cliente": "NAO REGISTRAR"
+                }
+            )
+            self.assertEqual(resposta.status_code, 204)
+            log.assert_called_once_with(
+                "captura_falhou_navegador",
+                usuario_id=1,
+                etapa="solicitar_microfone",
+                codigo="NotAllowedError"
+            )
+
+        with patch("app.log_evento") as log:
+            resposta = self.post_json(
+                "/atendimentos/diagnostico-captura",
+                {"etapa": "invalida", "codigo": "NotAllowedError"}
+            )
+            self.assertEqual(resposta.status_code, 400)
+            log.assert_not_called()
+
+            resposta = self.post_json(
+                "/atendimentos/diagnostico-captura",
+                {"etapa": "solicitar_aba", "codigo": "mensagem com cpf"}
+            )
+            self.assertEqual(resposta.status_code, 204)
+            log.assert_called_once_with(
+                "captura_falhou_navegador",
+                usuario_id=1,
+                etapa="solicitar_aba",
+                codigo="UnknownError"
+            )
+
     def test_csrf_exigido_e_aceita_header_sem_hifen(self):
 
         self.set_session()
