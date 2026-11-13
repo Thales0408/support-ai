@@ -1205,6 +1205,11 @@
                     ? `${formatarDuracao(data.duracao_segundos)} - ${formatarCusto(data.custo_estimado_usd)} / R$ ${Number(data.custo_estimado_brl || 0).toFixed(2).replace(".", ",")} - ${data.chunks_ignorados || 0} trecho(s) ignorado(s) - ${data.categoria || "outro"}`
                     : `${formatarDuracao(data.duracao_segundos)} - ${data.sentimento_cliente || "neutro"} - ${data.urgencia || "media"} - ${data.categoria || "outro"}`
 
+            if (data.transcricao_recuperada) {
+                document.getElementById("modal-meta").value +=
+                    " - Trechos transcritos recuperados (finalizacao pendente)"
+            }
+
             document.getElementById("modal-transcricao").innerText =
                 data.transcricao_completa || "Transcricao nao disponivel."
 
