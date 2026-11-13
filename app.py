@@ -4066,6 +4066,43 @@ def iniciar_atendimento():
     })
 
 
+@app.route("/atendimentos/diagnostico-captura", methods=["POST"])
+def diagnostico_captura():
+    """Registra apenas o tipo de falha local, sem audio ou dados de cliente."""
+    usuario_id = usuario_logado()
+    if not usuario_id:
+        return jsonify({"erro": "Nao autenticado"}), 401
+
+    dados = request.get_json(silent=True) or {}
+    etapas = {
+        "solicitar_aba",
+        "solicitar_microfone",
+        "criar_atendimento",
+        "preparar_audio",
+        "iniciar_recorder"
+    }
+    codigos = {
+        "NotAllowedError", "NotFoundError", "NotReadableError",
+        "AbortError", "SecurityError", "TypeError",
+        "NotSupportedError", "InvalidStateError", "UnknownError"
+    }
+    etapa = dados.get("etapa")
+    if etapa not in etapas:
+        return jsonify({"erro": "Etapa invalida"}), 400
+
+    codigo = dados.get("codigo")
+    if codigo not in codigos:
+        codigo = "UnknownError"
+
+    log_evento(
+        "captura_falhou_navegador",
+        usuario_id=usuario_id,
+        etapa=etapa,
+        codigo=codigo
+    )
+    return "", 204
+
+
 @app.route(
     "/atendimentos/cancelar-sem-audio",
     methods=["POST"]
