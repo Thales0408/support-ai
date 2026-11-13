@@ -36,6 +36,7 @@ let gravacaoAtiva = false
 let pausado = false
 let finalizando = false
 const finalizacoesPendentes = new Map()
+const finalizacoesComFalha = new Map()
 let limiteAtingido = false
 let pararSegmentoAtual = null
 let analisadoresAudio = []
@@ -96,6 +97,35 @@ function csrfHeaders(headers = {}) {
         ...headers,
         'X-CSRF-Token': token,
         'X-CSRFToken': token
+    }
+}
+
+// Apenas metadados controlados; nunca transmitir conteudo ou identificadores de clientes.
+async function relatarFalhaCaptura(etapa, erro) {
+    try {
+        await fetch('/atendimentos/diagnostico-captura', {
+            method: 'POST',
+            headers: csrfHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({
+                etapa,
+                codigo: erro && erro.name ? erro.name : 'UnknownError'
+            })
+        })
+    } catch (_erro) {
+        // Falhas de diagnostico nao interrompem o atendimento.
+    }
+}
+
+async function cancelarTentativaSemAudio(id) {
+    try {
+        const response = await fetch('/atendimentos/cancelar-sem-audio', {
+            method: 'POST',
+            headers: csrfHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ atendimento_id: id })
+        })
+        return response.ok
+    } catch (_erro) {
+        return false
     }
 }
 
@@ -240,6 +270,9 @@ function atualizarPainelGravacao() {
             finalizacoesPendentes.size === 1
                 ? 'Pronto — 1 atendimento finalizando em segundo plano'
                 : `Pronto — ${finalizacoesPendentes.size} atendimentos finalizando em segundo plano`
+    } else if (finalizacoesComFalha.size > 0) {
+        estado = 'paused'
+        rotulo = 'Finalizacao pendente: recuperar pelo historico'
     }
 
     captureShell.dataset.state =
@@ -277,7 +310,8 @@ function atendimentoEmAberto() {
         gravacaoAtiva ||
         finalizando ||
         atendimentoId ||
-        finalizacoesPendentes.size > 0
+        finalizacoesPendentes.size > 0 ||
+        finalizacoesComFalha.size > 0
     )
 }
 
@@ -524,10 +558,12 @@ async function finalizarAtendimento(contexto) {
         )
 
     if (!response.ok) {
-
-        throw new Error(
+        const erro = new Error(
             data.mensagem || data.erro || 'Erro finalizando atendimento'
         )
+        erro.httpStatus = response.status
+        erro.tipo = data.tipo || ''
+        throw erro
     }
 
     return data
@@ -860,10 +896,19 @@ async function concluirFinalizacaoEmSegundoPlano(contexto) {
             tentativa++
         ) {
 
-            resultadoFinal =
-                await finalizarAtendimento(
-                    contexto
-                )
+            try {
+                resultadoFinal = await finalizarAtendimento(contexto)
+            } catch (erro) {
+                const transitoria = (
+                    erro.httpStatus === undefined ||
+                    erro.httpStatus >= 500
+                ) && erro.tipo !== 'openai_auth'
+                if (transitoria && tentativa < 2) {
+                    await esperar((tentativa + 1) * 2000)
+                    continue
+                }
+                throw erro
+            }
 
             if (
                 resultadoFinal.status !== 'finalizando'
@@ -888,6 +933,7 @@ async function concluirFinalizacaoEmSegundoPlano(contexto) {
         finalizacoesPendentes.delete(
             contexto.atendimentoId
         )
+        finalizacoesComFalha.delete(contexto.atendimentoId)
 
         window.dispatchEvent(
             new CustomEvent(
@@ -922,6 +968,7 @@ async function concluirFinalizacaoEmSegundoPlano(contexto) {
         finalizacoesPendentes.delete(
             contexto.atendimentoId
         )
+        finalizacoesComFalha.set(contexto.atendimentoId, true)
 
         if (
             !gravacaoAtiva &&
@@ -930,7 +977,7 @@ async function concluirFinalizacaoEmSegundoPlano(contexto) {
         ) {
 
             statusDiv.innerText =
-                `Atendimento ${contexto.atendimentoId} não finalizou: ${err.message}. Ele permanece no histórico para reprocessamento.`
+                `Atendimento ${contexto.atendimentoId}: falha na finalizacao (${err.message}). A transcricao salva permanece no historico; tente Finalizar novamente por la.`
         }
 
     } finally {
@@ -1125,6 +1172,8 @@ startBtn.onclick = async () => {
         return
     }
 
+    let etapaInicio = 'solicitar_aba'
+
     try {
 
         statusDiv.innerText =
@@ -1165,6 +1214,7 @@ startBtn.onclick = async () => {
         // MICROFONE
         // =================================
 
+        etapaInicio = 'solicitar_microfone'
         micStream =
             await navigator
                 .mediaDevices
@@ -1180,6 +1230,7 @@ startBtn.onclick = async () => {
         statusDiv.innerText =
             'Preparando atendimento...'
 
+        etapaInicio = 'criar_atendimento'
         atendimentoId =
             await iniciarAtendimento()
 
@@ -1187,6 +1238,7 @@ startBtn.onclick = async () => {
         // AUDIO CONTEXT
         // =================================
 
+        etapaInicio = 'preparar_audio'
         audioContext =
             new AudioContext()
 
@@ -1270,6 +1322,7 @@ startBtn.onclick = async () => {
 
         atualizarPainelGravacao()
 
+        etapaInicio = 'iniciar_recorder'
         iniciarNovoSegmento()
 
         startBtn.innerText =
@@ -1283,20 +1336,31 @@ startBtn.onclick = async () => {
     } catch (err) {
 
         console.error(err)
+        await relatarFalhaCaptura(etapaInicio, err)
 
-        statusDiv.innerText =
-            'Erro: ' + err.message
+        const idNaoConcluido = atendimentoId
+        const cancelado = idNaoConcluido
+            ? await cancelarTentativaSemAudio(idNaoConcluido)
+            : false
+
+        if (cancelado || !idNaoConcluido) {
+            atendimentoId = null
+        }
+
+        statusDiv.innerText = idNaoConcluido && !cancelado
+            ? `Falha na captura. Atendimento ${idNaoConcluido} preservado; clique em Tentar finalizar para recuperar.`
+            : `Gravacao nao iniciada (${etapaInicio}): ${err.message}. Verifique as permissoes da aba e do microfone no Chrome.`
 
         startBtn.disabled = false
-        startBtn.innerText =
-            'Iniciar gravação'
+        startBtn.innerText = atendimentoId
+            ? 'Tentar finalizar'
+            : 'Iniciar gravação'
 
         atualizarBotaoPausa(false)
         limparTimerChunk()
         pararStreams()
 
         recorder = null
-        atendimentoId = null
         gravacaoAtiva = false
         pausado = false
         finalizando = false
