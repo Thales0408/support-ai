@@ -279,6 +279,19 @@ class FakeCursor:
             self.result = []
             return
 
+        if "coalesce(nullif(transcricao_normalizada" in sql_lower and "order by ordem" in sql_lower:
+            atendimento_id = int(params[0])
+            chunks = [
+                chunk for chunk in self.state["chunks"].values()
+                if chunk["atendimento_id"] == atendimento_id
+                and chunk["status"] == "transcrito"
+            ]
+            self.result = [
+                (chunk.get("transcricao_normalizada") or chunk.get("texto") or "",)
+                for chunk in sorted(chunks, key=lambda item: item["ordem"])
+            ]
+            return
+
         if "update atendimentos set status = 'transcrevendo'" in sql_lower:
 
             atendimento = self.state["atendimentos"].get(int(params[0]))
@@ -1241,6 +1254,45 @@ class FluxosIntegracaoTest(unittest.TestCase):
         self.assertIn("Custo estimado USD", cabecalho_admin)
         self.assertIn("Custo estimado BRL", cabecalho_admin)
         workbook_admin.close()
+
+    def test_detalhe_recupera_transcricao_pendente_sem_alterar_status(self):
+
+        self.set_session()
+        inicio = self.post_json("/atendimentos/iniciar")
+        atendimento_id = inicio.get_json()["atendimento_id"]
+        self.state["atendimentos"][atendimento_id]["status"] = "transcrevendo"
+        self.state["chunks"][(atendimento_id, 0)] = {
+            "atendimento_id": atendimento_id,
+            "usuario_id": 1,
+            "ordem": 0,
+            "status": "transcrito",
+            "texto": "Cliente relatou problema no sistema.",
+            "duracao_segundos": 45
+        }
+        self.state["chunks"][(atendimento_id, 1)] = {
+            "atendimento_id": atendimento_id,
+            "usuario_id": 1,
+            "ordem": 1,
+            "status": "transcrito",
+            "texto": "Analista orientou verificar o cadastro.",
+            "duracao_segundos": 45
+        }
+
+        detalhe = self.client.get(f"/atendimentos/{atendimento_id}")
+        self.assertEqual(detalhe.status_code, 200)
+        dados = detalhe.get_json()
+        self.assertTrue(dados["transcricao_recuperada"])
+        self.assertIn("Cliente relatou", dados["transcricao_completa"])
+        self.assertIn("Analista orientou", dados["transcricao_completa"])
+        self.assertEqual(dados["status"], "transcrevendo")
+        self.assertEqual(
+            self.state["atendimentos"][atendimento_id]["status"],
+            "transcrevendo"
+        )
+
+        self.set_session(usuario_id=2, perfil="analista", nome="supervisor")
+        negado = self.client.get(f"/atendimentos/{atendimento_id}")
+        self.assertEqual(negado.status_code, 404)
 
     def test_finalizacao_aceita_duracao_acima_do_limite(self):
 
