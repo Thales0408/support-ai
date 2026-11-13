@@ -5707,6 +5707,48 @@ def transcrever_arquivo_unico():
 # RESULTADOS
 # =========================================
 
+@app.route("/integracoes/backoffice/atendimento-por-ticket")
+def backoffice_atendimento_unico():
+    """Consulta autenticada e somente leitura: nunca escolher um ticket ambiguo."""
+    usuario_id = usuario_logado()
+    if not usuario_id:
+        return jsonify({"erro": "Nao autenticado"}), 401
+
+    ticket = str(request.args.get("ticket") or "").strip()
+    if not re.fullmatch(r"\\d{4,15}", ticket):
+        return jsonify({"erro": "Ticket invalido"}), 400
+
+    with conectar_banco() as conn:
+        with conn.cursor() as cursor:
+            # LIMIT 2 permite distinguir 0, 1 ou duplicado sem consultar
+            # somente os 300 registros mais novos do historico.
+            cursor.execute(
+                """
+                SELECT id, usuario_id, status
+                FROM atendimentos
+                WHERE ticket_zendesk = %s
+                ORDER BY id DESC
+                LIMIT 2
+                """,
+                (ticket,)
+            )
+            rows = cursor.fetchall()
+
+    if len(rows) != 1:
+        return jsonify({"unico": False}), 200
+
+    atendimento_id, dono_id, status = rows[0]
+    if int(dono_id or 0) != int(usuario_id) and not usuario_supervisor():
+        return jsonify({"erro": "Atendimento nao encontrado"}), 404
+
+    return jsonify({
+        "unico": True,
+        "atendimento_id": int(atendimento_id),
+        "ticket": ticket,
+        "status": status
+    })
+
+
 @app.route("/resultados")
 def resultados():
 
